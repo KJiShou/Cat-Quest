@@ -151,14 +151,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0.1764706, g: 0.83137256, b: 0.5294118, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 3bb8d4798a43049ce924f7f2f15566aa, type: 3}
+  m_Sprite: {fileID: 21300000, guid: cc04d8c6097ab4aafbfd11cf1801eba6, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -529,8 +529,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4278190080
-  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
+    rgba: 4283249175
+  m_fontColor: {r: 0.09019608, g: 0.19607843, b: 0.3019608, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -800,6 +800,22 @@ PrefabInstance:
     - target: {fileID: 7604855435613512354, guid: e1bf4400f203a8f44b1f27969ff332e1, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7902724382851232266, guid: e1bf4400f203a8f44b1f27969ff332e1, type: 3}
+      propertyPath: m_fontColor.b
+      value: 0.28235295
+      objectReference: {fileID: 0}
+    - target: {fileID: 7902724382851232266, guid: e1bf4400f203a8f44b1f27969ff332e1, type: 3}
+      propertyPath: m_fontColor.g
+      value: 0.23921569
+      objectReference: {fileID: 0}
+    - target: {fileID: 7902724382851232266, guid: e1bf4400f203a8f44b1f27969ff332e1, type: 3}
+      propertyPath: m_fontColor.r
+      value: 0.70980394
+      objectReference: {fileID: 0}
+    - target: {fileID: 7902724382851232266, guid: e1bf4400f203a8f44b1f27969ff332e1, type: 3}
+      propertyPath: m_fontColor32.rgba
+      value: 4282924469
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
