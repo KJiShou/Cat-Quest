@@ -5852,6 +5852,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Ugh...
     animationName: 
     animationPlaybackMode: 0
@@ -5866,6 +5869,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: What am I supposed to do today?
     animationName: 
     animationPlaybackMode: 0
@@ -5880,6 +5886,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I need to finish this...
     animationName: 
     animationPlaybackMode: 0
@@ -5894,6 +5903,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: And I still have that to deal with...
     animationName: 
     animationPlaybackMode: 0
@@ -5908,6 +5920,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Oh... and I almost forgot about that one.
     animationName: 
     animationPlaybackMode: 0
@@ -5922,6 +5937,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: There's too much.
     animationName: ninja-stun
     animationPlaybackMode: 1
@@ -5936,6 +5954,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: There's too much.
     animationName: 
     animationPlaybackMode: 0
@@ -5950,6 +5971,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I don't even know where to start.
     animationName: 
     animationPlaybackMode: 0
@@ -5964,6 +5988,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I don't even know where to start.
     animationName: ninja-stun
     animationPlaybackMode: 1
@@ -5978,6 +6005,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Maybe staring at all of this isn't helping.
     animationName: ninja-stun
     animationPlaybackMode: 1
@@ -5992,6 +6022,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I'll go for a walk.
     animationName: ninja-stun
     animationPlaybackMode: 1
@@ -6006,6 +6039,9 @@ MonoBehaviour:
     targetPoint: {fileID: 0}
     duration: 0
     jumpHeight: 0
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Maybe some fresh air will clear my head.
     animationName: ninja-stun
     animationPlaybackMode: 1
@@ -6020,6 +6056,9 @@ MonoBehaviour:
     targetPoint: {fileID: 65968504}
     duration: 2
     jumpHeight: 0
+    moveCameraWithCharacter: 1
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Maybe some fresh air will clear my head.
     animationName: ninja-stun
     animationPlaybackMode: 1
@@ -6034,6 +6073,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 1
     jumpHeight: 1.2
+    moveCameraWithCharacter: 1
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Maybe some fresh air will clear my head.
     animationName: ninja-stun
     animationPlaybackMode: 1
@@ -6048,6 +6090,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Master Loke?
     animationName: ninja-stun
     animationPlaybackMode: 1
@@ -6062,6 +6107,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Master Loke?
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6076,6 +6124,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Good morning, {PlayerName}.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6090,6 +6141,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: You look troubled.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6104,6 +6158,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Master Loke?
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6118,6 +6175,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Is it that obvious?
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6132,6 +6192,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Is it that obvious?
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6146,6 +6209,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Very.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6160,6 +6226,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: What's on your mind?
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6174,6 +6243,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Is it that obvious?
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6188,6 +6260,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I have so many things I need to do.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6202,6 +6277,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Things I should finish...
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6216,6 +6294,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Things I shouldn't forget...
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6230,6 +6311,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: And every time I try to start...
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6244,6 +6328,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I just end up thinking about everything at once.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6258,6 +6345,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I just end up thinking about everything at once.
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6272,6 +6362,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I see.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6286,6 +6379,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: So your problem isn't that you have nothing to do.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6300,6 +6396,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Your problem is that everything is fighting for your attention
       at the same time.
     animationName: master-talk
@@ -6315,6 +6414,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I just end up thinking about everything at once.
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6329,6 +6431,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: ...Yeah.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6343,6 +6448,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: That's exactly it.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6357,6 +6465,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: That's exactly it.
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6371,6 +6482,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: '{PlayerName}, when your mind is crowded...'
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6385,6 +6499,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: ...don't try to carry everything in your head.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6399,6 +6516,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Put it somewhere you can see it.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6413,6 +6533,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Write down what you need to do.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6427,6 +6550,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: One task at a time.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6441,6 +6567,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: That's exactly it.
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6455,6 +6584,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: '"Just... write everything down?'
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6469,6 +6601,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: '"Just... write everything down?'
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6483,6 +6618,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Exactly.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6497,6 +6635,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: You don't need to solve everything right now.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6511,6 +6652,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: First, understand what needs to be done.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6525,6 +6669,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Then choose where to begin.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6539,6 +6686,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: '"Just... write everything down?'
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6553,6 +6703,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: So instead of worrying about everything...
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6567,6 +6720,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: I should turn them into smaller tasks?
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6581,6 +6737,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Now you're learning.
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6595,6 +6754,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Now you're learning.
     animationName: master-talk
     animationPlaybackMode: 1
@@ -6609,6 +6771,9 @@ MonoBehaviour:
     targetPoint: {fileID: 1233478465}
     duration: 2
     jumpHeight: 1.2
+    moveCameraWithCharacter: 0
+    moveCameraX: 1
+    moveCameraY: 1
     dialogueText: Now you're learning.
     animationName: sensei-talk
     animationPlaybackMode: 1
@@ -6627,6 +6792,7 @@ MonoBehaviour:
   typingSpeed: 0.03
   activeSpeakerColor: {r: 1, g: 1, b: 1, a: 1}
   inactiveSpeakerColor: {r: 0.55, g: 0.55, b: 0.55, a: 1}
+  storyCamera: {fileID: 615382721}
 --- !u!4 &1144129321
 Transform:
   m_ObjectHideFlags: 0

@@ -41,12 +41,24 @@ public class StoryStep
     // =============================
 
     public MovementType movementType;
+
     public Transform targetPoint;
 
     [Min(0.01f)]
     public float duration = 1f;
 
     public float jumpHeight = 2f;
+
+
+    // =============================
+    // Camera During Movement
+    // =============================
+
+    public bool moveCameraWithCharacter = false;
+
+    public bool moveCameraX = true;
+
+    public bool moveCameraY = true;
 
 
     // =============================

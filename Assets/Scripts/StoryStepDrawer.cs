@@ -101,6 +101,21 @@ public class StoryStepDrawer : PropertyDrawer
                 "animationDirection"
             );
 
+        SerializedProperty moveCameraProperty =
+            property.FindPropertyRelative(
+                "moveCameraWithCharacter"
+            );
+
+        SerializedProperty moveCameraXProperty =
+            property.FindPropertyRelative(
+                "moveCameraX"
+            );
+
+        SerializedProperty moveCameraYProperty =
+            property.FindPropertyRelative(
+                "moveCameraY"
+            );
+
 
         Rect rect =
             new Rect(
@@ -194,6 +209,44 @@ public class StoryStepDrawer : PropertyDrawer
                     jumpHeightProperty,
                     new GUIContent(
                         "Jump Height"
+                    )
+                );
+            }
+
+            MoveNext(ref rect);
+
+
+            EditorGUI.PropertyField(
+                rect,
+                moveCameraProperty,
+                new GUIContent(
+                    "Move Camera With Character"
+                )
+            );
+
+
+            if (moveCameraProperty.boolValue)
+            {
+                MoveNext(ref rect);
+
+
+                EditorGUI.PropertyField(
+                    rect,
+                    moveCameraXProperty,
+                    new GUIContent(
+                        "Move Camera X"
+                    )
+                );
+
+
+                MoveNext(ref rect);
+
+
+                EditorGUI.PropertyField(
+                    rect,
+                    moveCameraYProperty,
+                    new GUIContent(
+                        "Move Camera Y"
                     )
                 );
             }
@@ -521,6 +574,25 @@ public class StoryStepDrawer : PropertyDrawer
                 // Jump Height
                 height +=
                     lineHeight + Spacing;
+            }
+
+            height +=
+                lineHeight + Spacing;
+
+
+            SerializedProperty moveCameraProperty =
+                property.FindPropertyRelative(
+                    "moveCameraWithCharacter"
+                );
+
+
+            if (moveCameraProperty.boolValue)
+            {
+                // Move Camera X
+                // Move Camera Y
+
+                height +=
+                    (lineHeight + Spacing) * 2;
             }
         }
 

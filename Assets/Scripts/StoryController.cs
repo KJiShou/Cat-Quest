@@ -26,6 +26,15 @@ public class StoryController : MonoBehaviour
     private Color inactiveSpeakerColor =
         new Color(0.55f, 0.55f, 0.55f, 1f);
 
+    [Header("Story Camera")]
+    [SerializeField] private Camera storyCamera;
+
+    private Vector3 movementCharacterStartPosition;
+
+    private Vector3 movementCameraStartPosition;
+
+    private Vector3 movementCameraEndPosition;
+
     private int currentStepIndex = -1;
 
     private StoryStep currentStep;
@@ -470,24 +479,112 @@ public class StoryController : MonoBehaviour
 
         SetAllCharactersActive();
 
-        currentState = StoryState.Movement;
+        currentState =
+            StoryState.Movement;
+
+
+        // Save character's starting position
+        movementCharacterStartPosition =
+            character.transform.position;
+
+
+        // Prepare camera movement
+        PrepareCameraMovement(
+            step,
+            character
+        );
+
 
         switch (step.movementType)
         {
             case MovementType.Walk:
+
                 currentAction =
                     StartCoroutine(
-                        WalkCharacter(step, character)
+                        WalkCharacter(
+                            step,
+                            character
+                        )
                     );
+
                 break;
 
+
             case MovementType.Jump:
+
                 currentAction =
                     StartCoroutine(
-                        JumpCharacter(step, character)
+                        JumpCharacter(
+                            step,
+                            character
+                        )
                     );
+
                 break;
         }
+    }
+
+    private void PrepareCameraMovement(
+    StoryStep step,
+    StoryCharacter character)
+    {
+        if (storyCamera == null)
+            return;
+
+
+        movementCameraStartPosition =
+            storyCamera.transform.position;
+
+
+        movementCameraEndPosition =
+            movementCameraStartPosition;
+
+
+        if (!step.moveCameraWithCharacter)
+            return;
+
+
+        Vector3 characterMovement =
+            step.targetPoint.position -
+            character.transform.position;
+
+
+        if (step.moveCameraX)
+        {
+            movementCameraEndPosition.x +=
+                characterMovement.x;
+        }
+
+
+        if (step.moveCameraY)
+        {
+            movementCameraEndPosition.y +=
+                characterMovement.y;
+        }
+
+
+        // Camera Z must remain unchanged
+        movementCameraEndPosition.z =
+            movementCameraStartPosition.z;
+    }
+
+    private void UpdateCameraMovement(
+    StoryStep step,
+    float progress)
+    {
+        if (storyCamera == null ||
+            !step.moveCameraWithCharacter)
+        {
+            return;
+        }
+
+
+        storyCamera.transform.position =
+            Vector3.Lerp(
+                movementCameraStartPosition,
+                movementCameraEndPosition,
+                progress
+            );
     }
 
 
@@ -525,6 +622,11 @@ public class StoryController : MonoBehaviour
                     endPosition,
                     progress
                 );
+
+            UpdateCameraMovement(
+                step,
+                progress
+            );
 
             yield return null;
         }
@@ -579,6 +681,11 @@ public class StoryController : MonoBehaviour
             character.transform.position =
                 position;
 
+            UpdateCameraMovement(
+                step,
+                progress
+            );
+
             if (progress >= 0.5f &&
                 !switchedToJumpDown)
             {
@@ -604,14 +711,27 @@ public class StoryController : MonoBehaviour
     StoryStep step,
     StoryCharacter character)
     {
+        // Character final position
         character.transform.position =
             step.targetPoint.position;
+
+
+        // Camera final position
+        if (storyCamera != null &&
+            step.moveCameraWithCharacter)
+        {
+            storyCamera.transform.position =
+                movementCameraEndPosition;
+        }
+
 
         character.PlayAnimation(
             character.IdleAnimation
         );
 
+
         currentAction = null;
+
 
         StartNextStep();
     }
