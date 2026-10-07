@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-
+using UnityEngine.EventSystems;
 public class StoryController : MonoBehaviour
 {
     [Header("Story Sequence")]
@@ -29,6 +29,9 @@ public class StoryController : MonoBehaviour
     [Header("Story Camera")]
     [SerializeField] private Camera storyCamera;
 
+    [Header("Game Manager")]
+    [SerializeField] private GameManager gameManager;
+
     private Vector3 movementCharacterStartPosition;
 
     private Vector3 movementCameraStartPosition;
@@ -47,6 +50,8 @@ public class StoryController : MonoBehaviour
 
     private float previousAnimatorSpeed = 1f;
 
+    private bool storyEnded = false;
+    private bool storyStarted = false;
     private enum StoryState
     {
         None,
@@ -66,12 +71,19 @@ public class StoryController : MonoBehaviour
     private void Start()
     {
         dialoguePanel.SetActive(false);
-
-        StartNextStep();
     }
 
     private void Update()
     {
+        if (!storyStarted || storyEnded)
+            return;
+
+        if (EventSystem.current != null &&
+            EventSystem.current.IsPointerOverGameObject())
+        {
+            return;
+        }
+
         if (Input.GetMouseButtonDown(0) ||
             Input.GetMouseButtonDown(1) ||
             Input.GetKeyDown(KeyCode.Space))
@@ -84,6 +96,71 @@ public class StoryController : MonoBehaviour
     // =====================================================
     // STORY SEQUENCE
     // =====================================================
+    public void StartStory()
+    {
+        if (storyStarted || storyEnded)
+            return;
+
+        storyStarted = true;
+
+        currentStepIndex = -1;
+        currentState = StoryState.None;
+
+        StartNextStep();
+    }
+
+    private void FinishStory()
+    {
+        dialoguePanel.SetActive(false);
+        continueIcon.SetActive(false);
+
+        SetAllCharactersActive();
+
+        currentState = StoryState.Finished;
+
+        Debug.Log("Story finished.");
+
+        gameManager.LoadNextLevel("CharacterHome", 1f);
+    }
+
+    private void CleanupCurrentStoryAction()
+    {
+        if (currentStep == null)
+            return;
+
+        StoryCharacter character = currentStep.character;
+
+        if (character == null)
+            return;
+
+        Animator animator = character.Animator;
+
+        if (animator != null)
+        {
+            animator.speed = previousAnimatorSpeed;
+        }
+
+        character.PlayAnimation(
+            character.IdleAnimation
+        );
+    }
+
+    public void SkipStory()
+    {
+        if (storyEnded)
+            return;
+
+        storyEnded = true;
+
+        // Stop all movement animation
+        StopAllCoroutines();
+
+        currentAction = null;
+
+        CleanupCurrentStoryAction();
+
+        FinishStory();
+    }
 
     private void StartNextStep()
     {
@@ -741,6 +818,27 @@ public class StoryController : MonoBehaviour
     // DIALOGUE
     // =====================================================
 
+    private string ProcessDialogueText(string text)
+    {
+        string playerName =
+            GameDataManager.Instance.GetUsername();
+
+        return text.Replace(
+            "{playerName}",
+            playerName
+        );
+    }
+
+    private string GetSpeakerDisplayName(StoryCharacter character)
+    {
+        if (character.DisplayName == "Player")
+        {
+            return GameDataManager.Instance.GetUsername();
+        }
+
+        return character.DisplayName;
+    }
+
     private void StartDialogue(StoryStep step)
     {
         StoryCharacter character =
@@ -762,11 +860,10 @@ public class StoryController : MonoBehaviour
         SetActiveSpeaker(character);
 
         // Automatically use Character Display Name
-        speakerNameText.text =
-            character.DisplayName;
+        speakerNameText.text = GetSpeakerDisplayName(character);
 
         currentFullText =
-            step.dialogueText;
+            ProcessDialogueText(step.dialogueText);
 
         continueIcon.SetActive(false);
 
@@ -977,12 +1074,11 @@ public class StoryController : MonoBehaviour
 
     private void EndStory()
     {
-        dialoguePanel.SetActive(false);
+        if (storyEnded)
+            return;
 
-        SetAllCharactersActive();
+        storyEnded = true;
 
-        currentState = StoryState.Finished;
-
-        Debug.Log("Story finished.");
+        FinishStory();
     }
 }
