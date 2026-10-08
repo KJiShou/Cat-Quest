@@ -24,6 +24,11 @@ public class TaskDatePicker : MonoBehaviour
     private readonly Color ink = new Color32(20, 45, 77, 255);
 
     public DateTime SelectedDate => new DateTime(year, month, day);
+    public void LoadValue(DateTime value)
+    {
+        year = value.Year; month = value.Month; day = value.Day;
+        dateLabel.text = SelectedDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+    }
 
     private void Awake()
     {

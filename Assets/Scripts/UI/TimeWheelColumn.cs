@@ -8,6 +8,7 @@ public class TimeWheelColumn : MonoBehaviour, IBeginDragHandler, IEndDragHandler
     public ScrollRect scroll;
     public TMP_Text[] numbers;
     public float rowHeight = 44;
+    public int minimumValue;
     public int Value { get; private set; }
     private bool dragging;
     private float lastInput;
@@ -17,8 +18,8 @@ public class TimeWheelColumn : MonoBehaviour, IBeginDragHandler, IEndDragHandler
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(scroll.content);
         scroll.StopMovement();
-        Value = Mathf.Clamp(value, 0, numbers.Length - 1);
-        scroll.content.anchoredPosition = new Vector2(0, Value * rowHeight);
+        Value = Mathf.Clamp(value, minimumValue, minimumValue + numbers.Length - 1);
+        scroll.content.anchoredPosition = new Vector2(0, (Value - minimumValue) * rowHeight);
         UpdateAppearance();
     }
 
@@ -30,11 +31,11 @@ public class TimeWheelColumn : MonoBehaviour, IBeginDragHandler, IEndDragHandler
     private void LateUpdate()
     {
         float position = scroll.content.anchoredPosition.y;
-        Value = Mathf.Clamp(Mathf.RoundToInt(position / rowHeight), 0, numbers.Length - 1);
+        Value = minimumValue + Mathf.Clamp(Mathf.RoundToInt(position / rowHeight), 0, numbers.Length - 1);
         if (!dragging && Time.unscaledTime - lastInput > .12f && Mathf.Abs(scroll.velocity.y) < 40)
         {
             scroll.StopMovement();
-            float target = Value * rowHeight;
+            float target = (Value - minimumValue) * rowHeight;
             float snapped = Mathf.Lerp(position, target, 1 - Mathf.Exp(-20 * Time.unscaledDeltaTime));
             if (Mathf.Abs(snapped - target) < .05f) snapped = target;
             scroll.content.anchoredPosition = new Vector2(0, snapped);
@@ -49,7 +50,7 @@ public class TimeWheelColumn : MonoBehaviour, IBeginDragHandler, IEndDragHandler
         {
             float distance = Mathf.Abs(i - position);
             float emphasis = Mathf.Clamp01(1 - distance / 2.6f);
-            Color color = i == Value ? new Color32(0, 137, 245, 255) : new Color32(103, 125, 155, 255);
+            Color color = i + minimumValue == Value ? new Color32(0, 137, 245, 255) : new Color32(103, 125, 155, 255);
             color.a = Mathf.Lerp(.12f, 1, emphasis);
             numbers[i].color = color;
             numbers[i].fontSize = Mathf.Lerp(20, 28, emphasis);

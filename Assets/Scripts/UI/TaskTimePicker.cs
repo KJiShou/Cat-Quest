@@ -15,7 +15,11 @@ public class TaskTimePicker : MonoBehaviour
     public Button dismiss;
     public int hour = 8;
     public int minute;
-    public System.TimeSpan SelectedTime => new System.TimeSpan(hour, minute, 0);
+    public bool isPm;
+    public Toggle am;
+    public Toggle pm;
+    private bool draftPm;
+    public System.TimeSpan SelectedTime => new System.TimeSpan(hour % 12 + (isPm ? 12 : 0), minute, 0);
 
     private void Awake()
     {
@@ -23,6 +27,8 @@ public class TaskTimePicker : MonoBehaviour
         confirm.onClick.AddListener(Confirm);
         cancel.onClick.AddListener(Close);
         dismiss.onClick.AddListener(Close);
+        am.onValueChanged.AddListener(value => { if (value) draftPm = false; });
+        pm.onValueChanged.AddListener(value => { if (value) draftPm = true; });
         RefreshLabel();
     }
 
@@ -32,6 +38,8 @@ public class TaskTimePicker : MonoBehaviour
         overlay.transform.SetAsLastSibling();
         hourWheel.SetValue(hour);
         minuteWheel.SetValue(minute);
+        draftPm = isPm;
+        am.SetIsOnWithoutNotify(!isPm); pm.SetIsOnWithoutNotify(isPm);
         var canvas = timeButton.GetComponentInParent<Canvas>().rootCanvas;
         var overlayRect = (RectTransform)overlay.transform;
         var corners = new Vector3[4];
@@ -50,11 +58,19 @@ public class TaskTimePicker : MonoBehaviour
     {
         hour = hourWheel.Value;
         minute = minuteWheel.Value;
+        isPm = draftPm;
         RefreshLabel();
         Close();
     }
 
-    private void RefreshLabel() => timeLabel.text = hour.ToString("00") + ":" + minute.ToString("00");
+    public void LoadValue(System.TimeSpan value)
+    {
+        int hour24 = value.Hours; isPm = hour24 >= 12;
+        hour = hour24 % 12; if (hour == 0) hour = 12;
+        minute = value.Minutes;
+        RefreshLabel();
+    }
+    private void RefreshLabel() => timeLabel.text = hour.ToString("00") + ":" + minute.ToString("00") + (isPm ? " PM" : " AM");
     private void Close() => overlay.SetActive(false);
     private void OnDisable() { if (overlay) Close(); }
 }
