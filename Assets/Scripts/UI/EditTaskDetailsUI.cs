@@ -60,6 +60,7 @@ public class EditTaskDetailsUI : MonoBehaviour
         clearTitle.onClick.AddListener(() => taskTitle.text = string.Empty);
         description.onValueChanged.AddListener(UpdateCount);
         addSubtask.onClick.AddListener(AddSubtask);
+        difficulty.options[1].text = "Medium";
         difficulty.onValueChanged.AddListener(UpdateDifficulty);
         UpdateDifficulty(difficulty.value);
         tagMultiSelection.SelectionChanged += SetTag;
@@ -139,7 +140,7 @@ public class EditTaskDetailsUI : MonoBehaviour
         difficultyBadge.sprite = difficultySprites[value];
         difficultyBadge.type = Image.Type.Simple;
         difficultyBadge.preserveAspect = true;
-        difficulty.captionText.text = ((TaskDifficulty)value).ToString();
+        difficulty.captionText.text = TaskService.DifficultyName((TaskDifficulty)value);
         difficulty.captionText.color = TaskUIBuilder.DifficultyColor((TaskDifficulty)value);
         difficulty.captionText.alignment = TextAlignmentOptions.Center;
     }

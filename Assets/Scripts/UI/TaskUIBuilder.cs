@@ -23,7 +23,7 @@ public sealed class TaskUIBuilder
     public static void DifficultyBadge(Transform badge, TaskDifficulty difficulty, Sprite[] sprites)
     {
         var text = badge.GetComponentInChildren<TMP_Text>(true);
-        text.text = difficulty.ToString(); text.color = DifficultyColor(difficulty);
+        text.text = TaskService.DifficultyName(difficulty); text.color = DifficultyColor(difficulty);
         text.alignment = TextAlignmentOptions.Center; text.textWrappingMode = TextWrappingModes.NoWrap;
         text.enableAutoSizing = false;
         var image = badge.GetComponentInChildren<Image>(true);

@@ -1,0 +1,4 @@
+Lucide icons: https://github.com/lucide-icons/lucide
+Downloaded pin.svg, pin-off.svg and minus.svg from main/icons on 2026-10-19.
+PNG copies rendered at 96px with white strokes for Unity UI tinting using resvg.
+License included in LICENSE.txt.

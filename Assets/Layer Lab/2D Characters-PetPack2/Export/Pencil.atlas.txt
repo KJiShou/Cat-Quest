@@ -1,0 +1,16 @@
+Pencil.png
+size:128,128
+filter:Linear,Linear
+pma:true
+Pencil/Body
+bounds:2,16,78,108
+Pencil/Eye
+bounds:2,2,28,12
+offsets:1,1,30,14
+Pencil/Mouth
+bounds:82,18,13,5
+offsets:1,1,15,7
+Shadow
+bounds:82,25,99,28
+offsets:1,1,101,30
+rotate:90

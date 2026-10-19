@@ -129,7 +129,8 @@ public class DashboardTasksUI : MonoBehaviour
                 task,
                 taskManager.editor.difficultySprites,
                 OpenTask,
-                RequestComplete);
+                RequestComplete,
+                service.PreviewReward(task));
         }
 
         if (tasks.Length == 0)

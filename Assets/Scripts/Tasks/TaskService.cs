@@ -21,7 +21,7 @@ public sealed class TaskView
     public string Key => IsHistory ? history.id : task.id;
 }
 
-public sealed class TaskService
+public sealed partial class TaskService
 {
     public event Action Changed;
     public string LastError { get; private set; }
@@ -35,6 +35,10 @@ public sealed class TaskService
     public TaskService(IPlayerDataStore store, ITaskClock clock)
     {
         this.store = store; this.clock = clock;
+        PlayerDataStore.Normalize(store.Data);
+        RecoverInterruptedBattles();
+        if (store.Data.focusSessions.Any(s => s.status == FocusSessionStatus.Running))
+            Commit(data => { foreach (var session in data.focusSessions.Where(s => s.status == FocusSessionStatus.Running)) session.status = FocusSessionStatus.Invalid; });
         if (!store.Data.tagsInitialized)
             Commit(data =>
             {
@@ -46,7 +50,10 @@ public sealed class TaskService
     }
     public static string DateKey(DateTime date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     public static bool TryDate(string value, out DateTime date) => DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
-    public static int Reward(TaskDifficulty difficulty) => difficulty == TaskDifficulty.Easy ? 5 : difficulty == TaskDifficulty.Hard ? 20 : 10;
+    public static int Reward(TaskDifficulty difficulty) => BaseReward(difficulty).fishCoins;
+    public static RewardAmounts BaseReward(TaskDifficulty difficulty) => difficulty == TaskDifficulty.Easy
+        ? new RewardAmounts(10, 5) : difficulty == TaskDifficulty.Hard ? new RewardAmounts(30, 15) : new RewardAmounts(20, 10);
+    public static string DifficultyName(TaskDifficulty difficulty) => difficulty == TaskDifficulty.Normal ? "Medium" : difficulty.ToString();
     private string Today => DateKey(clock.LocalNow);
     private static string OccurrenceDay(QuestTask task, string today) => task.daily ? today : "once";
 
@@ -205,20 +212,25 @@ public sealed class TaskService
             var receipt = data.history.FirstOrDefault(h => h.taskId == taskId && h.day == occurrence.day);
             if (!occurrence.rewardGranted)
             {
-                int amount = Reward(current.difficulty);
-                data.fishCoins = checked(data.fishCoins + amount); data.experience = checked(data.experience + amount);
+                var rewardDay = GetRewardDay(data, Today);
+                var amount = TaskAllowance(current.difficulty, rewardDay);
+                AddRewards(data, amount);
+                rewardDay.taskExperience += amount.experience;
+                rewardDay.taskFishCoins += amount.fishCoins;
                 occurrence.rewardGranted = true;
                 data.history.Add(new TaskCompletion
                 {
                     id = Guid.NewGuid().ToString("N"), taskId = taskId, day = occurrence.day,
-                    completedUtc = clock.UtcNow.ToString("o", CultureInfo.InvariantCulture), snapshot = PlayerDataStore.Copy(current),
-                    tagNames = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.name).ToList(), fishCoins = amount, experience = amount
+                    completedUtc = clock.UtcNow.ToString("o", CultureInfo.InvariantCulture), completedLocalDay = Today, rewardedLocalDay = Today,
+                    snapshot = PlayerDataStore.Copy(current),
+                    tagNames = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.name).ToList(), fishCoins = amount.fishCoins, experience = amount.experience
                 });
             }
             else if (receipt != null && receipt.revoked)
             {
                 receipt.revoked = false;
                 receipt.completedUtc = clock.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+                receipt.completedLocalDay = Today;
                 receipt.snapshot = PlayerDataStore.Copy(current);
                 receipt.tagNames = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.name).ToList();
             }

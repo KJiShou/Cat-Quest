@@ -55,6 +55,9 @@ public class TaskSystemUI : MonoBehaviour
 
     private void Start()
     {
+        var tabBar=tabButtons[0].transform.parent;
+        var tabs=tabBar.GetComponent<TaskTabsLayout>() ?? tabBar.gameObject.AddComponent<TaskTabsLayout>();
+        tabs.owner=this;tabs.Apply();
         ui = new TaskUIBuilder(font, roundedSprite);
         var manager = GameDataManager.EnsureInstance();
         Service = manager.Tasks;
@@ -238,7 +241,7 @@ public class TaskSystemUI : MonoBehaviour
         SpaceSchedule(date);
         var difficulty=TaskUIBuilder.Find(row.transform,"Normal_Difficulty");
         TaskUIBuilder.DifficultyBadge(difficulty,view.task.difficulty,editor.difficultySprites);
-        foreach(var text in row.GetComponentsInChildren<TMP_Text>(true)) if(text.name.StartsWith("FishNum")) text.text=(view.IsHistory ? view.history.fishCoins : TaskService.Reward(view.task.difficulty)).ToString();
+        foreach(var text in row.GetComponentsInChildren<TMP_Text>(true)) if(text.name.StartsWith("FishNum")) text.text=Service.PreviewReward(view).fishCoins.ToString();
         var tags=TaskUIBuilder.Find(row.transform,"Tags");
         string tagCaption=string.Join(", ",view.tagNames.Take(2))+(view.tagNames.Count>2 ? " +"+(view.tagNames.Count-2) : "");
         TaskUIBuilder.LayoutTag(tags.gameObject,tagCaption,15,28);
@@ -450,7 +453,7 @@ public class TaskSystemUI : MonoBehaviour
         var difficultyToggles=new List<Toggle>();
         foreach(TaskDifficulty value in Enum.GetValues(typeof(TaskDifficulty)))
         {
-            var toggle=ui.Toggle(modalPanel,value.ToString(),selectedDifficulty==value); toggle.group=radio; difficultyToggles.Add(toggle);
+            var toggle=ui.Toggle(modalPanel,TaskService.DifficultyName(value),selectedDifficulty==value); toggle.group=radio; difficultyToggles.Add(toggle);
             toggle.onValueChanged.AddListener(isOn=> { if(!isOn) return; selectedDifficulty=value; all.SetIsOnWithoutNotify(false); foreach(var other in difficultyToggles) if(other!=toggle) other.SetIsOnWithoutNotify(false); });
         }
         all.onValueChanged.AddListener(isOn=> { if(!isOn)return; selectedDifficulty=null; foreach(var toggle in difficultyToggles) toggle.SetIsOnWithoutNotify(false); });

@@ -28,6 +28,9 @@ public class GameDataManager : MonoBehaviour
         if (store != null) return;
         Instance = this;
         string path = Path.Combine(Application.persistentDataPath, "catquest-data.json");
+        // Explicit standalone smoke-test mode always uses an isolated verification store.
+        if (CompanionProtocol.HasArgument("--focus-smoke"))
+            path = Path.Combine(CompanionProtocol.Argument("--smoke-dir"), "test-save.json");
 #if UNITY_EDITOR
         // Editor integration tests use a disposable store, never the player's save.
         string testPath = System.Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");

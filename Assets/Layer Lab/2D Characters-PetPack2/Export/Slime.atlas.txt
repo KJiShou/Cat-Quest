@@ -1,0 +1,16 @@
+Slime.png
+size:128,128
+filter:Linear,Linear
+pma:true
+Shadow2
+bounds:2,2,72,20
+offsets:1,1,74,22
+rotate:90
+Slime/Body
+bounds:2,76,63,48
+Slime/Eff
+bounds:67,101,21,23
+offsets:0,0,22,24
+Slime/Eye
+bounds:24,65,23,9
+offsets:1,1,25,11

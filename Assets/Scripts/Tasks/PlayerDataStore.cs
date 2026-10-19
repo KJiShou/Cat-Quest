@@ -39,7 +39,7 @@ public sealed class PlayerDataStore : IPlayerDataStore
             string json = File.ReadAllText(path).Trim();
             if (!json.StartsWith("{") || !json.EndsWith("}")) return false;
             data = JsonUtility.FromJson<PlayerData>(json);
-            if (data == null || data.version > 2) return false;
+            if (data == null || data.version > 4) return false;
             Normalize(data);
             return true;
         }
@@ -70,11 +70,26 @@ public sealed class PlayerDataStore : IPlayerDataStore
     public static T Copy<T>(T value) => JsonUtility.FromJson<T>(JsonUtility.ToJson(value));
     public static void Normalize(PlayerData data)
     {
-        data.version = 2;
+        data.version = 4;
+        data.masterStage = Math.Max(1,data.masterStage);
+        data.battles ??= new List<BattleAttempt>();
+        data.bossProgress ??= new List<BossProgress>();
+        data.battles.RemoveAll(b=>b==null);
+        data.bossProgress.RemoveAll(b=>b==null);
+        for(int id=1;id<=3;id++) if(!data.bossProgress.Exists(p=>p.bossId==id)) data.bossProgress.Add(new BossProgress {bossId=id});
         data.tasks ??= new List<QuestTask>();
         data.tags ??= new List<QuestTag>();
         data.occurrences ??= new List<TaskOccurrence>();
         data.history ??= new List<TaskCompletion>();
+        data.rewardDays ??= new List<RewardDay>();
+        data.focusSessions ??= new List<FocusSession>();
+        data.rewardDays.RemoveAll(d => d == null);
+        data.focusSessions.RemoveAll(s => s == null);
+        foreach (var session in data.focusSessions)
+        {
+            if (session.focusDurationSeconds <= 0) session.focusDurationSeconds = 1500;
+            if (session.restDurationSeconds <= 0) session.restDurationSeconds = 300;
+        }
         data.tasks.RemoveAll(t => t == null);
         data.tags.RemoveAll(t => t == null);
         data.occurrences.RemoveAll(t => t == null);
@@ -85,6 +100,12 @@ public sealed class PlayerDataStore : IPlayerDataStore
             task.subtasks ??= new List<QuestSubtask>();
         }
         foreach (var item in data.occurrences) item.completedSubtaskIds ??= new List<string>();
-        foreach (var item in data.history) item.tagNames ??= new List<string>();
+        foreach (var item in data.history)
+        {
+            item.tagNames ??= new List<string>();
+            if (string.IsNullOrEmpty(item.completedLocalDay) && DateTimeOffset.TryParse(item.completedUtc, out var completed))
+                item.completedLocalDay = TaskService.DateKey(completed.LocalDateTime);
+            if (string.IsNullOrEmpty(item.rewardedLocalDay)) item.rewardedLocalDay = item.completedLocalDay;
+        }
     }
 }

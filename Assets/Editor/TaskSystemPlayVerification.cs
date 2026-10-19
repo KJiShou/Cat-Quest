@@ -44,6 +44,8 @@ public static class TaskSystemPlayVerification
         if(EditorApplication.timeSinceStartup<next) return;
         try
         {
+            var navigationForTest=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
+            if(step==0 && navigationForTest && !navigationForTest.taskSystem.gameObject.activeInHierarchy) { navigationForTest.ShowPage(MainMenuPage.Tasks); next=EditorApplication.timeSinceStartup+1; return; }
             var system=UnityEngine.Object.FindFirstObjectByType<TaskSystemUI>();
             Check(system && system.Service!=null,"MainMenu did not initialize the task system.");
             if(step==0)
@@ -165,7 +167,7 @@ public static class TaskSystemPlayVerification
                 Check(system.Service.Snapshot.fishCoins==0,"Cancelling confirm completed task.");
                 system.CompleteSelected(taskId);
                 TaskUIBuilder.Find(canvas.transform.Find("TaskConfirmDialog"),"Confirm").GetComponent<Button>().onClick.Invoke();
-                Check(system.Service.Snapshot.fishCoins==10 && system.Service.Snapshot.experience==10,"Normal task rewards failed.");
+                Check(system.Service.Snapshot.fishCoins==10 && system.Service.Snapshot.experience==20,"Normal task rewards failed.");
                 Check(system.tickets.text=="0" && system.Service.Snapshot.tickets==0,"XP rewards were shown as tickets.");
                 Check(system.tabCounts[0].text=="0" && system.tabCounts[4].text=="1","Tab counts did not refresh.");
                 Check(!system.detailsRoot.gameObject.activeSelf && system.SelectedKey==null,"Completed selection kept the details panel open.");
@@ -188,13 +190,13 @@ public static class TaskSystemPlayVerification
                 Check(form.dailyToggle.isOn && form.scheduleToggle.isOn,"Daily add defaults failed.");
                 form.taskTitle.text="UI daily task"; form.difficulty.value=(int)TaskDifficulty.Hard; system.SaveDraft(); dailyId=system.Service.Snapshot.tasks.First(t=>t.daily).id;
                 system.CompleteSelected(dailyId); system.CompleteSelected(dailyId);
-                Check(system.Service.Snapshot.fishCoins==30 && system.Service.Snapshot.history.Count==2,"Daily completion paid twice or wrong reward.");
+                Check(system.Service.Snapshot.fishCoins==25 && system.Service.Snapshot.history.Count==2,"Daily completion paid twice or wrong reward.");
                 var dailyBox=TaskUIBuilder.Find(system.listContent,"Task_"+dailyId).Find("Image").GetComponent<Button>();
                 dailyBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left});
-                Check(!system.Service.Query(TaskTab.Daily).Single().Completed && system.Service.Snapshot.fishCoins==30,"Daily checkbox did not reopen without removing rewards.");
+                Check(!system.Service.Query(TaskTab.Daily).Single().Completed && system.Service.Snapshot.fishCoins==25,"Daily checkbox did not reopen without removing rewards.");
                 dailyBox=TaskUIBuilder.Find(system.listContent,"Task_"+dailyId).Find("Image").GetComponent<Button>();
                 dailyBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left});
-                Check(system.Service.Query(TaskTab.Daily).Single().Completed && system.Service.Snapshot.fishCoins==30,"Daily checkbox recompletion paid twice.");
+                Check(system.Service.Query(TaskTab.Daily).Single().Completed && system.Service.Snapshot.fishCoins==25,"Daily checkbox recompletion paid twice.");
                 system.SelectTab(TaskTab.Todo); system.BeginAdd(); system.QuickAddInput.text="Temporary todo"; system.CommitQuickAdd();
                 var temporary=system.Service.Snapshot.tasks.First(t=>t.title=="Temporary todo");
                 Check(!temporary.scheduled,"Todo should default to no schedule.");
@@ -290,13 +292,13 @@ public static class TaskSystemPlayVerification
                 var dialog=system.GetComponentInParent<Canvas>().rootCanvas.transform.Find("TaskDialog");
                 system.SelectTab(TaskTab.Daily); system.SelectTask(dailyId); TaskUIBuilder.Find(system.detailsRoot,"DeleteButton").GetComponentInChildren<Button>().onClick.Invoke();
                 TaskUIBuilder.Find(system.GetComponentInParent<Canvas>().rootCanvas.transform.Find("TaskConfirmDialog"),"Confirm").GetComponent<Button>().onClick.Invoke(); Check(!system.Service.Snapshot.tasks.Any(t=>t.id==dailyId) && system.Service.Snapshot.history.Count==2,"Daily delete removed history.");
-                var disk=new PlayerDataStore(GameDataManager.Instance.SavePath); Check(disk.Data.history.Count==2 && disk.Data.fishCoins==30,"UI changes were not saved on disk.");
+                var disk=new PlayerDataStore(GameDataManager.Instance.SavePath); Check(disk.Data.history.Count==2 && disk.Data.fishCoins==25,"UI changes were not saved on disk.");
                 system.SelectTab(TaskTab.History); system.SelectTask(system.Service.Query(TaskTab.History).First().Key);
                 var deletedHistory=system.Service.Query(TaskTab.History).Single(v=>v.task.id==dailyId);
                 Check(!TaskUIBuilder.Find(system.listContent,"Task_"+deletedHistory.Key).Find("Image").GetComponent<Button>().interactable,"Deleted History checkbox remained enabled.");
                 system.search.text="UI integration"; Check(system.listContent.GetComponentsInChildren<Button>(false).Count(b=>b.name.StartsWith("Task_"))==1,"Search UI did not filter history.");
                 system.search.text=""; system.filterButton.onClick.Invoke();
-                var normal=dialog.GetComponentsInChildren<Toggle>(false).First(t=>t.name=="Normal"); normal.isOn=true;
+                var normal=dialog.GetComponentsInChildren<Toggle>(false).First(t=>t.name=="Medium"); normal.isOn=true;
                 TaskUIBuilder.Find(dialog,"Apply").GetComponent<Button>().onClick.Invoke(); Check(system.listContent.GetComponentsInChildren<Button>(false).Count(b=>b.name.StartsWith("Task_"))==1,"Difficulty filter UI failed.");
                 system.SelectTab(TaskTab.History); system.SelectTask(system.Service.Query(TaskTab.History).First(v=>v.task.title=="UI integration task").Key);
                 Capture(system);
@@ -368,17 +370,17 @@ public static class TaskSystemPlayVerification
             var row=TaskUIBuilder.Find(system.listContent,"Task_"+id);
             var badge=TaskUIBuilder.Find(row,"Normal_Difficulty");
             var text=badge.GetComponentInChildren<TMP_Text>(); var image=badge.GetComponentInChildren<Image>();
-            Check(text.text==value.ToString() && text.color==TaskUIBuilder.DifficultyColor(value) && image.sprite==system.editor.difficultySprites[(int)value] && image.preserveAspect,"List difficulty badge mismatch.");
+            Check(text.text==TaskService.DifficultyName(value) && text.color==TaskUIBuilder.DifficultyColor(value) && image.sprite==system.editor.difficultySprites[(int)value] && image.preserveAspect,"List difficulty badge mismatch.");
             var title=system.detailsRoot.Find("ScrollRect/Content/Title/GameObject/Title").GetComponent<RectTransform>();
             var detailBadge=title.parent.GetComponentsInChildren<Transform>(true).First(t=>t.name.Contains("Difficulty"));
             var corners=new Vector3[4]; var badgeCorners=new Vector3[4]; title.GetWorldCorners(corners); ((RectTransform)detailBadge).GetWorldCorners(badgeCorners);
             Check(corners[3].x<=badgeCorners[0].x,"Long title overlaps detail badge.");
-            Check(detailBadge.GetComponentInChildren<TMP_Text>().text==value.ToString(),"Detail difficulty caption mismatch.");
+            Check(detailBadge.GetComponentInChildren<TMP_Text>().text==TaskService.DifficultyName(value),"Detail difficulty caption mismatch.");
             var date=TaskUIBuilder.Find(row,"DateTime").GetComponent<TMP_Text>();
             Check(date.color==TaskUIBuilder.Overdue && !date.text.Contains("Overdue"),"Overdue date is not red or still has a prefix.");
             Check(system.detailsRoot.Find("ScrollRect/Content/Schedule/GameObject/Title (2)").GetComponent<TMP_Text>().color==TaskUIBuilder.Overdue,"Detail overdue date is not red.");
             system.editor.LoadDraft(task,system.Service.Snapshot.tags,Array.Empty<string>());
-            Check(system.editor.difficulty.captionText.text==value.ToString() && system.editor.difficulty.captionText.color==TaskUIBuilder.DifficultyColor(value),"Editor difficulty mismatch.");
+            Check(system.editor.difficulty.captionText.text==TaskService.DifficultyName(value) && system.editor.difficulty.captionText.color==TaskUIBuilder.DifficultyColor(value),"Editor difficulty mismatch.");
         }
         Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-long-title-preview.png",true);
     }

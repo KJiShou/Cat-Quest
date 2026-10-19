@@ -102,8 +102,9 @@ public sealed class TaskDetailsPresenter
             toggle.onValueChanged.AddListener(value=> { if(!service.SetSubtask(view.task.id,sub.id,value)) { error(service.LastError); toggle.SetIsOnWithoutNotify(!value); } });
         }
         body.Find("SubTasks").gameObject.SetActive(view.task.subtasks.Count>0);
-        fish.text=(view.IsHistory ? view.history.fishCoins : TaskService.Reward(view.task.difficulty)).ToString();
-        xp.text=(view.IsHistory ? view.history.experience : TaskService.Reward(view.task.difficulty)).ToString();
+        var reward = service.PreviewReward(view);
+        fish.text=reward.fishCoins.ToString();
+        xp.text=reward.experience.ToString();
         complete.interactable=!view.Completed && service.Eligible(view.task);
         complete.onClick.AddListener(()=>onComplete(view.task.id)); edit.onClick.AddListener(()=>onEdit(view)); delete.onClick.AddListener(()=>onDelete(view.task.id));
         LayoutRebuilder.MarkLayoutForRebuild((RectTransform)body);

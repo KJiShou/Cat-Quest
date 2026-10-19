@@ -1,0 +1,8 @@
+<linker>
+  <!-- SpriteSkinShutdown calls the package's internal cleanup method at exit. -->
+  <assembly fullname="Unity.2D.Animation.Runtime">
+    <type fullname="UnityEngine.U2D.Animation.GpuDeformationSystem" preserve="nothing">
+      <method name="ClearFallbackBuffer" />
+    </type>
+  </assembly>
+</linker>

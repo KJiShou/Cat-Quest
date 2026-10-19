@@ -18,14 +18,15 @@ public class DashboardTaskRow : MonoBehaviour
             TaskView view,
             Sprite[] difficultySprites,
             Action<TaskView> clicked,
-            Action<TaskView> completeRequested
+            Action<TaskView> completeRequested,
+            RewardAmounts reward
         )
     {
         taskTitle.text = view.task.title;
         taskTitle.textWrappingMode = TextWrappingModes.NoWrap;
         taskTitle.overflowMode = TextOverflowModes.Ellipsis;
 
-        difficultyLabel.text = view.task.difficulty.ToString();
+        difficultyLabel.text = TaskService.DifficultyName(view.task.difficulty);
         difficultyBackground.sprite =
             difficultySprites[(int)view.task.difficulty];
 
@@ -35,8 +36,8 @@ public class DashboardTaskRow : MonoBehaviour
                 ? new Color32(0, 166, 85, 255)
                 : new Color32(0, 137, 245, 255);
 
-        fishAmount.text = TaskService.Reward(view.task.difficulty).ToString();
-        EXP_Amount.text = TaskService.Reward(view.task.difficulty).ToString();
+        fishAmount.text = reward.fishCoins.ToString();
+        EXP_Amount.text = reward.experience.ToString();
         tick.SetActive(view.Completed);
 
         var button = GetComponent<Button>();
