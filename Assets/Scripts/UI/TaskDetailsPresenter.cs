@@ -77,7 +77,7 @@ public sealed class TaskDetailsPresenter
         if(difficulty) {
             difficulty.gameObject.SetActive(view!=null);
             if(view!=null) {
-                var system=root.GetComponentInParent<TaskSystemUI>();
+                var system=root.GetComponentInParent<TaskSystemUI>(true);
                 TaskUIBuilder.DifficultyBadge(difficulty,view.task.difficulty,system.editor.difficultySprites);
                 var badgeSize=TaskUIBuilder.Height((RectTransform)difficulty,34);
                 badgeSize.minWidth=badgeSize.preferredWidth=80; badgeSize.flexibleWidth=0;

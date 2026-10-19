@@ -43,6 +43,7 @@ public sealed class TaskConfirmDialog
         var icon=close.transform.Find("Icon_Close").GetComponent<RectTransform>(); icon.sizeDelta=new Vector2(20,20);
         var dim=Root.transform.Find("ScreenDim").GetComponent<Image>(); dim.color=new Color(0,0,0,.18f);
         dim.raycastTarget=true; var outside=dim.gameObject.GetComponent<Button>() ?? dim.gameObject.AddComponent<Button>();
+        (outside.GetComponent<JuicyButton>()??outside.gameObject.AddComponent<JuicyButton>()).enabled=false;
         outside.onClick.RemoveAllListeners(); outside.onClick.AddListener(Close);
         Root.SetActive(false);
     }

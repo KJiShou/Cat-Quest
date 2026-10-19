@@ -27,6 +27,7 @@ public class TaskTimePicker : MonoBehaviour
         confirm.onClick.AddListener(Confirm);
         cancel.onClick.AddListener(Close);
         dismiss.onClick.AddListener(Close);
+        (dismiss.GetComponent<JuicyButton>()??dismiss.gameObject.AddComponent<JuicyButton>()).enabled=false;
         am.onValueChanged.AddListener(value => { if (value) draftPm = false; });
         pm.onValueChanged.AddListener(value => { if (value) draftPm = true; });
         RefreshLabel();

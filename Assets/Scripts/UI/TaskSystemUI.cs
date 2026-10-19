@@ -147,8 +147,10 @@ public class TaskSystemUI : MonoBehaviour
         var canvas=GetComponentInParent<Canvas>().rootCanvas;
         modalOverlay=TaskUIBuilder.Rect(canvas.transform,"TaskDialog"); TaskUIBuilder.Stretch(modalOverlay); ui.Image(modalOverlay,new Color(0,0,0,.08f));
         var close=modalOverlay.gameObject.AddComponent<Button>(); close.onClick.AddListener(CloseModal);
+        close.gameObject.AddComponent<JuicyButton>().enabled=false; // Backdrop dismiss surface, not a visible button.
         modalPanel=ui.Column(modalOverlay,"Dialog",-1,12); modalPanel.anchorMin=modalPanel.anchorMax=new Vector2(.5f,.5f); modalPanel.pivot=new Vector2(.5f,.5f); modalPanel.sizeDelta=new Vector2(540,440);
         ui.Image(modalPanel,Color.white,roundedSprite); modalPanel.gameObject.AddComponent<Button>();
+        modalPanel.gameObject.AddComponent<JuicyButton>().enabled=false; // Swallow panel clicks without animating the whole dialog.
         modalPanel.GetComponent<VerticalLayoutGroup>().padding=new RectOffset(24,24,20,20);
         modalOverlay.gameObject.SetActive(false);
         confirmation=new TaskConfirmDialog(confirmDialogTemplate,canvas.transform,font);

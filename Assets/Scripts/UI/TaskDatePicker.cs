@@ -34,6 +34,7 @@ public class TaskDatePicker : MonoBehaviour
     {
         dateButton.onClick.AddListener(Open);
         dismiss.onClick.AddListener(() => overlay.SetActive(false));
+        (dismiss.GetComponent<JuicyButton>()??dismiss.gameObject.AddComponent<JuicyButton>()).enabled=false;
         previousMonth.onClick.AddListener(() => ChangeMonth(-1));
         nextMonth.onClick.AddListener(() => ChangeMonth(1));
         for (int i = 0; i < days.Length; i++)
