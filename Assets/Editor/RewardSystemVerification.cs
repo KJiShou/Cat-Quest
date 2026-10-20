@@ -159,7 +159,7 @@ public static class RewardSystemVerification
             completedLocalDay = "2026-10-08", rewardedLocalDay = "2026-10-08", snapshot = new QuestTask(), experience = 110, fishCoins = 55 });
         File.WriteAllText(path, JsonUtility.ToJson(legacy));
         var disk = new PlayerDataStore(path); var service = new TaskService(disk, new Clock());
-        Check(disk.Data.version == 4 && disk.Data.username == "Legacy" && disk.Data.tickets == 7 && disk.Data.experience == 110, "Migration changed previous rewards.");
+        Check(disk.Data.version == 5 && disk.Data.username == "Legacy" && disk.Data.tickets == 7 && disk.Data.experience == 110, "Migration changed previous rewards.");
         Complete(service, TaskDifficulty.Hard);
         Check(service.Snapshot.experience == 120 && service.Snapshot.fishCoins == 60, "Legacy paid rewards did not consume allowance.");
         Session(service); Check(service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes), service.LastError);

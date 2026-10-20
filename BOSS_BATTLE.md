@@ -1,6 +1,6 @@
 # Boss battles
 
-Specification: `D:/Downloads/Cat Quest.pdf`, sections 4.5.4–4.5.5 (PDF pages 62–68). Equipment acquisition UI and stat modifiers are deferred.
+Specification: `D:/Downloads/Cat Quest.pdf`, sections 4.5.4Ã¢â‚¬â€œ4.5.5 (PDF pages 62Ã¢â‚¬â€œ68). Equipment acquisition, upgrade, equip/unequip and stat modifiers are implemented; see EQUIPMENT.md.
 
 ## Rules
 
@@ -12,9 +12,9 @@ Specification: `D:/Downloads/Cat Quest.pdf`, sections 4.5.4–4.5.5 (PDF pages 6
 - Each confirmed entry atomically records immutable stats and spends one ticket. A valid defeat or explicit stop consumes it. Technical errors/timeouts and unfinished attempts found on startup refund exactly once.
 - Settlement recomputes the outcome from the saved snapshot and commits reward, mastery, result and unlocks together. Failed writes can be retried without duplicate rewards.
 - Normal bosses: Cyclope (90/8/5/.90), Orc (220/18/10/1.00), Demon (450/35/18/1.10), in HP/ATK/DEF/ASPD order. Orc needs a Cyclope victory and level 10; Demon needs an Orc victory and level 20.
-- First victories award 30/60/100 EXP. Wins 5/10/15 create pending equipment claims. No items are granted yet. Repeat Fish rewards require three actually claimed set components, so remain unavailable until equipment is implemented.
+- First victories award 30/60/100 EXP. Wins 5/10/15 create pending equipment claims. Each pending claim selects one unowned component directly on the Boss page through the Stage armour progress bar. Repeat Fish rewards begin after three components have actually been claimed.
 - Master unlocks after Demon. Three baseline stat sets and linear per-cycle scaling follow the PDF. Only the current stage is enterable; its first victory awards `50+10*n` EXP and `25+5*n` Fish, then advances the stage.
-- Save schema 4 preserves older task, focus, currency and XP data. It adds boss mastery, pending claims, battle receipts/snapshots and the next Master stage.
+- Save schema 5 preserves older task, focus, currency and XP data. It adds boss mastery, pending claims, battle receipts/snapshots and the next Master stage.
 
 ## Presentation
 
@@ -31,4 +31,4 @@ Editor request files:
 - `Temp/verify-battle-rules.request`: combat math, frame-rate independence, gates, atomic save failures/retries, first rewards, mastery, Master scaling/rewards, recovery and old-save migration; also existing Focus/reward/task regression checks.
 - `Temp/verify-battle-play.request`: isolated save, stage portraits and gate checks, 1920x1080 and 1280x720 screenshots, confirmation, ticket spend, cat run, attack/victory, doubled animation speed at 2 ASPD, and navigation stop. Results/screenshots go to `Library/BattleVerification`.
 
-No player save is used by these checks. No equipment or leaderboard UI is implemented by this change.
+No player save is used by these checks. Equipment is implemented in Cat Home; leaderboard remains separate.

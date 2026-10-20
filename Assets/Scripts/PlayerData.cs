@@ -5,7 +5,11 @@ using System.Collections.Generic;
 public class PlayerData
 {
     public string username;
-    public int version = 4;
+    public int version = 5;
+    public bool equipmentUnlocked;
+    public List<EquipmentItem> equipment = new List<EquipmentItem>();
+    public List<EquipmentUpgradeReceipt> equipmentUpgrades = new List<EquipmentUpgradeReceipt>();
+    public string equippedWeaponId, equippedBodyOutfitId, equippedHeadAccessoryId;
     public int masterStage = 1;
     public List<BossProgress> bossProgress = new List<BossProgress>();
     public List<BattleAttempt> battles = new List<BattleAttempt>();

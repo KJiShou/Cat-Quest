@@ -3,7 +3,7 @@ using System.Linq;
 
 public sealed partial class TaskService
 {
-    public CombatStats CatStats => BattleRules.Cat(store.Data.experience);
+    public CombatStats CatStats => EquipmentStats.Final;
     public string BattleEntryError(int bossId,int masterStage=0)
     {
         var d=store.Data;
@@ -27,6 +27,7 @@ public sealed partial class TaskService
         var error=BattleEntryError(bossId,masterStage);
         if(error!=null) {LastError=error;return false;}
         var item=new BattleAttempt {id=Guid.NewGuid().ToString("N"),bossId=bossId,masterStage=masterStage,cat=CatStats,boss=BattleRules.Boss(bossId,masterStage),startedUtc=clock.UtcNow.ToString("o")};
+        item.equippedEquipment=store.Data.equipment.Where(e=>Enum.GetValues(typeof(EquipmentSlot)).Cast<EquipmentSlot>().Any(slot=>EquipmentRules.Equipped(store.Data,slot)==e.id)).Select(PlayerDataStore.Copy).ToList();
         if(!Commit(d=>{d.tickets--;d.battles.Add(item);})) return false;
         attempt=PlayerDataStore.Copy(item);return true;
     }

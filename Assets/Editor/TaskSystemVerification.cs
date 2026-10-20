@@ -145,7 +145,7 @@ public static class TaskSystemVerification
 
             string path=Path.Combine(folder,"save.json"); File.WriteAllText(path,"{\"username\":\"Legacy player\"}");
             var disk=new PlayerDataStore(path); var diskService=new TaskService(disk,clock);
-            Check(disk.Data.username=="Legacy player" && disk.Data.version==4,"Username-only migration failed.");
+            Check(disk.Data.username=="Legacy player" && disk.Data.version==5,"Username-only migration failed.");
             Check(diskService.Upsert(Task("Persisted"),null,out var diskId),diskService.LastError);
             var reloaded=new PlayerDataStore(path); Check(reloaded.Data.tasks.Single().id==diskId,"Reload lost tasks or IDs.");
             diskService.Complete(diskId,true);

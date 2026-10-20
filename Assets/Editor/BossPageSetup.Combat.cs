@@ -17,6 +17,7 @@ public static partial class BossPageSetup
         var actors=arena.gameObject.AddComponent<BossBattleActors>();binding.actors=actors;
         actors.catController=Controller("CatCombat","Assets/Packages/Character/Spine 2D Ninja Cats Character Set/Characters/Animations/Ninja/",new[]{"ninja-idle","ninja-run","ninja-slash","ninja-die"});
         actors.bossController=Controller("BossCombat",Monsters+"Animations/Bigguy/",new[]{"idle","walk","attack-smash","die"});
+        actors.weaponSlashPrefabs=new[]{36,37,35}.Select(n=>AssetDatabase.LoadAssetAtPath<GameObject>("Assets/CartoonVFX9X/BundleSpriteSheetEffect/Prefabs/Slash_FX_"+n+".prefab")).ToArray();
         actors.orcPrefab=AssetDatabase.LoadAssetAtPath<GameObject>(Monsters+"Prefabs/Orc.prefab");
         actors.demonPrefab=AssetDatabase.LoadAssetAtPath<GameObject>(Monsters+"Prefabs/Demon.prefab");
         binding.bossBar=bossHealth.GetComponent<Slider>();
@@ -54,6 +55,10 @@ public static partial class BossPageSetup
         var picture=reference.transform.Find("ScrollRect/Content/StageList/StagePIcture");
         binding.stageChoices=new Button[3];binding.stageCaptions=new TMP_Text[3];binding.stageLocks=new GameObject[3];
         binding.masteryBars=new Slider[3];binding.masteryValues=new TMP_Text[3];
+        binding.masteryIcons=new Image[3];
+        const string chestIcons="Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/ResourcesData/Sprites/Components/Icon_ItemIcons/512/";
+        binding.masteryChestClosed=AssetDatabase.LoadAssetAtPath<Sprite>(chestIcons+"Itemicon_Chest_Blue.Png");
+        binding.masteryChestOpen=AssetDatabase.LoadAssetAtPath<Sprite>(chestIcons+"Itemicon_Chest_Blue_Open.Png");
         string[] names={"Cyclope","Orc","Demon"};
         for(int i=0;i<3;i++) {
             var card=Panel(picker,"Stage"+(i+1),.035f+i*.325f,.20f,.315f+i*.325f,.80f,Color.white);
@@ -74,8 +79,8 @@ public static partial class BossPageSetup
             var progress=Panel(card,"EquipmentProgress",.08f,.055f,.92f,.185f,new Color32(235,247,255,255));
             var badge=Panel(progress,"ArmorBadge",.015f,.08f,.22f,.92f,new Color32(198,236,255,255));
             var icon=Rect(badge,"ArmorIcon",.06f,.06f,.94f,.94f);
-            var armor=ui.Image(icon,Color.white,AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/ResourcesData/Sprites/Components/Icon_ItemIcons/512/Itemicon_Equipment_Armor.Png"));
-            armor.type=Image.Type.Simple;armor.preserveAspect=true;
+            var armor=ui.Image(icon,Color.white,binding.masteryChestClosed);
+            armor.type=Image.Type.Simple;armor.preserveAspect=true;armor.raycastTarget=false;binding.masteryIcons[i]=armor;
             binding.masteryValues[i]=Label(progress,"0/5",20,.27f,.47f,.95f,.96f,TaskUIBuilder.Blue);
             binding.masteryValues[i].alignment=TextAlignmentOptions.Center;
             var track=Panel(progress,"Track",.27f,.14f,.95f,.39f,new Color32(200,223,242,255));

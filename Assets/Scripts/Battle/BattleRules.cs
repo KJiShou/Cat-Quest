@@ -23,6 +23,7 @@ public sealed class BattleAttempt
     public string id, startedUtc, completedUtc;
     public int bossId, masterStage, experience, fishCoins;
     public CombatStats cat, boss;
+    public List<EquipmentItem> equippedEquipment = new List<EquipmentItem>();
     public BattleOutcome outcome;
 }
 public static class BattleRules

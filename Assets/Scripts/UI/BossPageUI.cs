@@ -18,6 +18,8 @@ public sealed class BossPageUI : MonoBehaviour
     public GameObject[] stageLocks;
     public Slider[] masteryBars;
     public TMP_Text[] masteryValues;
+    public Image[] masteryIcons;
+    public Sprite masteryChestClosed,masteryChestOpen;
     public GameObject masterLock;
     public Button masterChoice,closeStages;
     public TMP_Text masterCaption;
@@ -55,6 +57,15 @@ public sealed class BossPageUI : MonoBehaviour
         confirm.onClick.AddListener(Confirm);
         cancel.onClick.AddListener(()=>confirmation.SetActive(false));
         foreach(var button in resultContinue)button.onClick.AddListener(CloseResult);
+        for(int i=0;i<masteryBars.Length;i++){
+            int boss=i+1;var frame=masteryBars[i].transform.parent;
+            var button=frame.GetComponent<Button>()??frame.gameObject.AddComponent<Button>();
+            button.targetGraphic=frame.GetComponent<Image>();button.targetGraphic.raycastTarget=true;
+            button.onClick.AddListener(()=>{
+                if(IsBattling)return;
+                GetComponent<EquipmentPageUI>().OpenClaim(boss);
+            });
+        }
     }
     void OnEnable(){resetPreview=true;if(service!=null){service.Changed+=Refresh;Refresh();}}
     void Start(){EnsureActors();Refresh();}
@@ -78,7 +89,8 @@ public sealed class BossPageUI : MonoBehaviour
             // Five wins per equipment milestone; keep the completed third milestone full.
             int progress=p.wins<=0?0:p.wins>=15?5:1+(p.wins-1)%5;
             masteryBars[i].SetValueWithoutNotify(progress);
-            masteryValues[i].text=$"{progress}/5";
+            if(masteryIcons!=null&&i<masteryIcons.Length&&masteryIcons[i])masteryIcons[i].sprite=p.pendingClaims>0?masteryChestOpen:masteryChestClosed;
+            masteryValues[i].text=$"{progress}/5"+(p.pendingClaims>0?" · Claim":"");
             stageCaptions[i].text=$"Stage {id} · {(id==1?"Cyclope":id==2?"Orc":"Demon")}\n"+(gate??"");
         }
         bool masterUnlocked=data.bossProgress.Single(p=>p.bossId==3).wins>0;
@@ -130,7 +142,7 @@ public sealed class BossPageUI : MonoBehaviour
         }
         if(attempt==null||settlementPending)return;
         try {
-            if(approaching){if(actors.Run(Time.unscaledDeltaTime)){approaching=false;actors.StartCombat(attempt.cat,attempt.boss);}return;}
+            if(approaching){if(actors.Run(Time.unscaledDeltaTime)){approaching=false;actors.StartCombat(attempt.cat,attempt.boss,attempt.equippedEquipment.FirstOrDefault(i=>EquipmentRules.Find(i.id)?.Slot==EquipmentSlot.Weapon)?.id);}return;}
             simulation.Advance(Time.unscaledDeltaTime,OnHit);
             if(simulation.Outcome!=BattleOutcome.Running)Settle(simulation.Outcome);
         } catch(Exception e){Debug.LogException(e);Settle(BattleOutcome.Error);}

@@ -60,6 +60,6 @@ public static class BattleVerification
         Check(!service.BeginBattle(1,1,out _),"Master stage cannot repay");
         var ms=BattleRules.Boss(1,4);Check(ms.hp==600&&ms.atk==40&&ms.def==22&&Math.Abs(ms.aspd-1.12)<1e-8,"Master scaling");
         var old=JsonUtility.FromJson<PlayerData>("{\"version\":3,\"username\":\"Existing\",\"experience\":123,\"tickets\":4}");PlayerDataStore.Normalize(old);
-        Check(old.version==4&&old.experience==123&&old.tickets==4&&old.bossProgress.Count==3&&old.masterStage==1,"Old save migration");
+        Check(old.version==5&&old.experience==123&&old.tickets==4&&old.bossProgress.Count==3&&old.masterStage==1,"Old save migration");
     }
 }

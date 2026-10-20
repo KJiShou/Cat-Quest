@@ -7,6 +7,12 @@ public sealed class BossBattleActors : MonoBehaviour
 {
     public RuntimeAnimatorController catController, bossController;
     public GameObject orcPrefab, demonPrefab;
+    public GameObject[] weaponSlashPrefabs;
+    GameObject slash;
+    ParticleSystem[] slashParticles;
+    int slashTier;
+    float slashSpeed=1;
+    public int WeaponEffectTier => slashTier;
     Transform stage,cat,boss,originalBoss;
     Animator catAnimator,bossAnimator;
     Vector3 home, bossScale;
@@ -40,6 +46,7 @@ public sealed class BossBattleActors : MonoBehaviour
     public void Bind(Transform root)
     {
         if(stage==root) return;
+        ClearSlash();
         stage=root;cat=stage.Find("Ninja Cat");originalBoss=stage.Find("Cyclope");boss=originalBoss;
         home=cat.position;bossScale=boss.localScale;
         catPose=new PoseSnapshot(cat);originalBossPose=bossPose=new PoseSnapshot(boss);
@@ -75,6 +82,7 @@ public sealed class BossBattleActors : MonoBehaviour
     }
     public void ResetPose()
     {
+        StopSlash();
         if(!Ready)return;
         catPose.Restore();bossPose.Restore();
         if(catAnimator.isActiveAndEnabled)catAnimator.Rebind();
@@ -92,13 +100,39 @@ public sealed class BossBattleActors : MonoBehaviour
         return RunProgress>=1;
     }
     float AttackLength(Animator animator)=>animator.runtimeAnimatorController.animationClips.First(c=>c.name.Contains("slash")||c.name.Contains("attack-smash")).length;
-    public void StartCombat(CombatStats catStats,CombatStats bossStats)
+    public void StartCombat(CombatStats catStats,CombatStats bossStats,string weaponId=null)
     {
+        ConfigureSlash(weaponId,(float)catStats.aspd);
         // One whole attack cycle per 1 / ASPD seconds. Impact sits halfway through a cycle.
         Play(catAnimator,"Attack",AttackLength(catAnimator)*(float)catStats.aspd,.5f);
         Play(bossAnimator,"Attack",AttackLength(bossAnimator)*(float)bossStats.aspd,.5f);
     }
-    public void Hit(bool catAttacks) {if(catAttacks) bossFlash=.13f;else catFlash=.13f;}
+    public void Hit(bool catAttacks) {if(catAttacks){bossFlash=.13f;PlaySlash();}else catFlash=.13f;}
+    void ConfigureSlash(string weaponId,float attackSpeed){
+        int tier=EquipmentRules.Find(weaponId)?.Tier??1;
+        slashSpeed=Mathf.Max(1,attackSpeed);
+        if(slash&&slashTier==tier)return;
+        ClearSlash();slashTier=tier;
+        if(!stage||weaponSlashPrefabs==null||weaponSlashPrefabs.Length<tier||!weaponSlashPrefabs[tier-1])return;
+        slash=Instantiate(weaponSlashPrefabs[tier-1],stage);slash.name="Weapon Slash Grade "+tier;
+        slashParticles=slash.GetComponentsInChildren<ParticleSystem>(true);
+        foreach(var ps in slashParticles){ps.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);var main=ps.main;main.loop=false;main.playOnAwake=false;main.useUnscaledTime=true;main.scalingMode=ParticleSystemScalingMode.Hierarchy;}
+        var reference=catRenderers.FirstOrDefault();
+        foreach(var renderer in slash.GetComponentsInChildren<ParticleSystemRenderer>(true)){if(reference)renderer.sortingLayerID=reference.sortingLayerID;renderer.sortingOrder=Mathf.Max(catRenderers.Max(r=>r.sortingOrder),bossRenderers.Max(r=>r.sortingOrder))+2;}
+    }
+    void PlaySlash(){
+        if(!slash||slashParticles==null||!Ready)return;
+        var bounds=catRenderers[0].bounds;
+        foreach(var renderer in catRenderers)bounds.Encapsulate(renderer.bounds);
+        var point=bounds.center;point.x=Mathf.Lerp(bounds.center.x,bossRenderers[0].bounds.center.x,.6f);
+        slash.transform.position=point;slash.transform.rotation=Quaternion.identity;
+        slash.transform.localScale=Vector3.one*Mathf.Max(.5f,bounds.size.y*1.4f);
+        foreach(var ps in slashParticles){ps.Stop(false,ParticleSystemStopBehavior.StopEmittingAndClear);var main=ps.main;main.simulationSpeed=slashSpeed;ps.Play(false);}
+    }
+    void StopSlash(){if(slashParticles!=null)foreach(var ps in slashParticles)if(ps)ps.Stop(false,ParticleSystemStopBehavior.StopEmittingAndClear);}
+    void ClearSlash(){StopSlash();if(slash)Destroy(slash);slash=null;slashParticles=null;}
+    void OnDisable(){StopSlash();}
+    void OnDestroy(){ClearSlash();}
     public void Finish(BattleOutcome outcome)
     {
         Play(catAnimator,outcome==BattleOutcome.Defeat?"Die":"Idle");

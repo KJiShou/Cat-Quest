@@ -39,7 +39,7 @@ public sealed class PlayerDataStore : IPlayerDataStore
             string json = File.ReadAllText(path).Trim();
             if (!json.StartsWith("{") || !json.EndsWith("}")) return false;
             data = JsonUtility.FromJson<PlayerData>(json);
-            if (data == null || data.version > 4) return false;
+            if (data == null || data.version > 5) return false;
             Normalize(data);
             return true;
         }
@@ -70,7 +70,7 @@ public sealed class PlayerDataStore : IPlayerDataStore
     public static T Copy<T>(T value) => JsonUtility.FromJson<T>(JsonUtility.ToJson(value));
     public static void Normalize(PlayerData data)
     {
-        data.version = 4;
+        data.version = 5;
         data.masterStage = Math.Max(1,data.masterStage);
         data.battles ??= new List<BattleAttempt>();
         data.bossProgress ??= new List<BossProgress>();
@@ -85,6 +85,7 @@ public sealed class PlayerDataStore : IPlayerDataStore
         data.focusSessions ??= new List<FocusSession>();
         data.rewardDays.RemoveAll(d => d == null);
         data.focusSessions.RemoveAll(s => s == null);
+        EquipmentRules.Normalize(data);
         foreach (var session in data.focusSessions)
         {
             if (session.focusDurationSeconds <= 0) session.focusDurationSeconds = 1500;
