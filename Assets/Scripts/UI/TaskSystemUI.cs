@@ -27,6 +27,7 @@ public class TaskSystemUI : MonoBehaviour
     public GameObject confirmDialogTemplate;
     public TMP_InputField QuickAddInput => quickInput;
     public Sprite roundedSprite;
+    public Sprite tagTintSprite;
     public TMP_FontAsset font;
     public TaskService Service { get; private set; }
     public TaskTab CurrentTab { get; private set; }
@@ -119,7 +120,7 @@ public class TaskSystemUI : MonoBehaviour
 
     private void BuildDetails()
     {
-        details = new TaskDetailsPresenter(detailsRoot, ui);
+        details = new TaskDetailsPresenter(detailsRoot, ui, tagTintSprite);
     }
     private void LateUpdate()
     {
@@ -230,8 +231,25 @@ public class TaskSystemUI : MonoBehaviour
         TaskUIBuilder.DifficultyBadge(difficulty,view.task.difficulty,editor.difficultySprites);
         foreach(var text in row.GetComponentsInChildren<TMP_Text>(true)) if(text.name.StartsWith("FishNum")) text.text=Service.PreviewReward(view).fishCoins.ToString();
         var tags=TaskUIBuilder.Find(row.transform,"Tags");
-        string tagCaption=string.Join(", ",view.tagNames.Take(2))+(view.tagNames.Count>2 ? " +"+(view.tagNames.Count-2) : "");
-        TaskUIBuilder.LayoutTag(tags.gameObject,tagCaption,15,28);
+        for (int i=0;i<Math.Min(2,view.tagNames.Count);i++)
+        {
+            var chip=i==0 ? tags.gameObject : Instantiate(tags.gameObject,tags.parent);
+            chip.SetActive(true);
+            if(i>0) { chip.name="Tag_"+i; chip.transform.SetSiblingIndex(tags.GetSiblingIndex()+i); }
+            TaskUIBuilder.LayoutTag(chip,view.tagNames[i],15,28);
+            var chipSize=chip.GetComponent<LayoutElement>();
+            chipSize.minWidth=chipSize.preferredWidth=Mathf.Min(140,chipSize.preferredWidth);
+            chip.GetComponentInChildren<TMP_Text>().overflowMode=TextOverflowModes.Ellipsis;
+            TagColors.Apply(chip,view.tagColors!=null && i<view.tagColors.Count ? view.tagColors[i] : TagColors.DefaultHex,tagTintSprite);
+        }
+        if(view.tagNames.Count>2)
+        {
+            var extra=Instantiate(tags.gameObject,tags.parent); extra.name="MoreTags";
+            extra.SetActive(true);
+            extra.transform.SetSiblingIndex(tags.GetSiblingIndex()+2);
+            TaskUIBuilder.LayoutTag(extra,"+"+(view.tagNames.Count-2),15,28);
+            TagColors.Apply(extra,TagColors.DefaultHex,tagTintSprite);
+        }
         tags.gameObject.SetActive(view.tagNames.Count>0);
         var tick=TaskUIBuilder.Find(row.transform,"Tick"); if(tick) tick.gameObject.SetActive(view.Completed);
         var checkbox=tick.parent.GetComponent<Button>() ?? tick.parent.gameObject.AddComponent<Button>();
@@ -387,7 +405,7 @@ public class TaskSystemUI : MonoBehaviour
         foreach(var tag in tags) {
             var tasks=visible.Where(view=>view.task.tagIds.Contains(tag.id)).ToList();
             if(tasks.Count==0) continue;
-            RenderTagHeading(tag.id,tag.name,tasks.Count);
+            RenderTagHeading(tag.id,tag.name,tasks.Count,tag.colorHex);
             foreach(var task in tasks) RenderRow(task);
         }
         var untagged=visible.Where(view=>view.task.tagIds.Count==0).ToList();
@@ -396,7 +414,7 @@ public class TaskSystemUI : MonoBehaviour
             foreach(var task in untagged) RenderRow(task);
         }
     }
-    private void RenderTagHeading(string id,string caption,int count)
+    private void RenderTagHeading(string id,string caption,int count,string colorHex=null)
     {
         var row=ui.Row(listContent,"TagGroup_"+id,42,10);
         var source=detailsRoot.Find("ScrollRect/Content/Tags/Title/Icon");
@@ -404,31 +422,8 @@ public class TaskSystemUI : MonoBehaviour
         var iconSize=TaskUIBuilder.Height(icon.GetComponent<RectTransform>(),26);
         iconSize.minWidth=iconSize.preferredWidth=26; iconSize.flexibleWidth=0;
         foreach(var button in icon.GetComponents<Button>()) { button.onClick.RemoveAllListeners(); button.enabled=false; }
+        if(colorHex!=null) icon.GetComponent<Image>().color=TagColors.Background(colorHex);
         ui.Text(row,caption+" ("+count+")",22,TaskUIBuilder.Ink);
-    }
-    private void ShowTagManager()
-    {
-        OpenModal("Manage Tags",480);
-        var content=ui.ScrollContent(modalPanel,"Tags",310);
-        foreach(var tag in Service.Snapshot.tags)
-        {
-            var row=ui.Row(content,"Tag_"+tag.id,40);
-            var text=ui.Text(row,tag.name,18); TaskUIBuilder.Flex(text.transform);
-            ui.Button(row,"RenameTag","Rename",90).onClick.AddListener(()=>ShowTagEditor(tag));
-            ui.Button(row,"DeleteTag","Delete",80,new Color32(255,216,221,255)).onClick.AddListener(()=>
-            {
-                int affected=Service.Snapshot.tasks.Count(t=>t.tagIds.Contains(tag.id));
-                Confirm("Delete tag?","Remove '"+tag.name+"' from "+affected+" tasks? The tasks and completed history will be kept.",()=> { if(!Service.DeleteTag(tag.id)) Notify(Service.LastError,true); else Notify("Tag deleted."); });
-            });
-        }
-        ui.Button(modalPanel,"Close","Close").onClick.AddListener(CloseModal);
-    }
-    private void ShowTagEditor(QuestTag tag)
-    {
-        OpenModal(tag==null ? "New Tag" : "Rename Tag",220);
-        var input=ui.Input(modalPanel,"Tag name"); input.characterLimit=30; input.text=tag?.name ?? "";
-        var row=ui.Row(modalPanel,"Actions",40); ui.Button(row,"Cancel","Cancel").onClick.AddListener(CloseModal);
-        ui.Button(row,"Save","Save").onClick.AddListener(()=> { if(!Service.SaveTag(tag?.id,input.text,out _)) Notify(Service.LastError,true); else { CloseModal(); Notify("Tag saved."); } }); input.Select();
     }
     private void ShowFilters()
     {
@@ -448,6 +443,9 @@ public class TaskSystemUI : MonoBehaviour
         foreach(var tag in Service.Snapshot.tags)
         {
             var toggle=ui.Toggle(content,tag.name,selectedTags.Contains(tag.id)); toggle.onValueChanged.AddListener(isOn=> { if(isOn) selectedTags.Add(tag.id); else selectedTags.Remove(tag.id); });
+            var swatch=TaskUIBuilder.Rect(toggle.transform,"TagColor"); swatch.SetSiblingIndex(1);
+            var size=TaskUIBuilder.Height(swatch,16); size.minWidth=size.preferredWidth=16;
+            ui.Image(swatch,TagColors.Background(tag.colorHex),tagTintSprite).raycastTarget=false;
         }
         var row=ui.Row(modalPanel,"Actions",40); ui.Button(row,"Clear","Clear filters").onClick.AddListener(()=> { difficultyFilter=null; tagFilters.Clear(); CloseModal(); Refresh(); });
         ui.Button(row,"Apply","Apply").onClick.AddListener(()=> { difficultyFilter=selectedDifficulty; tagFilters.Clear(); tagFilters.UnionWith(selectedTags); CloseModal(); Refresh(); });

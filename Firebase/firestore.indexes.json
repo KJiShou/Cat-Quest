@@ -1,0 +1,22 @@
+{
+  "indexes": [
+    { "collectionGroup": "leaderboard", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "bossStage", "order": "DESCENDING" },
+      { "fieldPath": "playerId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "leaderboard", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "totalTasksCompleted", "order": "DESCENDING" },
+      { "fieldPath": "playerId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "leaderboard", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "totalFocusMinutes", "order": "DESCENDING" },
+      { "fieldPath": "playerId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "leaderboard", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "power", "order": "DESCENDING" },
+      { "fieldPath": "catLevel", "order": "DESCENDING" },
+      { "fieldPath": "playerId", "order": "ASCENDING" }
+    ] }
+  ],
+  "fieldOverrides": []
+}

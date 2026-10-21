@@ -15,6 +15,7 @@ public sealed class TaskView
     public QuestTask task;
     public TaskOccurrence occurrence;
     public List<string> tagNames;
+    public List<string> tagColors;
     public TaskCompletion history;
     public bool IsHistory => history != null;
     public bool Completed => occurrence.completed;
@@ -223,7 +224,9 @@ public sealed partial class TaskService
                     id = Guid.NewGuid().ToString("N"), taskId = taskId, day = occurrence.day,
                     completedUtc = clock.UtcNow.ToString("o", CultureInfo.InvariantCulture), completedLocalDay = Today, rewardedLocalDay = Today,
                     snapshot = PlayerDataStore.Copy(current),
-                    tagNames = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.name).ToList(), fishCoins = amount.fishCoins, experience = amount.experience
+                    tagNames = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.name).ToList(),
+                    tagColors = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.colorHex).ToList(),
+                    fishCoins = amount.fishCoins, experience = amount.experience
                 });
             }
             else if (receipt != null && receipt.revoked)
@@ -233,19 +236,29 @@ public sealed partial class TaskService
                 receipt.completedLocalDay = Today;
                 receipt.snapshot = PlayerDataStore.Copy(current);
                 receipt.tagNames = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.name).ToList();
+                receipt.tagColors = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.colorHex).ToList();
             }
         });
     }
     private static QuestTask RequireTask(PlayerData data, string id) => data.tasks.FirstOrDefault(t => t.id == id) ?? throw new ArgumentException("Task no longer exists.");
     public bool SaveTag(string id, string name, out string savedId)
+        => SaveTag(id, name, store.Data.tags.FirstOrDefault(t => t.id == id)?.colorHex ?? TagColors.DefaultHex, out savedId);
+
+    public bool SaveTag(string id, string name, string colorHex, out string savedId)
     {
         name = (name ?? "").Trim(); string newId = string.IsNullOrEmpty(id) ? Guid.NewGuid().ToString("N") : id; savedId = null;
         bool result = Commit(data =>
         {
             if (name.Length == 0 || name.Length > 30) throw new ArgumentException("Enter a tag name (1–30 characters).");
+            if (!TagColors.TryNormalize(colorHex, out var color)) throw new ArgumentException("Choose a valid tag color.");
             if (data.tags.Any(t => t.id != newId && string.Equals(t.name, name, StringComparison.OrdinalIgnoreCase))) throw new ArgumentException("A tag with that name already exists.");
             var tag = data.tags.FirstOrDefault(t => t.id == newId);
-            if (tag == null) data.tags.Add(new QuestTag { id = newId, name = name }); else tag.name = name;
+            if (tag == null)
+            {
+                if (!string.IsNullOrEmpty(id)) throw new ArgumentException("Tag no longer exists.");
+                data.tags.Add(new QuestTag { id = newId, name = name, colorHex = color });
+            }
+            else { tag.name = name; tag.colorHex = color; }
         });
         if (result) savedId = newId;
         return result;
@@ -264,7 +277,7 @@ public sealed partial class TaskService
         if (tab == TaskTab.History)
             foreach (var item in data.history.Where(h => !h.revoked).OrderByDescending(h => h.completedUtc)) rows.Add(new TaskView
             {
-                task = item.snapshot, history = item, tagNames = item.tagNames,
+                task = item.snapshot, history = item, tagNames = item.tagNames, tagColors = item.tagColors,
                 occurrence = new TaskOccurrence { taskId = item.taskId, day = item.day, completed = true, rewardGranted = true, completedSubtaskIds = item.snapshot.subtasks.Select(s => s.id).ToList() }
             });
         else
@@ -275,7 +288,9 @@ public sealed partial class TaskService
                     : tab == TaskTab.Todo ? !task.daily && !occurrence.completed
                     : tab == TaskTab.Tags ? !occurrence.completed && Eligible(task)
                     : !occurrence.completed && (task.daily ? Eligible(task) : task.scheduled && TryDate(task.date, out var due) && due.Date <= clock.LocalNow.Date);
-                if (show) rows.Add(new TaskView { task = task, occurrence = occurrence, tagNames = data.tags.Where(t => task.tagIds.Contains(t.id)).Select(t => t.name).ToList() });
+                if (show) rows.Add(new TaskView { task = task, occurrence = occurrence,
+                    tagNames = data.tags.Where(t => task.tagIds.Contains(t.id)).Select(t => t.name).ToList(),
+                    tagColors = data.tags.Where(t => task.tagIds.Contains(t.id)).Select(t => t.colorHex).ToList() });
             }
         search = (search ?? "").Trim();
         rows = rows.Where(v => (!difficulty.HasValue || v.task.difficulty == difficulty.Value)

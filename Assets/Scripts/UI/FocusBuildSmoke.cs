@@ -6,11 +6,14 @@ using UnityEngine;
 // Opt-in standalone integration harness. Never instantiated during normal startup.
 public sealed class FocusBuildSmoke : MonoBehaviour
 {
-    [Serializable] public sealed class Command { public string action; public int focusMinutes=25,restMinutes=5,seconds;public string screenshot; }
+    [Serializable] public sealed class Command { public string action; public int focusMinutes=25,restMinutes=5,seconds;public string screenshot;public bool enabled=true; }
     [Serializable] public sealed class Result {
         public string phase,error,companionDirectory,ownerId,sessionId,questTitle,animationState,ninjaSprite,acornSprite;
         public float animationTime; public bool training;
         public double remaining;public int width,height,fish,exp,coins,tickets,focusMinutes,restMinutes;public bool settingsLocked;public bool controlsBound,forest,widgetOpen;
+        public bool notificationsEnabled,notificationsRegistered;
+        public int notificationAttempts,notificationsAccepted,notificationsShown,notificationActivations;
+        public string notificationSessionId,notificationKind,notificationError;
     }
     string directory;float next;MainMenuNavigation navigation;FocusPanelUI panel;FocusController focus;
     void Start() { directory=CompanionProtocol.Argument("--smoke-dir");Directory.CreateDirectory(directory); }
@@ -36,7 +39,12 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                     case "end":panel.endEarly.onClick.Invoke();break;
                     case "cancel":panel.cancel.onClick.Invoke();break;
                     case "rest":panel.endRest.onClick.Invoke();break;
+                    case "retry":focus.RetrySettlement();break;
                     case "advance":for(int i=0;i<command.seconds;i++)focus.Advance(1);break;
+                    case "notifications":
+                        var settings=GameDataManager.Instance.Tasks.Settings;settings.notificationsEnabled=command.enabled;
+                        if(!GameDataManager.Instance.Tasks.SaveSettings(settings))throw new IOException(GameDataManager.Instance.Tasks.LastError);
+                        break;
                     case "widget":CompanionHost.Ensure().SetEnabled(true);break;
                     case "close-widget":CompanionHost.Ensure().SetEnabled(false);break;
                     case "dashboard":navigation.ShowPage(MainMenuPage.Dashboard);break;
@@ -46,6 +54,7 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                 }
             }
             var host=CompanionHost.Ensure();var preview=FindFirstObjectByType<CharacterHomePreview>(FindObjectsInactive.Include);
+            var runner=FocusRunner.EnsureInstance();
             var data=GameDataManager.Instance.PlayerData;
             var stage=panel.GetComponentInChildren<FocusScenePreview>(true)?.Stage;
             var battle=stage?stage.GetComponentInChildren<FocusTrainingBattle>(true):null;
@@ -57,6 +66,9 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                 focusMinutes=focus.Options.focusMinutes,restMinutes=focus.Options.restMinutes,settingsLocked=!panel.focusDuration.interactable,phase=focus.Phase.ToString(),remaining=focus.RemainingSeconds,width=Screen.width,height=Screen.height,
                 fish=focus.SpectatorFishCount,exp=data.experience,coins=data.fishCoins,tickets=data.tickets,
                 ownerId=host.OwnerId,sessionId=focus.SessionId ?? "",companionDirectory=host.DirectoryPath,widgetOpen=host.IsOpen,error=host.Error,
+                notificationsEnabled=GameDataManager.Instance.Tasks.Settings.notificationsEnabled,notificationsRegistered=runner.NotificationsRegistered,
+                notificationAttempts=runner.NotificationAttempts,notificationsAccepted=runner.NotificationsAccepted,notificationsShown=runner.NotificationsShown,notificationActivations=runner.NotificationActivations,
+                notificationSessionId=runner.LastNotificationSessionId,notificationKind=runner.LastNotificationKind,notificationError=runner.NotificationError,
                 questTitle=focus.Options.questTitle,controlsBound=panel.questList && panel.focusDuration && panel.restDuration && panel.focusDuration.wholeNumbers && panel.restDuration.wholeNumbers,
                 forest=preview && preview.showSceneBackground && preview.previewCamera && preview.character });
         }catch(Exception e){File.WriteAllText(Path.Combine(directory,"smoke-error.txt"),e.ToString());}

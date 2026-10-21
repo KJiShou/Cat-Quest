@@ -6,6 +6,8 @@ public class PlayerData
 {
     public string username;
     public int version = 5;
+    public AppSettings settings;
+    public AccountPreferences account;
     public bool equipmentUnlocked;
     public List<EquipmentItem> equipment = new List<EquipmentItem>();
     public List<EquipmentUpgradeReceipt> equipmentUpgrades = new List<EquipmentUpgradeReceipt>();
@@ -27,7 +29,7 @@ public class PlayerData
 
 public enum TaskDifficulty { Easy, Normal, Hard }
 public enum TaskTab { Today, Daily, Todo, Tags, History }
-[Serializable] public class QuestTag { public string id; public string name; }
+[Serializable] public class QuestTag { public string id; public string name; public string colorHex = TagColors.DefaultHex; }
 [Serializable] public class QuestSubtask { public string id; public string title; }
 [Serializable] public class QuestTask
 {
@@ -60,6 +62,7 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
     public string rewardedLocalDay;
     public QuestTask snapshot;
     public List<string> tagNames = new List<string>();
+    public List<string> tagColors = new List<string>();
     public int fishCoins;
     public int experience;
     public bool revoked;

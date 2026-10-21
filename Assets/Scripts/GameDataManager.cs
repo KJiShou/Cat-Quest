@@ -31,6 +31,7 @@ public class GameDataManager : MonoBehaviour
         // Explicit standalone smoke-test mode always uses an isolated verification store.
         if (CompanionProtocol.HasArgument("--focus-smoke"))
             path = Path.Combine(CompanionProtocol.Argument("--smoke-dir"), "test-save.json");
+        if (AccountBuildSmoke.Enabled) path = AccountBuildSmoke.IsolatedSavePath;
 #if UNITY_EDITOR
         // Editor integration tests use a disposable store, never the player's save.
         string testPath = System.Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");
@@ -38,6 +39,11 @@ public class GameDataManager : MonoBehaviour
 #endif
         store = new PlayerDataStore(path);
         Tasks = new TaskService(store, new SystemTaskClock());
+        if (!CompanionProtocol.HasArgument("--companion"))
+        {
+            SettingsAudio.EnsureInstance();
+            AccountController.EnsureInstance();
+        }
     }
     public void SetUsername(string username)
     {

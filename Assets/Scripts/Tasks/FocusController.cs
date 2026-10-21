@@ -7,6 +7,9 @@ public enum FocusPhase { Ready, Focusing, Saving, Resting, Finished, Interrupted
 public sealed class FocusController : IFocusPresentation
 {
     public event Action Changed;
+    // Reminder consumers observe committed results, never the timer before saving succeeds.
+    public event Action<string> FocusCompleted;
+    public event Action<string> RestCompleted;
     public FocusSessionOptions Options { get; private set; } = new FocusSessionOptions();
     public string SessionId => sessionId;
     public int FocusSeconds => Options.focusMinutes * 60;
@@ -56,7 +59,7 @@ public sealed class FocusController : IFocusPresentation
         else if (Phase == FocusPhase.Resting)
         {
             restElapsed += seconds;
-            if (restElapsed >= RestSeconds) EndRest();
+            if (restElapsed >= RestSeconds) FinishRest(true);
         }
     }
     public bool EndEarly() => Phase == FocusPhase.Focusing && Settle(true, false, false);
@@ -83,12 +86,19 @@ public sealed class FocusController : IFocusPresentation
             Phase = FocusPhase.Resting; restElapsed = 0;
             Message = $"Focus saved: +{LastResult.experience} EXP, +{LastResult.fishCoins} Fish Coins, +{LastResult.tickets} Ticket. Time to rest.";
         }
-        Changed?.Invoke(); return true;
+        string completedId = sessionId;
+        bool completedNormally = !cancel && LastResult.status == FocusSessionStatus.Completed;
+        Changed?.Invoke();
+        if (completedNormally) FocusCompleted?.Invoke(completedId);
+        return true;
     }
-    public void EndRest()
+    public void EndRest() => FinishRest(false);
+    private void FinishRest(bool elapsed)
     {
         if (Phase != FocusPhase.Resting) return;
+        string completedId = sessionId;
         Phase = FocusPhase.Finished; Message = "Rest finished. Start another Focus or return to Dashboard.";
         Changed?.Invoke();
+        if (elapsed) RestCompleted?.Invoke(completedId);
     }
 }

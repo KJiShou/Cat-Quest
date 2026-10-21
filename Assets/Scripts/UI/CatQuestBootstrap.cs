@@ -11,7 +11,8 @@ public sealed class CatQuestBootstrap : MonoBehaviour
         else
         {
             if(CompanionProtocol.HasArgument("--focus-smoke")) { var probe=new GameObject("FocusBuildSmoke"); DontDestroyOnLoad(probe); probe.AddComponent<FocusBuildSmoke>(); }
-            SceneManager.LoadScene(CompanionProtocol.HasArgument("--focus-smoke") ? "CharacterHome" : "IntroStory");
+            if(AccountBuildSmoke.Enabled) { var probe=new GameObject("AccountBuildSmoke"); DontDestroyOnLoad(probe); probe.AddComponent<AccountBuildSmoke>(); }
+            SceneManager.LoadScene(CompanionProtocol.HasArgument("--focus-smoke") || AccountBuildSmoke.Enabled ? "CharacterHome" : "IntroStory");
         }
     }
 }

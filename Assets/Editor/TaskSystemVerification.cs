@@ -26,6 +26,53 @@ public static class TaskSystemVerification
     private static void Check(bool condition,string message) { if(!condition) throw new Exception(message); }
     private static QuestTask Task(string title,bool daily=false,string date="2026-10-07") => new QuestTask { title=title,daily=daily,scheduled=true,date=date,minuteOfDay=9*60 };
 
+    private static void VerifyTagIdentityAndColors(string folder)
+    {
+        var memory=new MemoryStore(); var service=new TaskService(memory,new Clock());
+        Check(service.SaveTag(null,"Color study","#3d5fc3",out var tagId),service.LastError);
+        var task=Task("Tagged live task"); task.tagIds.Add(tagId);
+        Check(service.Upsert(task,null,out var taskId),service.LastError);
+        var completed=Task("Tagged history"); completed.tagIds.Add(tagId);
+        Check(service.Upsert(completed,null,out var completedId) && service.Complete(completedId,true),service.LastError);
+        string originalHistory=JsonUtility.ToJson(service.Snapshot.history.Single());
+        Check(service.SaveTag(tagId,"Renamed study","#FF9E3A",out var savedTagId),service.LastError);
+        var live=service.Query(TaskTab.Todo,"Renamed study",null,new[]{tagId}).Single();
+        Check(savedTagId==tagId && live.task.id==taskId && live.task.tagIds.SequenceEqual(new[]{tagId}),"Tag edit replaced a task/tag ID or lost its association.");
+        Check(live.tagNames.Single()=="Renamed study" && live.tagColors.Single()=="#FF9E3A","Live query did not resolve the edited tag name/color.");
+        var history=service.Query(TaskTab.History).Single();
+        Check(history.tagNames.Single()=="Color study" && history.tagColors.Single()=="#3D5FC3"
+            && JsonUtility.ToJson(service.Snapshot.history.Single())==originalHistory,"Tag edit rewrote historical names/colors or receipts.");
+        Check(service.SaveTag(tagId,"Name-only rename",out _) && service.Snapshot.tags.Single(t=>t.id==tagId).colorHex=="#FF9E3A","Legacy rename overload erased the selected color.");
+        string before=JsonUtility.ToJson(service.Snapshot);
+        Check(!service.SaveTag(null,"name-only RENAME",TagColors.DefaultHex,out _),"Duplicate case-insensitive tag name accepted.");
+        Check(!service.SaveTag(null,"  ",TagColors.DefaultHex,out _),"Blank tag name accepted.");
+        Check(!service.SaveTag(null,new string('a',31),TagColors.DefaultHex,out _),"Long tag name accepted.");
+        Check(!service.SaveTag(tagId,"Bad color","#FF000080",out _) && !service.SaveTag(tagId,"Bad color","red",out _),"Invalid or transparent tag color accepted.");
+        Check(JsonUtility.ToJson(service.Snapshot)==before,"Rejected tag edits mutated saved data.");
+        memory.fail=true;
+        Check(!service.SaveTag(tagId,"Failed rename","#FF6B6D",out _) && !service.DeleteTag(tagId),"Failed tag save/delete reported success.");
+        Check(JsonUtility.ToJson(service.Snapshot)==before,"Failed tag write changed catalog, task associations or history.");
+        memory.fail=false;
+        Check(service.SaveTag(tagId,"Retried rename","#FF6B6D",out _) && service.DeleteTag(tagId),service.LastError);
+        Check(service.Snapshot.tasks.Count==2 && service.Snapshot.tasks.All(t=>!t.tagIds.Contains(tagId))
+            && JsonUtility.ToJson(service.Snapshot.history.Single())==originalHistory,"Deleting a tag deleted tasks or changed history.");
+        Check(!service.SaveTag(tagId,"Stale edit",TagColors.DefaultHex,out _) && !service.DeleteTag(tagId),"Stale tag editor recreated a deleted tag.");
+
+        string path=Path.Combine(folder,"legacy-tags.json");
+        string legacy="{\"version\":5,\"tagsInitialized\":true,\"tags\":[{\"id\":\"old-tag\",\"name\":\"Legacy tag\"}],\"tasks\":[{\"id\":\"old-task\",\"title\":\"Keep me\",\"tagIds\":[\"old-tag\"]}]}";
+        File.WriteAllText(path,legacy);
+        var disk=new PlayerDataStore(path); var persisted=new TaskService(disk,new Clock());
+        Check(disk.Data.tags.Single().id=="old-tag" && disk.Data.tags.Single().colorHex==TagColors.DefaultHex
+            && disk.Data.tasks.Single().tagIds.Single()=="old-tag","Legacy tag color default changed existing IDs or associations.");
+        Check(persisted.SaveTag("old-tag","Updated legacy","#2A3957",out _),persisted.LastError);
+        var reload=new PlayerDataStore(path);
+        Check(reload.Data.tags.Single().id=="old-tag" && reload.Data.tags.Single().name=="Updated legacy"
+            && reload.Data.tags.Single().colorHex=="#2A3957" && reload.Data.tasks.Single().tagIds.Single()=="old-tag","Tag rename/color/IDs did not survive reload.");
+        Check(File.ReadAllText(path+".bak")==legacy,"Additive tag save failed to keep the previous save as a backup.");
+        reload.Data.tags.Single().colorHex="invalid"; PlayerDataStore.Normalize(reload.Data);
+        Check(reload.Data.tags.Single().colorHex==TagColors.DefaultHex,"Invalid saved tag color did not safely default.");
+    }
+
     private static void VerifyReopeningAndOverdue()
     {
         var clock=new Clock(); var memory=new MemoryStore(); var service=new TaskService(memory,clock);
@@ -92,6 +139,8 @@ public static class TaskSystemVerification
         var report=new List<string>();
         try
         {
+            VerifyTagIdentityAndColors(folder);
+            report.Add("PASS: stable tag IDs/name/color edits, live filters, immutable history colors, validation, failed-write rollback/retry, deletion/stale edits, additive legacy load/backup and reload.");
             VerifyReopeningAndOverdue();
             report.Add("PASS: reopen ordinary/current Daily, history restrictions, duplicate clicks, retained rewards/progress, restored receipts, failed-write rollback, precise overdue deadlines, legacy history compatibility.");
             var clock=new Clock(); var memory=new MemoryStore(); var service=new TaskService(memory,clock);

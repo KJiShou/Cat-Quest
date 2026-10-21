@@ -13,6 +13,15 @@ public class TaskTagSelection : MonoBehaviour
     private readonly HashSet<int> selected = new HashSet<int>();
     private readonly List<Toggle> items = new List<Toggle>();
     private Transform configuredList;
+    private readonly List<string> colors = new List<string>();
+    private Sprite swatchSprite;
+
+    public void SetColors(IEnumerable<string> values, Sprite sprite)
+    {
+        colors.Clear(); colors.AddRange(values);
+        swatchSprite = sprite;
+        configuredList = null;
+    }
 
     public void SetSelection(IEnumerable<int> indices)
     {
@@ -43,6 +52,22 @@ public class TaskTagSelection : MonoBehaviour
         {
             int index = i;
             var toggle = items[i];
+            if (i < colors.Count)
+            {
+                var swatch = toggle.transform.Find("TagColor") as RectTransform;
+                if (!swatch)
+                {
+                    swatch = TaskUIBuilder.Rect(toggle.transform, "TagColor");
+                    swatch.anchorMin = swatch.anchorMax = new Vector2(1, .5f);
+                    swatch.anchoredPosition = new Vector2(-18, 0);
+                    swatch.sizeDelta = new Vector2(16, 16);
+                    var label = toggle.GetComponentInChildren<TMP_Text>();
+                    if (label) label.rectTransform.offsetMax = new Vector2(-36, label.rectTransform.offsetMax.y);
+                }
+                var graphic = swatch.GetComponent<Image>() ?? swatch.gameObject.AddComponent<Image>();
+                graphic.sprite = swatchSprite; graphic.type = Image.Type.Sliced;
+                graphic.color = TagColors.Background(colors[i]); graphic.raycastTarget = false;
+            }
             toggle.group = null;
             toggle.onValueChanged.RemoveAllListeners();
             toggle.SetIsOnWithoutNotify(selected.Contains(index));

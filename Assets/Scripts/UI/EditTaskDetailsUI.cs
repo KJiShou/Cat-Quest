@@ -21,6 +21,7 @@ public class EditTaskDetailsUI : MonoBehaviour
     public TaskTagSelection tagMultiSelection;
     public RectTransform tagContent;
     public GameObject tagTemplate;
+    public Sprite tagTintSprite;
     public ScrollRect subtaskScroll;
     public ScrollRect formScroll;
     public LayoutElement formContentMinimum;
@@ -31,6 +32,8 @@ public class EditTaskDetailsUI : MonoBehaviour
     private string editingId;
     private bool initialized;
     private readonly Dictionary<GameObject, string> rowIds = new Dictionary<GameObject, string>();
+    private readonly Dictionary<GameObject, string> chipIds = new Dictionary<GameObject, string>();
+    private readonly HashSet<string> selectedTagIds = new HashSet<string>();
     private List<QuestTag> tagCatalog = new List<QuestTag>();
 
     public System.TimeSpan SelectedTime => timePicker.SelectedTime;
@@ -84,17 +87,15 @@ public class EditTaskDetailsUI : MonoBehaviour
 
     public void LoadDraft(QuestTask task, List<QuestTag> tags, IEnumerable<string> completed)
     {
-        Initialize(); editingId = task.id; tagCatalog = tags.ConvertAll(tag => new QuestTag { id = tag.id, name = tag.name });
+        Initialize(); editingId = task.id;
+        selectedTagIds.Clear();
+        selectedTagIds.UnionWith(task.tagIds);
         taskTitle.SetTextWithoutNotify(task.title ?? ""); description.SetTextWithoutNotify(task.description ?? ""); UpdateCount(description.text);
         difficulty.SetValueWithoutNotify((int)task.difficulty); UpdateDifficulty((int)task.difficulty);
         dailyToggle.SetIsOnWithoutNotify(task.daily); scheduleToggle.SetIsOnWithoutNotify(task.scheduled || task.daily);
         datePicker.LoadValue(TaskService.TryDate(task.date, out var date) ? date : System.DateTime.Today);
         timePicker.LoadValue(System.TimeSpan.FromMinutes(task.minuteOfDay)); UpdateSchedule();
-        if (tagSelection.IsExpanded) tagSelection.Hide();
-        ClearChildren(tagContent); tagSelection.ClearOptions(); tagSelection.AddOptions(tagCatalog.ConvertAll(tag => tag.name));
-        foreach (var tag in tagCatalog)
-            if (task.tagIds.Contains(tag.id)) CreateTagChip(tag.name);
-        RefreshTags();
+        LoadTagCatalog(tags);
         ClearChildren(subtaskContent); rowIds.Clear();
         var done = new HashSet<string>(completed ?? System.Array.Empty<string>());
         foreach (var subtask in task.subtasks) CreateSubtask(subtask.id, subtask.title, done.Contains(subtask.id));
@@ -116,17 +117,28 @@ public class EditTaskDetailsUI : MonoBehaviour
             task.subtasks.Add(new QuestSubtask { id = id, title = title });
             if (row.GetComponentInChildren<Toggle>().isOn) completed.Add(id);
         }
-        foreach (Transform chip in tagContent)
-            if (chip.gameObject.activeSelf)
-                foreach (var tag in tagCatalog)
-                    if (chip.GetComponentInChildren<TMP_Text>().text == tag.name + " ×") task.tagIds.Add(tag.id);
+        foreach (var tag in tagCatalog)
+            if (selectedTagIds.Contains(tag.id)) task.tagIds.Add(tag.id);
         return task;
     }
 
     public void RefreshCatalog(List<QuestTag> tags)
     {
-        if(tagCatalog.Count==tags.Count && tagCatalog.TrueForAll(old=>tags.Exists(tag=>tag.id==old.id && tag.name==old.name))) return;
-        var draft = ReadDraft(out var done); LoadDraft(draft, tags, done);
+        if(tagCatalog.Count==tags.Count && tagCatalog.TrueForAll(old=>tags.Exists(tag=>tag.id==old.id && tag.name==old.name && tag.colorHex==old.colorHex))) return;
+        // A catalog edit must not rebuild the form or lose blank unsaved subtasks/scroll position.
+        LoadTagCatalog(tags);
+    }
+    private void LoadTagCatalog(List<QuestTag> tags)
+    {
+        tagCatalog = tags.ConvertAll(tag => new QuestTag { id = tag.id, name = tag.name, colorHex = tag.colorHex });
+        selectedTagIds.RemoveWhere(id => !tagCatalog.Exists(tag => tag.id == id));
+        if (tagSelection.IsExpanded) tagSelection.Hide();
+        ClearChildren(tagContent); chipIds.Clear();
+        tagSelection.ClearOptions(); tagSelection.AddOptions(tagCatalog.ConvertAll(tag => tag.name));
+        tagMultiSelection.SetColors(tagCatalog.ConvertAll(tag => tag.colorHex), tagTintSprite);
+        foreach (var tag in tagCatalog)
+            if (selectedTagIds.Contains(tag.id)) CreateTagChip(tag);
+        RefreshTags();
     }
     private static void ClearChildren(Transform parent)
     {
@@ -198,24 +210,32 @@ public class EditTaskDetailsUI : MonoBehaviour
 
     private void SetTag(int value, bool isSelected)
     {
-        var label = tagSelection.options[value].text + " ×";
-        foreach (Transform existing in tagContent)
-            if (existing.gameObject.activeSelf && existing.GetComponentInChildren<TMP_Text>().text == label)
-            {
-                if (!isSelected) { existing.gameObject.SetActive(false); Destroy(existing.gameObject); }
-                RefreshTags();
-                return;
-            }
-        if (!isSelected) return;
-        CreateTagChip(tagSelection.options[value].text);
+        if (value < 0 || value >= tagCatalog.Count) return;
+        var tag = tagCatalog[value];
+        if (isSelected)
+        {
+            if (selectedTagIds.Add(tag.id)) CreateTagChip(tag);
+        }
+        else
+        {
+            selectedTagIds.Remove(tag.id);
+            foreach (Transform existing in tagContent)
+                if (chipIds.TryGetValue(existing.gameObject, out var id) && id == tag.id)
+                {
+                    chipIds.Remove(existing.gameObject);
+                    existing.gameObject.SetActive(false); Destroy(existing.gameObject);
+                }
+        }
         RefreshTags();
     }
-    private void CreateTagChip(string name)
+    private void CreateTagChip(QuestTag tag)
     {
         var chip = Instantiate(tagTemplate, tagContent);
         chip.name = "TagChip";
         chip.SetActive(true);
-        chip.GetComponentInChildren<TMP_Text>().text = name + " ×";
+        chipIds[chip] = tag.id;
+        chip.GetComponentInChildren<TMP_Text>().text = tag.name + " ×";
+        TagColors.Apply(chip, tag.colorHex, tagTintSprite);
         SizeTag(chip);
         BindTag(chip);
     }
@@ -224,29 +244,35 @@ public class EditTaskDetailsUI : MonoBehaviour
     {
         var button = chip.GetComponent<Button>();
         button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(() => { chip.SetActive(false); Destroy(chip); RefreshTags(); });
+        button.onClick.AddListener(() =>
+        {
+            if (chipIds.TryGetValue(chip, out var id)) selectedTagIds.Remove(id);
+            chipIds.Remove(chip);
+            chip.SetActive(false); Destroy(chip); RefreshTags();
+        });
     }
 
     private static void SizeTag(GameObject chip)
     {
-        chip.GetComponent<LayoutElement>().preferredWidth = Mathf.Ceil(chip.GetComponentInChildren<TMP_Text>().GetPreferredValues().x) + 24;
+        var label = chip.GetComponentInChildren<TMP_Text>();
+        label.textWrappingMode = TextWrappingModes.NoWrap;
+        label.overflowMode = TextOverflowModes.Ellipsis;
+        var size = chip.GetComponent<LayoutElement>();
+        size.minWidth = size.preferredWidth = Mathf.Min(300, Mathf.Ceil(label.GetPreferredValues().x) + 24);
     }
 
     private void RefreshTags()
     {
-        bool hasTags = false;
         var selected = new List<int>();
         foreach (Transform chip in tagContent)
             if (chip.gameObject.activeSelf)
             {
-                hasTags = true;
                 SizeTag(chip.gameObject);
-                var text = chip.GetComponentInChildren<TMP_Text>().text;
-                for (int i = 0; i < tagSelection.options.Count; i++)
-                    if (text == tagSelection.options[i].text + " ×") selected.Add(i);
             }
+        for (int i = 0; i < tagCatalog.Count; i++)
+            if (selectedTagIds.Contains(tagCatalog[i].id)) selected.Add(i);
         tagMultiSelection.SetSelection(selected);
-        tagSelection.captionText.gameObject.SetActive(!hasTags);
+        tagSelection.captionText.gameObject.SetActive(selected.Count == 0);
         tagSelection.captionText.text = "Add tags...";
         LayoutRebuilder.MarkLayoutForRebuild(tagContent);
     }

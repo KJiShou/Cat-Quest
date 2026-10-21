@@ -71,6 +71,8 @@ public sealed class PlayerDataStore : IPlayerDataStore
     public static void Normalize(PlayerData data)
     {
         data.version = 5;
+        data.settings = AppSettings.Normalize(data.settings);
+        data.account = AccountPreferences.Normalize(data.account);
         data.masterStage = Math.Max(1,data.masterStage);
         data.battles ??= new List<BattleAttempt>();
         data.bossProgress ??= new List<BossProgress>();
@@ -93,6 +95,7 @@ public sealed class PlayerDataStore : IPlayerDataStore
         }
         data.tasks.RemoveAll(t => t == null);
         data.tags.RemoveAll(t => t == null);
+        foreach (var tag in data.tags) tag.colorHex = TagColors.Normalize(tag.colorHex);
         data.occurrences.RemoveAll(t => t == null);
         data.history.RemoveAll(t => t == null || t.snapshot == null);
         foreach (var task in data.tasks)
@@ -104,6 +107,7 @@ public sealed class PlayerDataStore : IPlayerDataStore
         foreach (var item in data.history)
         {
             item.tagNames ??= new List<string>();
+            item.tagColors ??= new List<string>();
             if (string.IsNullOrEmpty(item.completedLocalDay) && DateTimeOffset.TryParse(item.completedUtc, out var completed))
                 item.completedLocalDay = TaskService.DateKey(completed.LocalDateTime);
             if (string.IsNullOrEmpty(item.rewardedLocalDay)) item.rewardedLocalDay = item.completedLocalDay;

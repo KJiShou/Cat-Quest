@@ -12,10 +12,12 @@ public sealed class TaskDetailsPresenter
     private readonly GameObject tagTemplate, subtaskTemplate;
     private readonly TMP_Text title, description, schedule, fish, xp;
     private readonly Button complete, edit, delete;
+    private readonly Sprite tagTintSprite;
     private TaskView currentView;
-    public TaskDetailsPresenter(RectTransform root, TaskUIBuilder ui)
+    public TaskDetailsPresenter(RectTransform root, TaskUIBuilder ui, Sprite tagTintSprite=null)
     {
         this.root=root;
+        this.tagTintSprite=tagTintSprite;
         body=root.Find("ScrollRect/Content");
         title=body.Find("Title/GameObject/Title").GetComponent<TMP_Text>();
         var titleLayout=title.transform.parent.GetComponent<HorizontalLayoutGroup>();
@@ -88,9 +90,10 @@ public sealed class TaskDetailsPresenter
         if(view==null) return;
         schedule.text=scheduleText(view);
         RefreshScheduleColor(service);
-        foreach(var name in view.tagNames) {
+        for(int i=0;i<view.tagNames.Count;i++) {
             var chip=UnityEngine.Object.Instantiate(tagTemplate,tags); chip.SetActive(true);
-            TaskUIBuilder.LayoutTag(chip,name);
+            TaskUIBuilder.LayoutTag(chip,view.tagNames[i]);
+            TagColors.Apply(chip,view.tagColors!=null && i<view.tagColors.Count ? view.tagColors[i] : TagColors.DefaultHex,tagTintSprite);
         }
         body.Find("Tags").gameObject.SetActive(view.tagNames.Count>0);
         foreach(var sub in view.task.subtasks) {
