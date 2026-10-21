@@ -45,8 +45,6 @@ public class TaskSystemUI : MonoBehaviour
     private TaskConfirmDialog confirmation;
     private RectTransform modalOverlay;
     private RectTransform modalPanel;
-    private TMP_Text status;
-    private float statusUntil;
     private float nextClockCheck;
     private bool editing;
     private readonly List<(TMP_Text label, TaskView view)> scheduleLabels = new List<(TMP_Text, TaskView)>();
@@ -80,7 +78,7 @@ public class TaskSystemUI : MonoBehaviour
         editor.transform.Find("Footer/Actions/SaveChangesButton").GetComponent<Button>().onClick.AddListener(SaveDraft);
         editor.transform.Find("Footer/Actions/CancelButton").GetComponent<Button>().onClick.AddListener(CancelDraft);
         editor.transform.Find("Header/Close").GetComponent<Button>().onClick.AddListener(CancelDraft);
-        BuildDetails(); BuildModal(); BuildStatus();
+        BuildDetails(); BuildModal();
         editor.gameObject.SetActive(false); detailsRoot.gameObject.SetActive(false);
         CurrentTab = TaskTab.Today;
         Refresh();
@@ -105,7 +103,6 @@ public class TaskSystemUI : MonoBehaviour
                 if (item.label) item.label.color = Service.IsOverdue(item.view) ? TaskUIBuilder.Overdue : TaskUIBuilder.ScheduleInk;
             details.RefreshScheduleColor(Service);
         }
-        if (status && Time.unscaledTime > statusUntil) status.transform.parent.gameObject.SetActive(false);
     }
     private void OnEnable()
     {
@@ -158,19 +155,9 @@ public class TaskSystemUI : MonoBehaviour
         modalOverlay.gameObject.SetActive(false);
         confirmation=new TaskConfirmDialog(confirmDialogTemplate,canvas.transform,font);
     }
-    private void BuildStatus()
-    {
-        var canvas=GetComponentInParent<Canvas>().rootCanvas;
-        var panel=TaskUIBuilder.Rect(canvas.transform,"TaskStatus"); panel.anchorMin=panel.anchorMax=new Vector2(.5f,0); panel.pivot=new Vector2(.5f,0); panel.anchoredPosition=new Vector2(0,12); panel.sizeDelta=new Vector2(900,48);
-        ui.Image(panel,new Color32(234,247,255,255),roundedSprite);
-        status=ui.Text(panel,"",16); TaskUIBuilder.Stretch(status.rectTransform,16,16); status.alignment=TextAlignmentOptions.Center;
-        // The containing panel, not only its text, is hidden by Notify/Update.
-        panel.gameObject.SetActive(false);
-    }
     public void Notify(string message,bool error=false)
     {
-        status.text=message; status.color=error ? new Color32(185,38,58,255) : TaskUIBuilder.Ink;
-        status.transform.parent.gameObject.SetActive(true); status.gameObject.SetActive(true); status.transform.parent.SetAsLastSibling(); statusUntil=Time.unscaledTime+(error ? 12 : 4);
+        if(error) confirmation.ShowNotice("Notice",message);
     }
     private void OpenModal(string title,float height=440)
     {

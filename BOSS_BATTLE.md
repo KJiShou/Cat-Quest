@@ -32,3 +32,9 @@ Editor request files:
 - `Temp/verify-battle-play.request`: isolated save, stage portraits and gate checks, 1920x1080 and 1280x720 screenshots, confirmation, ticket spend, cat run, attack/victory, doubled animation speed at 2 ASPD, and navigation stop. Results/screenshots go to `Library/BattleVerification`.
 
 No player save is used by these checks. Equipment is implemented in Cat Home; leaderboard remains separate.
+
+Combat impact presentation: BossBattleActors layers a 0.32s outward recoil, tilt and squash/rebound over the current animated pose for both cat and each boss, triggered only by actual simulation hits. Attack clips retain their configured ASPD and recover their phase after the visual freeze; no damage or simulation timing comes from feedback. Repeated hits restart a bounded reaction, and finish/reset/stage selection/page disable/focus loss clear additive transforms and flash.
+
+Impact emphasis: each hit freezes only the two actor Animators for 55 ms, holds the recoil pose/flash, and shakes only the arena camera for 160 ms with a decaying offset. Simultaneous hits share one stop. On release the Animators catch up the held time to retain the attack phase; BattleSimulation and Time.timeScale are never paused by feedback. Cleanup restores animator speeds and the camera exactly, including finish, reset, page disable and focus loss.
+
+Stage reward chests show lightweight golden UI star particles while pendingClaims is positive. Particles stop with the Stage panel and clear immediately after the last claim. They do not intercept clicks or affect reward state. Victory presentation shows the existing Victory banner and only positive EXP from the committed receipt, using the Daily Reward EXP icon beside the amount; zero-EXP victories hide the reward strip, and mastery/next-stage/Fish text is omitted. All settlement and progression rules remain unchanged.

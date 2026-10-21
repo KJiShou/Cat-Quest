@@ -20,6 +20,7 @@ public sealed class BossPageUI : MonoBehaviour
     public TMP_Text[] masteryValues;
     public Image[] masteryIcons;
     public Sprite masteryChestClosed,masteryChestOpen;
+    public ChestRewardParticles[] masteryParticles;
     public GameObject masterLock;
     public Button masterChoice,closeStages;
     public TMP_Text masterCaption;
@@ -90,6 +91,7 @@ public sealed class BossPageUI : MonoBehaviour
             int progress=p.wins<=0?0:p.wins>=15?5:1+(p.wins-1)%5;
             masteryBars[i].SetValueWithoutNotify(progress);
             if(masteryIcons!=null&&i<masteryIcons.Length&&masteryIcons[i])masteryIcons[i].sprite=p.pendingClaims>0?masteryChestOpen:masteryChestClosed;
+            if(masteryParticles!=null&&i<masteryParticles.Length&&masteryParticles[i])masteryParticles[i].gameObject.SetActive(p.pendingClaims>0);
             masteryValues[i].text=$"{progress}/5"+(p.pendingClaims>0?" · Claim":"");
             stageCaptions[i].text=$"Stage {id} · {(id==1?"Cyclope":id==2?"Orc":"Demon")}\n"+(gate??"");
         }
@@ -100,6 +102,7 @@ public sealed class BossPageUI : MonoBehaviour
     void Refresh()
     {
         if(service==null)return;
+        if(stagePicker.activeSelf)RefreshStages();
         var c=attempt?.cat??service.CatStats;
         bossTitle.text=(master>0?$"Master {master} · ":"")+Name;
         if(attempt==null){
@@ -168,17 +171,14 @@ public sealed class BossPageUI : MonoBehaviour
         actors.Finish(outcome);
         if(!service.ResolveBattle(attempt.id,outcome)){settlementPending=true;message.text=service.LastError;Refresh();return;}
         var receipt=service.Snapshot.battles.Single(b=>b.id==attempt.id);
-        var p=service.Snapshot.bossProgress.Single(x=>x.bossId==selected);
-        message.text=receipt.outcome==BattleOutcome.Victory ? "Victory"+(receipt.experience>0?$" · +{receipt.experience} EXP":"")+(receipt.fishCoins>0?$" · +{receipt.fishCoins} Fish":"")+(master==0?$"\nMastery {p.wins}"+(p.pendingClaims>0?$" · {p.pendingClaims} equipment claim(s) saved":""):"\nNext Master stage unlocked") : receipt.outcome==BattleOutcome.Defeat?"Defeat · Train and try again":receipt.outcome==BattleOutcome.Stopped?"Battle stopped":"Battle interrupted · Ticket restored";
+        message.text=receipt.outcome==BattleOutcome.Victory ? "Victory"+(receipt.experience>0?$" · +{receipt.experience} EXP":"") : receipt.outcome==BattleOutcome.Defeat?"Defeat · Train and try again":receipt.outcome==BattleOutcome.Stopped?"Battle stopped":"Battle interrupted · Ticket restored";
         if(isActiveAndEnabled && (receipt.outcome==BattleOutcome.Victory || receipt.outcome==BattleOutcome.Defeat)) {
             int index=receipt.outcome==BattleOutcome.Victory?0:1;
             foreach(var panel in resultPanels)panel.SetActive(false);
-            resultValues[index].text=index==0
-                ? (receipt.experience>0?$"+{receipt.experience} EXP":"Mastery +1")+(receipt.fishCoins>0?$"   +{receipt.fishCoins} Fish":"")
-                : "Train and try again";
-            resultDetails[index].text=index==0
-                ? (master>0?"Next Master stage unlocked":$"Mastery {p.wins}"+(p.pendingClaims>0?$" · {p.pendingClaims} equipment claim(s) saved":""))
-                : "No rewards · Progress kept";
+            resultValues[index].text=index==0 ? (receipt.experience>0?$"+{receipt.experience}":"") : "Train and try again";
+            resultValues[index].transform.parent.gameObject.SetActive(index!=0||receipt.experience>0);
+            resultDetails[index].text=index==0?"":"No rewards · Progress kept";
+            resultDetails[index].gameObject.SetActive(index!=0);
             resultPanels[index].SetActive(true);resultPanels[index].transform.SetAsLastSibling();message.text="";
         }
         returnToIdleAt=Time.unscaledTime+2f;

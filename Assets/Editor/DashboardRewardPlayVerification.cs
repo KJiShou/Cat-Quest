@@ -126,6 +126,34 @@ public static class DashboardRewardPlayVerification
         capture.Begin(Path.Combine(folder, name));
         File.WriteAllText("Temp/dashboard-reward-screenshots.path", folder);
     }
+    private static void ValidateRowFeedback(bool hovering)
+    {
+        var feedback = hoverRow.GetComponent<JuicyButton>();
+        Check(feedback && feedback.isActiveAndEnabled, "Dashboard row feedback missing or disabled.");
+        if (hovering)
+        {
+            Check(feedback.DrawScale.y > 1.005f && feedback.DrawOffset > .5f, "Row did not lift and stretch on hover.");
+            Check(feedback.DrawScale.x >= .99f && feedback.DrawScale.x <= 1.06f &&
+                feedback.DrawScale.y <= 1.1f && feedback.DrawOffset <= 3.5f, "Row hover exceeded its visual bounds.");
+            var mask = hoverRow.GetComponentInParent<RectMask2D>();
+            if (mask)
+            {
+                var rect = (RectTransform)hoverRow.transform;
+                var corners = new Vector3[4]; rect.GetWorldCorners(corners);
+                foreach (var corner in corners)
+                {
+                    var point = rect.InverseTransformPoint(corner);
+                    point = (Vector3)rect.rect.center + Vector3.Scale(point - (Vector3)rect.rect.center,
+                        new Vector3(feedback.DrawScale.x, feedback.DrawScale.y, 1)) + Vector3.up * feedback.DrawOffset;
+                    float x = mask.rectTransform.InverseTransformPoint(rect.TransformPoint(point)).x;
+                    Check(x >= mask.rectTransform.rect.xMin - 1 && x <= mask.rectTransform.rect.xMax + 1,
+                        "Hovered row extends outside its scroll viewport horizontally.");
+                }
+            }
+        }
+        else Check(Vector2.Distance(feedback.DrawScale, Vector2.one) < .005f &&
+            Mathf.Abs(feedback.DrawOffset) < .1f && feedback.DrawShine < .01f, "Row feedback did not reset after pointer exit.");
+    }
     private static void Tick()
     {
         EditorApplication.QueuePlayerLoopUpdate();
@@ -161,15 +189,16 @@ public static class DashboardRewardPlayVerification
             }
             if(step==1 && hoverPhase==1){
                 Check(hoverRow.completeButton.GetComponent<JuicyButtonMesh>(),"Nested checkbox missing shared feedback");
-                Check(hoverRow.GetComponent<JuicyButton>().DrawScale.x>1.005f,"Row did not hover");
+                ValidateRowFeedback(true);
                 Capture("dashboard-row-hover.png");hoverPhase=2;next=EditorApplication.timeSinceStartup+.5;return;
             }
             if(step==1 && hoverPhase==2){
                 hoverRow.GetComponent<JuicyButton>().OnPointerExit(new PointerEventData(EventSystem.current));
+                hoverRow.GetComponent<JuicyButton>().OnDeselect(new BaseEventData(EventSystem.current));
                 hoverPhase=3;next=EditorApplication.timeSinceStartup+.5;return;
             }
             if (step == 1)
-            { ValidateLayout(nav); Capture("dashboard-1280x720.png"); next = EditorApplication.timeSinceStartup + 1; step++; return; }
+            { ValidateRowFeedback(false); ValidateLayout(nav); Capture("dashboard-1280x720.png"); next = EditorApplication.timeSinceStartup + 1; step++; return; }
             if (step == 2)
             { Resolution(1920, 1080); next = EditorApplication.timeSinceStartup + 2; step++; return; }
             if (step == 3)
@@ -221,7 +250,8 @@ public static class DashboardRewardPlayVerification
                 Check(panel.start.gameObject.activeSelf && panel.start.GetComponentInChildren<TMP_Text>().text == "Start Another Focus", "Rest did not offer next actions.");
                 Click(panel.start); Click(panel.cancel);
                 Check(FocusRunner.EnsureInstance().Controller.Phase == FocusPhase.Interrupted && service.Snapshot.experience == 125, "Cancelled session rewarded or entered Rest.");
-                Click(panel.dashboard);
+                Click(nav.buttons[(int)MainMenuPage.Dashboard]);
+                Check(nav.CurrentPage == MainMenuPage.Dashboard, "Sidebar did not return to Dashboard.");
                 next = EditorApplication.timeSinceStartup + 1; step++; return;
             }
             if (step == 9)

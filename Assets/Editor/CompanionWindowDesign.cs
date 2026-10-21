@@ -69,10 +69,6 @@ public static class CompanionWindowDesign
         var image=ui.Image(rect,Ink,sprite);image.type=Image.Type.Simple;image.preserveAspect=true;image.raycastTarget=false;
         return button;
     }
-    static RectTransform Icon(Transform parent,string name,CompanionHeaderIcon.Icon kind)
-    {
-        var rect=TaskUIBuilder.Rect(parent,name);var graphic=rect.gameObject.AddComponent<CompanionHeaderIcon>();graphic.icon=kind;graphic.color=Ink;graphic.raycastTarget=false;return rect;
-    }
     static TMP_Text Label(TaskUIBuilder ui,Transform parent,string text,int size)
     {
         var label=ui.Text(parent,text,size,Ink);label.enableAutoSizing=false;label.textWrappingMode=TextWrappingModes.NoWrap;label.overflowMode=TextOverflowModes.Ellipsis;return label;
@@ -80,9 +76,5 @@ public static class CompanionWindowDesign
     static Button Action(TaskUIBuilder ui,Transform parent,string name,string caption)
     {
         var button=ui.Button(parent,name,caption,color:new Color32(223,245,238,245));var label=button.GetComponentInChildren<TMP_Text>();label.color=Ink;label.fontSize=15;label.enableAutoSizing=false;label.textWrappingMode=TextWrappingModes.NoWrap;return button;
-    }
-    static Button WindowButton(TaskUIBuilder ui,Transform parent,string name,CompanionHeaderIcon.Icon kind)
-    {
-        var button=ui.Button(parent,name,"",color:new Color(1,1,1,.001f));var icon=Icon(button.transform,"Icon",kind);TaskUIBuilder.Stretch(icon);return button;
     }
 }

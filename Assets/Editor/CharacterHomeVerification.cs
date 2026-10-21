@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 [InitializeOnLoad]
@@ -21,7 +22,20 @@ public static class CharacterHomeVerification
     [MenuItem("Tools/Cat Quest/Verify Character Home")]
     public static void Run()
     {
-        var scene = EditorSceneManager.OpenPreviewScene("Assets/Scenes/CharacterHome.unity");
+        Scene scene;
+        try { scene = EditorSceneManager.OpenPreviewScene("Assets/Scenes/CharacterHome.unity"); }
+        catch (Exception ex)
+        {
+            File.WriteAllText("Temp/character-home-verification.txt", "FAIL: " + ex);
+            Debug.LogException(ex);
+            throw;
+        }
+        try { RunForScene(scene); }
+        finally { if (scene.IsValid()) EditorSceneManager.ClosePreviewScene(scene); }
+    }
+
+    internal static void RunForScene(Scene scene)
+    {
         try
         {
             var roots = scene.GetRootGameObjects();
@@ -49,8 +63,8 @@ public static class CharacterHomeVerification
         {
             File.WriteAllText("Temp/character-home-verification.txt", "FAIL: " + ex);
             Debug.LogException(ex);
+            throw;
         }
-        finally { EditorSceneManager.ClosePreviewScene(scene); }
     }
 
     private static void Require(bool condition, string message)

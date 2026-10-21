@@ -59,7 +59,13 @@ public sealed class TaskConfirmDialog
     }
     public void Show(string title,string body,Action onConfirm)
     {
+        cancel.gameObject.SetActive(true); confirm.GetComponentInChildren<TMP_Text>(true).text="Confirm";
         accepted=onConfirm; heading.text=title; message.text=body; Root.SetActive(true); Root.transform.SetAsLastSibling();
+    }
+    public void ShowNotice(string title,string body)
+    {
+        Show(title,body,null); cancel.gameObject.SetActive(false);
+        confirm.GetComponentInChildren<TMP_Text>(true).text="OK";
     }
     public void Dismiss() => Close();
     private void Close() { Root.SetActive(false); accepted=null; }

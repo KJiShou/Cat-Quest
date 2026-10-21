@@ -43,11 +43,14 @@ public static class RewardSystemVerification
     }
     [MenuItem("Tools/Cat Quest/Verify Rewards and Focus")]
     public static void Run()
+        => Run(CharacterHomeVerification.Run);
+
+    internal static void Run(Action verifyCharacterHome)
     {
         try
         {
             VerifyTasksAndGoals(); VerifyFocus(); VerifyController(); VerifyMigration();
-            TaskSystemVerification.Run(); CharacterHomeVerification.Run();
+            TaskSystemVerification.Run(); verifyCharacterHome();
             File.WriteAllText("Temp/reward-system.verification", "ALL PASS: difficulty tiers, independent caps, goals, undo, midnight, Focus settlement/retry/cancel/rest, interruption, migration, levels; existing task and CharacterHome checks passed.");
             Debug.Log("Rewards and Focus verification: ALL PASS");
         }

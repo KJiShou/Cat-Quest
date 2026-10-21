@@ -84,3 +84,13 @@ Unity 菜单 **Tools → Cat Quest → Verify MainMenu Play Flow**：
 在 MainMenu 的 Edit Mode 执行，自动进入 Play Mode，验证实际 UI 操作与落盘，结束后退出 Play Mode。测试使用 `Library/TaskSystemPlayVerification/<GUID>/save.json`，不写入真实玩家存档。
 
 测试报告位于 `Temp/task-system.verification` 和 `Temp/task-system.play-result`。
+
+## Shared reward flight feedback
+
+`RewardFlightUI` on the authored `Canvas/RewardFlights` observes committed Fish Coin, Ticket and EXP balance increases. It reuses the header Fish/Ticket artwork and `Light/Mission.prefab`'s `Panel_Right/TableFrame/Item_Group/Group (1)/ItemList_Blue/Item` EXP artwork, already used by `DailyGoalUI`. Its editable icon/text templates are serialized under the same Canvas subtree; vendor prefabs are unchanged.
+
+Quest completion, daily goal claims, Focus settlement (including valid End Early), and Boss currency/EXP rewards use the same bounded pool. Icons pop outward in random directions, then curve into their corresponding header target. Only displayed header values wait for arrival; the authoritative reward is already saved. Zero increases and duplicate settlements do not spawn flights. Spending updates the displayed balance while accounting for pending arrivals. Page changes retain the shared effect; focus loss or disabling settles the display immediately and clears visuals. UI uses unscaled time and never blocks input.
+
+Request `Temp/verify-reward-flight.request` in an idle Editor to run the isolated Play Mode verifier. Current-run results and motion frames are written to `Library/RewardFlightVerification/`. It covers real service settlements, duplicate/cancelled/capped rewards, delayed count arrival, pause, disable/focus cleanup, burst settlement and four window sizes. It restores the previous test-store environment, Play Mode start scene, Game View size and time scale.
+
+Receipt feedback: Fish and Ticket header icons use `JuicyButtonMesh`'s bounded 24% mesh-only pulse (0.32 seconds), preserving authored transforms, layout and hit areas. Consecutive arrivals accumulate into one blue gain number per resource; the stack stays visible for 1.2 seconds after the latest arrival before clearing. Focus loss/disable resets both the pulse and stack. Runtime pools are rebuilt safely after an Editor Play Mode script reload.

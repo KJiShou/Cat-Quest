@@ -44,7 +44,7 @@ public static class BossPageVerification
                 var camera=stage.GetComponentInChildren<Camera>();
                 var target=camera.targetTexture;var previous=RenderTexture.active;
                 var texture=new Texture2D(target.width,target.height,TextureFormat.RGB24,false);
-                try { RenderTexture.active=target;texture.ReadPixels(new Rect(0,0,target.width,target.height),0,0);texture.Apply();File.WriteAllBytes("Assets/Generated/Previews/ForestBossArena.png",texture.EncodeToPNG()); }
+                try { RenderTexture.active=target;texture.ReadPixels(new Rect(0,0,target.width,target.height),0,0);texture.Apply();File.WriteAllBytes(Path.Combine(Folder,"ForestBossArena.png"),texture.EncodeToPNG()); }
                 finally { RenderTexture.active=previous;UnityEngine.Object.Destroy(texture); }
                 Capture("boss-1920.png");
             }

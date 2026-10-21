@@ -27,6 +27,7 @@ public class ResisesSideMenuInLayoutGroup : MonoBehaviour
     [SerializeField] private bool setToggleTo;
 
     private Coroutine _animationRoutine;
+    private float lastContainerWidth = -1;
 
     private void Reset()
     {
@@ -43,6 +44,16 @@ public class ResisesSideMenuInLayoutGroup : MonoBehaviour
     private void OnDestroy()
     {
         expander.onValueChanged.RemoveListener(OnExpanderValueChanged);
+    }
+
+    private void LateUpdate()
+    {
+        // Window resizing must also resize the page when the toggle has not changed.
+        // Use the current sidebar width so an in-flight transition stays continuous.
+        float width = TotalWidth;
+        if (Mathf.Approximately(width, lastContainerWidth)) return;
+        lastContainerWidth = width;
+        contentContainer.sizeDelta = SizeOfContent(sideMenuContainer.rect.width);
     }
 
     private void OnValidate()

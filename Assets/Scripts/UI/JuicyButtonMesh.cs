@@ -14,9 +14,24 @@ public sealed class JuicyButtonMesh : BaseMeshEffect
         owners.Sort((a,b)=>a==b?0:a.transform.IsChildOf(b.transform)?-1:b.transform.IsChildOf(a.transform)?1:0);
         Refresh();
     }
+    float rewardAge = .32f, rewardStart = 1;
+    public float RewardScale { get; private set; } = 1;
+    public void PlayRewardPulse() { rewardStart = RewardScale; rewardAge = 0; }
+    public void ResetRewardPulse() { rewardAge = .32f; RewardScale = 1; Refresh(); }
+    void Update()
+    {
+        if (rewardAge >= .32f) return;
+        rewardAge = Mathf.Min(.32f, rewardAge + Time.unscaledDeltaTime);
+        if (rewardAge < .08f)
+            RewardScale = Mathf.Lerp(rewardStart, 1.24f, 1 - Mathf.Pow(1 - rewardAge / .08f, 3));
+        else
+            RewardScale = Mathf.Lerp(1.24f, 1, Mathf.SmoothStep(0, 1, (rewardAge - .08f) / .24f));
+        Refresh();
+    }
+    void OnApplicationFocus(bool focused) { if (!focused) ResetRewardPulse(); }
     TMP_Text label;
     protected override void OnEnable(){base.OnEnable();label=GetComponent<TMP_Text>();if(label)label.OnPreRenderText+=ModifyText;}
-    protected override void OnDisable(){if(label)label.OnPreRenderText-=ModifyText;base.OnDisable();}
+    protected override void OnDisable(){ResetRewardPulse();if(label)label.OnPreRenderText-=ModifyText;base.OnDisable();}
     void ModifyText(TMP_TextInfo info)
     {
         for(int m=0;m<info.meshInfo.Length;m++){
@@ -26,6 +41,8 @@ public sealed class JuicyButtonMesh : BaseMeshEffect
     }
     Vector3 TransformPoint(Vector3 position)
     {
+        Vector3 center = graphic.rectTransform.rect.center;
+        position = center + (position - center) * RewardScale;
         Vector3 world=graphic.rectTransform.TransformPoint(position);
         foreach(var owner in owners){
             if(!owner || !owner.isActiveAndEnabled || owner.visual)continue;
