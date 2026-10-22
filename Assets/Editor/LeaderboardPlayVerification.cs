@@ -107,7 +107,7 @@ public static class LeaderboardPlayVerification
                 else
                 {
                     Check(evidence.All(path => File.Exists(path) && new FileInfo(path).Length > 100), "A requested screenshot is missing or empty.");
-                    Finish("PASS: Leaderboard baseline/reference or authored four categories, own rank, empty/error/auth states, navigation, cancellation and feedback at 1920x1080 and 1280x720. Review current screenshots separately.");
+                    Finish("PASS: four categories, medal-number centering, panel/button/own-rank containment, removed copy, empty/error/auth states, navigation, cancellation and feedback at four resolutions; expanded/collapsed sidebar layout captures. Review current screenshots separately.");
                 }
             }
             catch (Exception e) { Finish("FAIL at " + context + ": " + e); }
@@ -270,6 +270,35 @@ public static class LeaderboardPlayVerification
     }
     static void Reset(JuicyButton feedback, string reason) => Check(Vector2.Distance(feedback.DrawScale, Vector2.one) < .005f && Mathf.Abs(feedback.DrawOffset) < .1f, reason);
 
+    static void Contained(RectTransform parent,RectTransform child,string message)
+    {
+        var outer=Bounds(parent);var inner=Bounds(child);
+        Check(inner.xMin>=outer.xMin-1&&inner.xMax<=outer.xMax+1&&inner.yMin>=outer.yMin-1&&inner.yMax<=outer.yMax+1,message+": "+inner+" within "+outer);
+    }
+    static void Layout(LeaderboardPanelUI panel)
+    {
+        Canvas.ForceUpdateCanvases();
+        var root=(RectTransform)panel.transform;
+        Contained((RectTransform)root.parent,root,"Ranking content leaves page");
+        foreach(var button in panel.categories.Concat(new[]{panel.refresh,panel.accountButton}))
+            Contained(root,(RectTransform)button.transform,"Ranking button leaves panel: "+button.name);
+        var own=(RectTransform)panel.ownRow.transform.parent;
+        Contained((RectTransform)own.parent,own,"Your Rank frame leaves table");
+        Contained(own,(RectTransform)own.Find("Title"),"Your Rank title leaves frame");
+        if(panel.ownRow.gameObject.activeSelf)Contained(own,(RectTransform)panel.ownRow.transform,"Player rank row leaves Your Rank frame");
+        else Contained(own,panel.ownMessage.rectTransform,"Own-rank message leaves frame");
+        Check(!panel.GetComponentsInChildren<TMP_Text>().Any(t=>t.text.StartsWith("Top ",StringComparison.Ordinal)||t.text.StartsWith("Four rankings.",StringComparison.Ordinal)),"Removed ranking copy is visible");
+        foreach(var row in panel.content.GetComponentsInChildren<LeaderboardRowUI>().Take(3).Concat(new[]{panel.ownRow}))
+        {
+            if(!row.gameObject.activeInHierarchy||!row.medal.enabled)continue;
+            row.rank.ForceMeshUpdate();
+            var glyph=row.rank.transform.TransformPoint(row.rank.textBounds.center);
+            var local=row.medal.transform.InverseTransformPoint(glyph);
+            Check(Mathf.Abs(local.x)<1.5f,"Medal number is off center: "+row.rank.text);
+            Check(Mathf.Abs(local.y+5.2f)<2,"Medal number leaves medal face: "+row.rank.text);
+        }
+    }
+
     sealed class Source : ILeaderboardSource
     {
         public string mode="normal";public int calls,cancels;
@@ -293,7 +322,7 @@ public static class LeaderboardPlayVerification
         GameObject reference=null;var source=new Source();
         try
         {
-            foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720)})
+            foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)})
             {
                 string suffix=size.x+"x"+size.y;Resolution(size);nav.ShowPage(MainMenuPage.Leaderboard);yield return 1;
                 context="baseline-"+suffix;Capture(context);yield return .2;
@@ -316,6 +345,7 @@ public static class LeaderboardPlayVerification
                     Check(panel.Snapshot!=null && panel.Snapshot.kind==(LeaderboardKind)i && panel.ownRow.gameObject.activeSelf && panel.ownRow.rank.text=="138","Independent category / out-of-top own rank missing");
                     Check(panel.content.GetComponentsInChildren<LeaderboardRowUI>().Length==50,"Expected top 50 visible models");
                     foreach(var button in panel.categories)Check(!button.GetComponentInChildren<TMP_Text>().isTextOverflowing,"Category text clipped");
+                    Layout(panel);
                     Capture(context);yield return .2;
                 }
                 var buttonToTest=panel.categories[0];var before=Bounds((RectTransform)buttonToTest.transform);var pointer=Pointer(buttonToTest);
@@ -326,7 +356,13 @@ public static class LeaderboardPlayVerification
                 foreach(string mode in new[]{"ownTop","optout","empty","error"})
                 {
                     context=mode+"-"+suffix;source.mode=mode;Click(panel.refresh);yield return .4;
-                    Check(!panel.Loading && panel.refresh.IsInteractable(),"Loading stuck");Capture(context);yield return .2;
+                    Check(!panel.Loading && panel.refresh.IsInteractable(),"Loading stuck");Layout(panel);Capture(context);yield return .2;
+                }
+                var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
+                var expander=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
+                source.mode="ownTop";Click(panel.refresh);yield return .4;
+                foreach(bool expanded in new[]{true,false}){
+                    expander.isOn=expanded;yield return .6;Layout(panel);Capture("layout-"+suffix+(expanded?"-expanded":"-collapsed"));yield return .2;
                 }
                 source.mode="normal";Click(panel.refresh);nav.ShowPage(MainMenuPage.Tasks);yield return .3;Check(!panel.Loading,"Closed page still loading");nav.ShowPage(MainMenuPage.Leaderboard);yield return .4;
                 Click(panel.accountButton);yield return .3;var settings=UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();Check(settings && settings.CurrentView=="Account","Account action missing");settings.Close();yield return .2;

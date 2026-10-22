@@ -45,8 +45,8 @@ public sealed class EquipmentPageUI : MonoBehaviour
     RectTransform Overlay(string n){var r=Rect(transform,n,0,0,1,1);ui.Image(r,new Color(0,.07f,.15f,.55f)).raycastTarget=true;var layer=r.gameObject.AddComponent<Canvas>();layer.overrideSorting=true;layer.sortingOrder=n=="ConfirmEquipment"?110:100;r.gameObject.AddComponent<EquipmentModalSurface>();return r;}
     static Color Grade(int tier)=>tier==1?new Color32(67,184,255,255):tier==2?new Color32(182,112,245,255):new Color32(255,201,65,255);
     void BuildHome(){
-        var surface=Rect(transform,"EquipmentSurface",.012f,.02f,.99f,.98f);
-        var left=Panel(surface,"CharacterCard",0,0,.395f,1,Color.white);
+        var surface=(RectTransform)transform.Find("EquipmentSurface");
+        var left=(RectTransform)surface.Find("CharacterCard");
         title=Text(left,"Title","Cat Home",27,.05f,.92f,.95f,.99f,TaskUIBuilder.Blue);
         var picture=ui.Image(Rect(left,"CatPreview",.04f,.50f,.96f,.91f),Color.white,catPoster);picture.type=Image.Type.Simple;picture.preserveAspect=true;picture.raycastTarget=false;
         var existingPreview=navigation?navigation.pages[0].GetComponentInChildren<CharacterHomePreview>(true):null;

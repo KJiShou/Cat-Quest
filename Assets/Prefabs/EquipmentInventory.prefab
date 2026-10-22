@@ -79,7 +79,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 2
+  m_PixelsPerUnitMultiplier: 1
 --- !u!114 &2025611526320149583
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -92,8 +92,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  m_EffectColor: {r: 0, g: 0, b: 0, a: 0.050980393}
-  m_EffectDistance: {x: 0, y: -5}
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 0.22352941}
+  m_EffectDistance: {x: 10, y: -10}
   m_UseGraphicAlpha: 1
 --- !u!1 &795822970131288533
 GameObject:
@@ -497,6 +497,7 @@ GameObject:
   - component: {fileID: 5004948923237402502}
   - component: {fileID: 5064862870626247767}
   - component: {fileID: 4869374406791919610}
+  - component: {fileID: 6194339516208158385}
   m_Layer: 0
   m_Name: Inventory
   m_TagString: Untagged
@@ -561,7 +562,22 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 2
+  m_PixelsPerUnitMultiplier: 1
+--- !u!114 &6194339516208158385
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2000619327377330396}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Shadow
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 0.22352941}
+  m_EffectDistance: {x: 10, y: -10}
+  m_UseGraphicAlpha: 1
 --- !u!1 &2234133873163931425
 GameObject:
   m_ObjectHideFlags: 0

@@ -291,6 +291,10 @@ public static class TaskTabsVerification
                 new QuestSubtask { id="layout-wrap",title="A long subtask should wrap into separate lines without covering the next row." },
                 new QuestSubtask { id="layout-word",title=new string('W',100) }
             } },Array.Empty<string>(),out string layoutTask),owner.Service.LastError);
+        Check(owner.Service.SaveTag(null,"Details layout check",out string detailTag),owner.Service.LastError);
+        Check(owner.Service.Upsert(new QuestTask { title="Task details", scheduled=true,
+            date=TaskService.DateKey(owner.Service.LocalNow), minuteOfDay=12*60,
+            tagIds=new List<string>{detailTag} },Array.Empty<string>(),out string shortTask),owner.Service.LastError);
         var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
         var toggle=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
         foreach(var size in Sizes)
@@ -302,6 +306,11 @@ public static class TaskTabsVerification
                 context=size.x+"x"+size.y+(expanded?" expanded":" collapsed");
                 toggle.isOn=expanded;owner.SelectTab(TaskTab.History);yield return 1;
                 Layout(owner);HeaderTextVariants(nav);ClickTabs(owner);
+                owner.SelectTab(TaskTab.Todo);owner.SelectTask(shortTask);yield return .5;
+                if(!capture)capture=new GameObject("Task Tab Capture").AddComponent<RewardScreenshotCapture>();
+                capture.Begin(Path.GetFullPath(Folder+"/details-"+size.x+"x"+size.y+(expanded?"-expanded":"-collapsed")+".png"));
+                yield return .2;
+                DetailsLayout(owner);
                 owner.SelectTab(TaskTab.Todo);owner.SelectTask(layoutTask);yield return .5;
                 Layout(owner);SubtaskLayout(owner);
                 var edit=owner.detailsRoot.Find("Button/Edit Button").GetComponentInChildren<Button>();
@@ -395,6 +404,19 @@ public static class TaskTabsVerification
             }
         }
         owner.CancelDraft();
+        Check(owner.Service.Delete(shortTask),"Could not remove isolated detail task.");
         Check(owner.Service.Delete(layoutTask),"Could not remove isolated layout task.");
+    }
+    static void DetailsLayout(TaskSystemUI owner)
+    {
+        Canvas.ForceUpdateCanvases();
+        var scroll=owner.detailsRoot.Find("ScrollRect").GetComponent<ScrollRect>();
+        var content=scroll.content;
+        var viewport=ScreenBounds(scroll.viewport);
+        Contained(viewport,ScreenBounds((RectTransform)content.Find("Title")),"Short task title clipped.");
+        foreach(var path in new[]{"Rewards/RewardsItem/FishCoins","Rewards/RewardsItem/EXP"})
+            Contained(viewport,ScreenBounds((RectTransform)content.Find(path)),"Short task reward clipped: "+path);
+        var top=ScreenBounds((RectTransform)content.Find("Title")).yMax;
+        Check(viewport.yMax-top>=8,"Detail content lacks top inset.");
     }
 }

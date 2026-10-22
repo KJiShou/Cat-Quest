@@ -2,6 +2,8 @@
 
 The existing sidebar opens an editable `Assets/Prefabs/Leaderboard/LeaderboardContent.prefab` nested in the original Canvas page. Its tabs, row frames and medals come from SimpleCasual's Light `Ranking.prefab`; typography remains Fredoka and buttons reuse `JuicyButton`. No vendor asset or unrelated page is regenerated.
 
+The page keeps its title without a subtitle or published-player count caption. Category and Account/Refresh buttons have bounded heights; the fixed Your Rank frame reserves separate space for its heading and player row. Loading, empty, error and participation messages remain in their existing content areas.
+
 ## Ranking behaviour
 
 - Boss Stage, Tasks Completed, Focus Minutes and Power are independent descending rankings.
@@ -31,7 +33,7 @@ Local compilation/emulator tests do not deploy this configuration. A real rankin
 ## Verification
 
 - `Temp/verify-leaderboard-data.request`: isolated ordering, response parsing, top/own/count contracts, failures, opt-out, cancellation and saved prefab bindings. Results and generated REST contracts under `Library/LeaderboardVerification/Data-*`.
-- `Temp/verify-leaderboard-play.request`: existing Editor, isolated save, actual reference and page captures at 1920×1080 and 1280×720, categories, own rank 138, own top row, empty/error/opt-out states, rapid switching, close/reopen and Account modal. Restores Game View, start scene and environment.
+- `Temp/verify-leaderboard-play.request`: existing Editor, isolated save, actual reference and page captures at 1920×1080, 1280×720, 1024×768 and 2560×1080, including expanded/collapsed sidebar layouts, medal centering, button/own-rank containment, categories, rank 138, empty/error/opt-out states, rapid switching, close/reopen and Account modal. Restores Game View, start scene and environment.
 - `Firebase/verify-rules.mjs`: emulator ownership/privacy validation plus all four top-50 and exact-rank queries. Set `CATQUEST_QUERY_CONTRACTS` to an absolute generated `query-contracts.json` path to additionally execute the compiled C# REST request shapes. These optional REST shape checks use the emulator-only owner token; signed-in/anonymous policy assertions use the official rules test contexts.
 - Account regression: `Temp/verify-settings-account.request`.
 

@@ -95,11 +95,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
   m_IgnoreLayout: 0
   m_MinWidth: -1
-  m_MinHeight: -1
+  m_MinHeight: 110
   m_PreferredWidth: -1
-  m_PreferredHeight: -1
+  m_PreferredHeight: 110
   m_FlexibleWidth: -1
-  m_FlexibleHeight: -1
+  m_FlexibleHeight: 0
   m_LayoutPriority: 1
 --- !u!1 &428236337129055382
 GameObject:
@@ -4043,8 +4043,8 @@ MonoBehaviour:
   m_Padding:
     m_Left: 0
     m_Right: 0
-    m_Top: 15
-    m_Bottom: 0
+    m_Top: 30
+    m_Bottom: 15
   m_ChildAlignment: 0
   m_Spacing: 0
   m_ChildForceExpandWidth: 1

@@ -14,7 +14,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     public Image powerCategoryIcon;
     public Sprite normalTab, selectedTab;
     public Button refresh, accountButton;
-    public TMP_Text categoryTitle, status, empty, ownMessage, updated;
+    public TMP_Text categoryTitle, empty, ownMessage, updated;
     public RectTransform content;
     public ScrollRect scroll;
     public LeaderboardRowUI template, ownRow;
@@ -76,7 +76,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
         foreach (var row in rows) row.gameObject.SetActive(false);
         ownRow.gameObject.SetActive(false); ownMessage.gameObject.SetActive(true); ownMessage.text = "Loading your rank…";
         empty.gameObject.SetActive(true); empty.text = "Loading rankings…";
-        status.text = "Connecting…"; updated.text = "";
+        updated.text = "";
         categoryTitle.text = LeaderboardQuery.Title(CurrentKind);
         for (int i = 0; i < categories.Length; i++)
         {
@@ -114,7 +114,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     public void Render(LeaderboardSnapshot result)
     {
         if (result.kind != CurrentKind) return;
-        Snapshot = result; status.text = result.message ?? "";
+        Snapshot = result;
         int count = result.success ? result.leaders.Count : 0;
         while (rows.Count < count) rows.Add(Instantiate(template, content));
         for (int i = 0; i < rows.Count; i++)

@@ -11,7 +11,7 @@ public sealed class LeaderboardRowUI : MonoBehaviour
     public Image metricIcon;
     public Sprite[] metricIcons;
     public Vector2 regularRankPosition = new Vector2(56, 0);
-    public Vector2 medalRankPosition = new Vector2(59, -5.2f);
+    public Vector2 medalRankPosition = new Vector2(56, -5.2f);
     public void Show(AccountAggregate row, long position, LeaderboardKind kind, bool self)
     {
         rank.text = position.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
