@@ -26,6 +26,10 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public SettingsTagRow tagRowTemplate;
     public Button googleSignIn, signOut, savePlayerName, retryUpload, replaceStatistics;
     public Button[] backdropButtons;
+    public Button[] dashboardRankings;
+    public Sprite rankingNormal, rankingSelected;
+    public Toggle showDashboardRanking, showDashboardTasks, showDashboardDailyRewards, showDashboardFocus, showDashboardCharacter;
+    public Color settingsInk = new Color32(35, 78, 125, 255);
     TaskService service;
     AccountController account;
     SettingsAudio audioPlayer;
@@ -33,6 +37,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     string editingTagId, deletingTagId, selectedColor = TagColors.DefaultHex;
     [NonSerialized] bool initialized, subscribed;
     bool refreshing, nameDirty;
+    LeaderboardKind selectedRanking;
     GameObject lastSelection;
     readonly List<SettingsTagRow> rows = new List<SettingsTagRow>();
     public string CurrentView { get; private set; }
@@ -60,6 +65,18 @@ public sealed class SettingsPanelUI : MonoBehaviour
         music.onValueChanged.AddListener(_ => PreviewVolumes(musicCommit));
         soundCommit.Commit += SaveSettings;
         musicCommit.Commit += SaveSettings;
+        foreach (var toggle in new[] { showDashboardRanking, showDashboardTasks, showDashboardDailyRewards, showDashboardFocus, showDashboardCharacter })
+            toggle.onValueChanged.AddListener(_ => { if (!refreshing) SaveSettings(); });
+        for (int i = 0; i < dashboardRankings.Length; i++)
+        {
+            var kind = (LeaderboardKind)i;
+            dashboardRankings[i].onClick.AddListener(() => {
+                if (selectedRanking == kind) return;
+                selectedRanking = kind;
+                SaveSettings();
+                RefreshRankingSelection();
+            });
+        }
         tagName.onValueChanged.AddListener(_ => UpdateTagPreview());
         playerName.onValueChanged.AddListener(_ => { if (!refreshing) nameDirty = true; });
         savePlayerName.onClick.AddListener(() => {
@@ -175,7 +192,29 @@ public sealed class SettingsPanelUI : MonoBehaviour
         if (CurrentView == "Account") account.CancelSignIn();
         RefreshSettings(); Show(settingsPage, "Settings", CurrentView == "Account" ? accountButton.gameObject : tagsButton.gameObject);
     }
-    AppSettings ReadSettings() => new AppSettings { notificationsEnabled = notifications.isOn, soundVolume = sound.value, musicVolume = music.value };
+    AppSettings ReadSettings()
+    {
+        var draft = service.Settings;
+        draft.notificationsEnabled = notifications.isOn;
+        draft.soundVolume = sound.value;
+        draft.musicVolume = music.value;
+        draft.dashboardRanking = selectedRanking.ToString();
+        draft.hideDashboardRanking = !showDashboardRanking.isOn;
+        draft.hideDashboardTasks = !showDashboardTasks.isOn;
+        draft.hideDashboardDailyRewards = !showDashboardDailyRewards.isOn;
+        draft.hideDashboardFocus = !showDashboardFocus.isOn;
+        draft.hideDashboardCharacter = !showDashboardCharacter.isOn;
+        return draft;
+    }
+    void RefreshRankingSelection()
+    {
+        for (int i = 0; i < dashboardRankings.Length; i++)
+        {
+            bool selected = i == (int)selectedRanking;
+            ((Image)dashboardRankings[i].targetGraphic).sprite = selected ? rankingSelected : rankingNormal;
+            dashboardRankings[i].GetComponentInChildren<TMP_Text>().color = selected ? Color.white : settingsInk;
+        }
+    }
     void PreviewVolumes(SettingsSliderCommit committer)
     {
         if (refreshing) return;
@@ -193,14 +232,21 @@ public sealed class SettingsPanelUI : MonoBehaviour
         soundCommit.Clear(); musicCommit.Clear();
         bool saved = service.SaveSettings(ReadSettings());
         settingsStatus.text = saved ? "Settings saved" : service.LastError;
-        settingsStatus.color = saved ? TaskUIBuilder.ScheduleInk : TaskUIBuilder.Overdue;
+        settingsStatus.color = saved ? settingsInk : TaskUIBuilder.Overdue;
         if (!saved) RefreshSettings(false);
         if (audioPlayer) { audioPlayer.ApplySaved(); if (saved) audioPlayer.PlayPreview(); }
     }
     void RefreshSettings(bool clearStatus = true)
     {
         var saved = service.Settings;
+        selectedRanking = saved.DashboardRanking;
+        RefreshRankingSelection();
         refreshing = true;
+        showDashboardRanking.SetIsOnWithoutNotify(!saved.hideDashboardRanking);
+        showDashboardTasks.SetIsOnWithoutNotify(!saved.hideDashboardTasks);
+        showDashboardDailyRewards.SetIsOnWithoutNotify(!saved.hideDashboardDailyRewards);
+        showDashboardFocus.SetIsOnWithoutNotify(!saved.hideDashboardFocus);
+        showDashboardCharacter.SetIsOnWithoutNotify(!saved.hideDashboardCharacter);
         notifications.SetIsOnWithoutNotify(saved.notificationsEnabled);
         sound.SetValueWithoutNotify(saved.soundVolume); music.SetValueWithoutNotify(saved.musicVolume);
         // Native sliders do not notify visual adapters during programmatic initialization.

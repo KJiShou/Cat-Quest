@@ -359,6 +359,86 @@ public static class SettingsPlayVerification
                 Layout(ui, size); Check(Hit(Bounds((RectTransform)launcher.transform).center) != launcher.gameObject, "Modal leaves the header gear clickable behind it.");
                 Capture("settings-" + suffix); yield return .15;
 
+                context = suffix + " Dashboard ranking preference";
+                var preview = nav.pages[0].GetComponentInChildren<DashboardLeaderboardUI>();
+                var rankingSource = new RankingFixture(); preview.SetSource(rankingSource);
+                foreach (LeaderboardKind kind in Enum.GetValues(typeof(LeaderboardKind)))
+                {
+                    var choice = ui.dashboardRankings[(int)kind];
+                    Click(choice); yield return .2;
+                    Check(service.Settings.DashboardRanking == kind && new PlayerDataStore(manager.SavePath).Data.settings.DashboardRanking == kind, "Ranking preference was not committed/reloaded: " + kind);
+                    Check(preview.CurrentKind == kind && rankingSource.last == kind && preview.rows.All(row => row.gameObject.activeSelf), "Dashboard did not load chosen ranking: " + kind);
+                    Check(ui.dashboardRankings.Count(button => ((Image)button.targetGraphic).sprite == ui.rankingSelected) == 1, "Ranking choices are not mutually exclusive");
+                    Check(preview.rows[0].score.text == LeaderboardQuery.Display(RankingFixture.Row, kind) && preview.rows[0].metricIcon.sprite == preview.rows[0].metricIcons[(int)kind], "Ranking score/icon uses wrong category");
+                    Check(preview.title.text.Contains(kind == LeaderboardKind.FocusMinutes ? "Focus" : LeaderboardQuery.Title(kind)), "Dashboard heading uses wrong category");
+                    Layout(ui, size);
+                    var effect = choice.GetComponent<JuicyButton>(); var choiceBounds = Bounds((RectTransform)choice.transform);
+                    var choicePointer = Pointer(choice); effect.OnPointerEnter(choicePointer); yield return .18;
+                    Check(effect.DrawScale.y > 1.01f, "Ranking choice hover did not animate");
+                    for (int press = 0; press < 6; press++) { effect.OnPointerDown(choicePointer); effect.OnPointerUp(choicePointer); }
+                    effect.OnPointerDown(choicePointer); yield return .1; effect.OnPointerExit(choicePointer); effect.OnDeselect(new BaseEventData(EventSystem.current));
+                    choice.interactable = false; yield return .3; choice.interactable = true; yield return .3;
+                    Reset(effect, "Ranking feedback did not reset"); Stable(choiceBounds, choice);
+                    EventSystem.current.SetSelectedGameObject(choice.gameObject);
+                    int loads = rankingSource.loads; ExecuteEvents.Execute(choice.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler); yield return .2;
+                    Check(rankingSource.loads == loads, "Submitting the selected preference duplicated a ranking load");
+                    Capture("ranking-" + kind + "-" + suffix); yield return .15;
+                }
+                ui.Close(); yield return .2;
+                Capture("dashboard-ranking-power-" + suffix); yield return .15;
+                Click(preview.viewAll); yield return .2;
+                Check(nav.CurrentPage == MainMenuPage.Leaderboard && preview.fullPanel.CurrentKind == LeaderboardKind.Power, "View All did not follow Dashboard preference");
+                nav.ShowPage(MainMenuPage.Dashboard); yield return .2;
+                Click(launcher.GetComponent<Button>()); yield return .2;
+                Check(((Image)ui.dashboardRankings[3].targetGraphic).sprite == ui.rankingSelected, "Reopening Settings lost selection");
+                // A late callback from a cancelled category must not replace the new one.
+                rankingSource.hold = true;
+                Click(ui.dashboardRankings[0]); yield return .15; var late = rankingSource.pending;
+                rankingSource.hold = false; Click(ui.dashboardRankings[2]); yield return .2;
+                late?.Invoke(RankingFixture.Result(LeaderboardKind.BossStage));
+                Check(preview.CurrentKind == LeaderboardKind.FocusMinutes && preview.rows[0].score.text == LeaderboardQuery.Display(RankingFixture.Row, LeaderboardKind.FocusMinutes), "Cancelled category overwrote the selected ranking");
+                checks.Add("PASS " + suffix + ": four exclusive Dashboard ranking choices, local save/reload, heading/score/icon refresh, View All routing, reopen, duplicate submit, cancelled response rejection and shared button feedback.");
+                preview.SetSource(null);
+
+                context = suffix + " Dashboard component switches";
+                var display = nav.pages[0].GetComponent<DashboardVisibilityUI>();
+                var componentSwitches = new[] { ui.showDashboardTasks, ui.showDashboardDailyRewards, ui.showDashboardFocus, ui.showDashboardRanking, ui.showDashboardCharacter };
+                var componentCards = new[] { display.tasks, display.dailyRewards, display.focus, display.ranking, display.character };
+                for (int component = 0; component < componentSwitches.Length; component++)
+                {
+                    var control = componentSwitches[component];var componentVisual = control.GetComponent<SettingsToggleVisual>();
+                    var hit = Bounds((RectTransform)control.transform);
+                    int commits = 0; Action countCommit = () => commits++;service.Changed += countCommit;
+                    Click(control);yield return .04;
+                    Check(!control.isOn && !componentCards[component].activeSelf && commits == 1, "Visibility switch did not hide exactly once: " + component);
+                    Capture("component-switch-moving-" + component + "-" + suffix);yield return .3;
+                    Check(Mathf.Abs(componentVisual.handle.anchoredPosition.x + componentVisual.travel) < .5f, "Visibility switch did not settle");
+                    Check(componentVisual.handle.GetComponent<Image>().color.b>componentVisual.handle.GetComponent<Image>().color.r,"Switch off handle is not blue");
+                    Stable(hit, control);
+                    control.interactable = false;ExecuteEvents.Execute(control.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);yield return .1;
+                    Check(!control.isOn && commits == 1, "Disabled visibility switch changed settings");control.interactable = true;
+                    EventSystem.current.SetSelectedGameObject(control.gameObject);
+                    ExecuteEvents.Execute(control.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);yield return .3;
+                    Check(control.isOn && componentCards[component].activeSelf && commits == 2, "Keyboard submit failed to show component");
+                    Check(componentVisual.handle.GetComponent<Image>().color.b>componentVisual.handle.GetComponent<Image>().color.r,"Switch on handle is not blue");
+                    for (int repeat = 0; repeat < 6; repeat++) Click(control);
+                    yield return .3;Stable(hit,control);Check(control.isOn && componentCards[component].activeSelf,"Repeated input lost component state");
+                    service.Changed -= countCommit;
+                }
+                var focusController = FocusRunner.EnsureInstance().Controller;
+                Check(focusController.Start(), "Could not start isolated Focus for visibility check");
+                Click(ui.showDashboardFocus);yield return .2;
+                Check(focusController.Phase == FocusPhase.Focusing && !display.focus.activeSelf, "Hiding Focus interrupted its session");
+                focusController.Cancel();Click(ui.showDashboardFocus);yield return .2;
+                Click(ui.showDashboardRanking);Click(ui.dashboardRankings[3]);yield return .2;
+                ui.Close();Click(launcher.GetComponent<Button>());yield return .2;
+                Check(!ui.showDashboardRanking.isOn && !display.ranking.activeSelf && service.Settings.DashboardRanking==LeaderboardKind.Power,"Closing/reopening lost hidden ranking/preference");
+                Click(ui.showDashboardRanking);yield return .2;
+                Check(preview.CurrentKind==LeaderboardKind.Power,"Showing ranking did not restore chosen category");
+                Click(ui.dashboardRankings[2]);yield return .2;
+                Layout(ui,size);Capture("dashboard-components-settings-"+suffix);yield return .15;
+                checks.Add("PASS " + suffix + ": five independent Dashboard switches, blue on/off handles, exactly-once saves, pointer/keyboard/disabled/repeated-input motion, reopen, hidden ranking preference and uninterrupted Focus.");
+
                 context = suffix + " controls/motion";
                 var feedback = ui.accountButton.GetComponent<JuicyButton>();
                 Check(feedback && feedback.enabled && ui.accountButton.GetComponents<JuicyButton>().Length == 1, "Account button does not reuse one shared feedback owner.");
@@ -443,6 +523,26 @@ public static class SettingsPlayVerification
                 Click(ui.accountButton); yield return .2;
                 Check(!account.State.configured && !ui.googleSignIn.interactable && !ui.upload.interactable && !string.IsNullOrEmpty(ui.accountStatus.text), "Missing configuration was not shown without enabling sign-in/upload.");
                 Layout(ui, size); Capture("account-unconfigured-" + suffix); yield return .15;
+                // Visual-only identity fixture: configuration remains blank, so no HTTP or credential write can occur.
+                var identityFields = new[] { "uid", "refreshToken", "email", "conflict", "comparison" }.Select(name => typeof(AccountController).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)).ToArray();
+                var previousIdentity = identityFields.Select(field => field.GetValue(account)).ToArray();
+                try
+                {
+                    object[] visualIdentity = { "visual-fixture", "unused-fixture", "Fixture account", true, "Published statistics differ. Choose the record to keep." };
+                    for(int field=0;field<identityFields.Length;field++)identityFields[field].SetValue(account,visualIdentity[field]);
+                    ui.OpenAccount();yield return .2;
+                    Check(ui.signOut.gameObject.activeSelf && ui.retryUpload.gameObject.activeSelf && ui.replaceStatistics.gameObject.activeSelf,"Account visual controls missing");
+                    ui.upload.SetIsOnWithoutNotify(true);yield return .2;Layout(ui,size);Capture("account-blue-on-"+suffix);yield return .15;
+                    var uploadVisual=ui.upload.GetComponent<SettingsToggleVisual>();
+                    Check(uploadVisual.handle.GetComponent<Image>().color.b>uploadVisual.handle.GetComponent<Image>().color.r,"Account on handle is not blue");
+                    ui.upload.SetIsOnWithoutNotify(false);yield return .2;Capture("account-blue-off-"+suffix);yield return .15;
+                    Check(uploadVisual.handle.GetComponent<Image>().color.b>uploadVisual.handle.GetComponent<Image>().color.r,"Account off handle is not blue");
+                }
+                finally
+                {
+                    for(int field=0;field<identityFields.Length;field++)identityFields[field].SetValue(account,previousIdentity[field]);
+                    ui.OpenAccount();
+                }
                 Click(ui.accountBack); yield return .1;
                 for (int i = 0; i < 3; i++) ExecuteEvents.Execute(ui.tagsButton.gameObject, Pointer(ui.tagsButton), ExecuteEvents.pointerClickHandler);
                 yield return .2;
@@ -550,6 +650,49 @@ public static class SettingsPlayVerification
             }
             taskUi.CancelDraft();
             checks.Add("PASS: maximum-length tag names, independent colors, bounded task chips and multiple wrapping editing chips.");
+            nav.ShowPage(MainMenuPage.Dashboard);yield return .3;
+            var layoutDisplay=nav.pages[0].GetComponent<DashboardVisibilityUI>();
+            var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
+            var expander=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
+            bool oldExpanded=expander.isOn;
+            try
+            {
+                foreach(var layoutSize in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)})
+                {
+                    Resolution(layoutSize);yield return .5;
+                    foreach(bool expanded in new[]{false,true})
+                    {
+                        expander.isOn=expanded;yield return .5;
+                        for(int mask=0;mask<32;mask++)
+                        {
+                            context=layoutSize+" Dashboard mask "+mask+" expanded="+expanded;
+                            var preference=service.Settings;
+                            preference.hideDashboardTasks=(mask&1)!=0;preference.hideDashboardDailyRewards=(mask&2)!=0;
+                            preference.hideDashboardFocus=(mask&4)!=0;preference.hideDashboardRanking=(mask&8)!=0;
+                            preference.hideDashboardCharacter=(mask&16)!=0;
+                            Check(service.SaveSettings(preference),"Could not save visibility combination");yield return .07;
+                            Canvas.ForceUpdateCanvases();
+                            Check(layoutDisplay.tasks.activeSelf==((mask&1)==0) && layoutDisplay.dailyRewards.activeSelf==((mask&2)==0) && layoutDisplay.focus.activeSelf==((mask&4)==0) && layoutDisplay.ranking.activeSelf==((mask&8)==0) && layoutDisplay.character.activeSelf==((mask&16)==0),"Visibility combination mismatch");
+                            Check(layoutDisplay.bottomRow.activeSelf==((mask&12)!=12),"Empty bottom row did not collapse");
+                            Check(layoutDisplay.topRow.activeSelf==((mask&19)!=19),"Empty top row did not collapse");
+                            Check(layoutDisplay.emptyState.activeSelf==(mask==31),"All-hidden Dashboard prompt mismatch");
+                            var pageBounds=Bounds((RectTransform)nav.pages[0].transform);
+                            foreach(var card in new[]{layoutDisplay.tasks,layoutDisplay.dailyRewards,layoutDisplay.focus,layoutDisplay.ranking,layoutDisplay.character,layoutDisplay.emptyState})
+                            {
+                                if(!card.activeInHierarchy)continue;var cardBounds=Bounds((RectTransform)card.transform);
+                                Check(cardBounds.width>20 && cardBounds.height>20 && cardBounds.xMin>=pageBounds.xMin-2 && cardBounds.xMax<=pageBounds.xMax+2 && cardBounds.yMin>=pageBounds.yMin-2 && cardBounds.yMax<=pageBounds.yMax+2,"Visible card leaves Dashboard");
+                            }
+                            if(mask==0 || mask==16 || mask==19 || mask==31){Capture("dashboard-layout-"+layoutSize.x+"-"+(expanded?"expanded":"collapsed")+"-mask"+mask);yield return .15;}
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                var preference=service.Settings;preference.hideDashboardTasks=preference.hideDashboardDailyRewards=preference.hideDashboardFocus=preference.hideDashboardRanking=preference.hideDashboardCharacter=false;
+                service.SaveSettings(preference);expander.isOn=oldExpanded;
+            }
+            checks.Add("PASS: all 32 Dashboard visibility combinations at 1920x1080, 1280x720, 1024x768 and 2560x1080 with expanded/collapsed sidebar; visible card containment, empty-row collapse and all-hidden prompt.");
         }
         finally
         {
@@ -557,5 +700,23 @@ public static class SettingsPlayVerification
             if (account) account.configuration = originalConfig;
             if (blankConfig) UnityEngine.Object.Destroy(blankConfig);
         }
+    }
+    sealed class RankingFixture : ILeaderboardSource
+    {
+        public LeaderboardKind last; public int loads; public bool hold;
+        public Action<LeaderboardSnapshot> pending;
+        public static AccountAggregate Row => new AccountAggregate { playerId="ranking-fixture",playerName="Mochi",bossStage=8,totalTasksCompleted=123,totalFocusMinutes=456,power=789,catLevel=10 };
+        public static LeaderboardSnapshot Result(LeaderboardKind kind)
+        {
+            var result=new LeaderboardSnapshot{kind=kind,success=true};
+            for(int i=0;i<3;i++)result.leaders.Add(Row);
+            return result;
+        }
+        public IEnumerator Load(LeaderboardKind kind,Action<LeaderboardSnapshot> done)
+        {
+            last=kind;loads++;yield return null;
+            if(hold)pending=done;else done(Result(kind));
+        }
+        public void Cancel(){}
     }
 }

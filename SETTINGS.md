@@ -6,6 +6,8 @@ Open Settings from the existing gear in the main header. The modal uses the proj
 
 - **Notification** enables Windows reminders for completed Focus and Rest timers. The switch saves immediately.
 - **Sound** and **Music** independently adjust their assigned in-app audio sources from 0 to 100%; zero displays **Muted**. Dragging previews the volume; release, keyboard deselection, a short keyboard idle period or closing the view commits it. Failed saves show an error and restore the saved volumes.
+- **Dashboard leaderboard** selects Boss Stage, Tasks Completed, Focus Minutes or Power. It saves immediately and controls the Dashboard preview and View All destination; older saves default to Focus Minutes.
+- **Show on Dashboard** independently controls Tasks, Daily rewards, Focus, Leaderboard and Character. All start visible. Changes save immediately; failed writes restore the committed switches. Hidden cards leave the layout and empty rows collapse. When no top cards remain, the quick-action row keeps its compact height. With all five hidden, a short message points back to Settings. These settings affect only Dashboard presentation: hiding Focus does not cancel its timer, and hidden features remain available from their sidebar pages. The chosen ranking category is retained while its card is hidden.
 - Close, Escape and the backdrop return from a subview or close Settings. Closing restores focus to the header gear. Tab/Shift+Tab stay within the active view, and keyboard selection scrolls tag actions into view.
 - Settings use the existing local `catquest-data.json` transaction/backup path through `TaskService.SaveSettings`. Older version-5 saves receive additive defaults: notifications on, sound `0.594` (displayed as 59%), music zero. Existing task/progression data is retained.
 
@@ -37,6 +39,8 @@ Notifications contain only generic Focus/Rest text. Their click requests restora
 
 The static views and tag row template are editable in `Assets/Prefabs/Settings/Settings.prefab`. `SettingsLauncher` on the existing Canvas gear instantiates one modal. Task chip tint bindings reuse the matching `BasicFrame_Oval_48_White` artwork while preserving existing chip geometry. Change affected serialized objects/properties directly; verification does not reconstruct or repair the prefab.
 
+Settings and its Account/Tag subviews use the project's blue action buttons, blue text/input accents, and the neutral SimpleCasual `Toggle_Switch_WhiteCustom` and `Slider15_WhiteCustom` artwork tinted blue. Switch handles have distinct active/muted blue colors; Sound/Music handles, fills and tracks use the same palette, including zero volume. Gear icons retain their original artwork/colors. Tag palette colors remain meaningful user data, error messages retain their error color, and Google's supplied sign-in artwork remains the branding exception.
+
 ## Verification entrypoints
 
 Use one flow at a time in the already-open project Editor. Test saves, screenshots and reports stay in ignored `Library/` or `Temp/` locations.
@@ -44,7 +48,7 @@ Use one flow at a time in the already-open project Editor. Test saves, screensho
 | Request / entrypoint | Checks and output |
 | --- | --- |
 | `Temp/verify-settings-data.request` | Runs the existing Focus → Rewards → Tasks chain, then settings persistence/bindings and account checks. Output: `Temp/verify-settings-data.result`; run folder under `Library/SettingsVerification/Data-*`. |
-| `Temp/verify-settings-play.request` | Uses CharacterHome with an isolated save, captures the rendered vendor reference and Settings/Tags/Tag Editor/Account at 1920×1080 and 1280×720, exercises controls/motion/modal focus, audio preview/commit/reload, tag filters/drafts/deletion and empty/error states. Output: `Library/SettingsVerification/<timestamp-guid>/result.txt`, screenshots, and `latest-run.txt`. |
+| `Temp/verify-settings-play.request` | Uses CharacterHome with an isolated save, captures the rendered vendor reference and Settings/Tags/Tag Editor/Account at 1920×1080 and 1280×720, exercises controls/motion/modal focus, audio preview/commit/reload, ranking choice, five component switches, blue Account states, tag filters/drafts/deletion and empty/error states. Also checks all 32 Dashboard visibility combinations at 1920×1080, 1280×720, 1024×768 and 2560×1080 with both sidebar states. Output: `Library/SettingsVerification/<timestamp-guid>/result.txt`, screenshots, and `latest-run.txt`. |
 | **Tools > Cat Quest > Verify Settings Account**, or `Temp/verify-settings-account.request` | Isolated mocked account/aggregate/OAuth callback/conflict/removal checks. Output: `Temp/verify-settings-account.result` and `Library/SettingsAccountVerification/`. No real credentials or network calls. |
 | `Temp/build-settings-windows.request` | Development Windows build with enabled project scenes. Player: `Builds/SettingsVerification/Build-*/`; reports: `Temp/build-settings-windows.result` and `Library/SettingsVerification/Build-*/`. A successful build alone does not establish native reminder behavior. |
 
