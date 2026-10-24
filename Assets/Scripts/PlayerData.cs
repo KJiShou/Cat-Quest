@@ -40,7 +40,7 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
     public bool daily;
     public bool scheduled;
     public string date; // Local yyyy-MM-dd; start date for daily tasks.
-    public int minuteOfDay;
+    public int minuteOfDay; // Legacy save compatibility; no longer used for scheduling.
     public List<string> tagIds = new List<string>();
     public List<QuestSubtask> subtasks = new List<QuestSubtask>();
 }
@@ -81,8 +81,11 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
 
 public enum DailyRewardGoal { ThreeQuests, Focus25Minutes }
 public enum FocusSessionStatus { Running, Completed, EndedEarly, Cancelled, Invalid }
+public enum FocusTimerMode { Pomodoro, Stopwatch, Countdown }
 [Serializable] public class FocusSession
 {
+    public FocusTimerMode mode;
+    public double elapsedSeconds;
     public int focusDurationSeconds = 1500;
     public int restDurationSeconds = 300;
     public string questId, questTitle, occurrenceDay;
@@ -102,9 +105,12 @@ public enum FocusSessionStatus { Running, Completed, EndedEarly, Cancelled, Inva
 
 [Serializable] public sealed class FocusSessionOptions
 {
+    public FocusTimerMode mode;
     public int focusMinutes = 25, restMinutes = 5;
     public string questId, questTitle, occurrenceDay;
-    public bool IsValid => focusMinutes >= 1 && focusMinutes <= 60 && restMinutes >= 1 && restMinutes <= 60;
+    public bool IsValid => Enum.IsDefined(typeof(FocusTimerMode), mode)
+        && (mode == FocusTimerMode.Stopwatch || (focusMinutes >= 1 && focusMinutes <= (mode == FocusTimerMode.Countdown ? 180 : 60)))
+        && (mode != FocusTimerMode.Pomodoro || (restMinutes >= 1 && restMinutes <= 60));
     public FocusSessionOptions Copy() => (FocusSessionOptions)MemberwiseClone();
 }
 

@@ -53,14 +53,14 @@ public sealed class DailyGoalUI : MonoBehaviour
         if (rowBackground)
         {
             rowBackground.sprite = ready || claimed ? completedSprite : inProgressSprite;
-            rowBackground.color = ready || claimed ? new Color32(222, 245, 237, 255) : Color.white;
+            rowBackground.color = ready || claimed ? new Color32(222, 240, 255, 255) : Color.white;
         }
         if (progressFill)
         {
             progressFill.sprite = ready || claimed ? completedFillSprite : inProgressFillSprite;
             progressFill.color = Color.white;
         }
-        progress.color = ready || claimed ? new Color32(29, 214, 151, 255) : new Color32(65, 154, 239, 255);
+        progress.color = new Color32(65, 154, 239, 255);
         if (claimed) feedback.text = "";
         else if (feedback.text == "Reward claimed!") feedback.text = "";
     }

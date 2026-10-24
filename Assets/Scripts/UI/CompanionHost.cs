@@ -108,7 +108,7 @@ public sealed class CompanionHost : MonoBehaviour
         if(focus==null) return;
         try { CompanionProtocol.Write(Path.Combine(DirectoryPath,"companion-session.json"),new CompanionState {
             ownerId=OwnerId,sessionId=focus.SessionId ?? "",heartbeatUtcTicks=DateTime.UtcNow.Ticks,
-            phase=focus.Phase,remainingSeconds=focus.RemainingSeconds,fishCount=focus.SpectatorFishCount,
+            phase=focus.Phase,mode=focus.Options.mode,elapsedSeconds=focus.ElapsedSeconds,remainingSeconds=focus.RemainingSeconds,fishCount=focus.SpectatorFishCount,
             playerName=GameDataManager.Instance.PlayerData.username,questTitle=focus.Options.questTitle,focusMinutes=focus.Options.focusMinutes,restMinutes=focus.Options.restMinutes,message=focus.Message }); }
         catch(IOException e) { Error="Pet Widget connection unavailable: "+e.Message; }
     }

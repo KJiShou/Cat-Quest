@@ -4,7 +4,8 @@ using System.Linq;
 
 public sealed partial class TaskService
 {
-    public const int TaskExperienceCap = 120, TaskFishCap = 60, FocusMinuteCap = 120, FocusTicketCap = 4;
+    public const int TaskExperienceCap = 120, TaskFishCap = 60, FocusMinuteCap = 360, FocusTicketCap = 4;
+    public const int FocusSessionMinuteCap = 180;
     public const int FocusDurationSeconds = 25 * 60, RestDurationSeconds = 5 * 60;
     public static readonly RewardAmounts GoalReward = new RewardAmounts(20, 10);
 
@@ -88,7 +89,9 @@ public sealed partial class TaskService
             if (data.focusSessions.Any(s => s.status == FocusSessionStatus.Running))
                 throw new ArgumentException("A Focus session is already running.");
             data.focusSessions.Add(new FocusSession { id = id, status = FocusSessionStatus.Running,
-                focusDurationSeconds = options.focusMinutes * 60, restDurationSeconds = options.restMinutes * 60,
+                mode = options.mode,
+                focusDurationSeconds = options.mode == FocusTimerMode.Stopwatch ? 0 : options.focusMinutes * 60,
+                restDurationSeconds = options.mode == FocusTimerMode.Pomodoro ? options.restMinutes * 60 : 0,
                 questId = options.questId, questTitle = options.questTitle, occurrenceDay = options.occurrenceDay,
                 startedUtc = clock.UtcNow.ToString("o", CultureInfo.InvariantCulture) });
         });
@@ -98,7 +101,7 @@ public sealed partial class TaskService
     public static int FocusFishForSeconds(double elapsedSeconds, int alreadyRewardedMinutes = 0)
     {
         if (double.IsNaN(elapsedSeconds) || double.IsInfinity(elapsedSeconds) || elapsedSeconds < 0) return 0;
-        int minutes = (int)Math.Floor(Math.Min(elapsedSeconds, FocusMinuteCap * 60d) / 60);
+        int minutes = (int)Math.Floor(Math.Min(elapsedSeconds, FocusSessionMinuteCap * 60d) / 60);
         int eligible = Math.Max(0, Math.Min(minutes, FocusMinuteCap - alreadyRewardedMinutes));
         return eligible / 5 * 2;
     }
@@ -114,9 +117,11 @@ public sealed partial class TaskService
             if (session == null || session.status != FocusSessionStatus.Running)
                 throw new ArgumentException("This Focus session cannot be rewarded.");
             if (double.IsNaN(elapsedSeconds) || double.IsInfinity(elapsedSeconds) || elapsedSeconds < 0 ||
-                (!endedEarly && elapsedSeconds < session.focusDurationSeconds))
+                (session.mode != FocusTimerMode.Stopwatch && !endedEarly && elapsedSeconds < session.focusDurationSeconds))
                 throw new ArgumentException("The Focus duration is invalid.");
-            elapsedSeconds = Math.Min(elapsedSeconds, session.focusDurationSeconds);
+            if (session.mode != FocusTimerMode.Stopwatch) elapsedSeconds = Math.Min(elapsedSeconds, session.focusDurationSeconds);
+            session.elapsedSeconds = elapsedSeconds;
+            elapsedSeconds = Math.Min(elapsedSeconds, FocusSessionMinuteCap * 60d);
             int minutes = (int)Math.Floor(elapsedSeconds / 60);
             var day = GetRewardDay(data, Today);
             int eligible = Math.Max(0, Math.Min(minutes, FocusMinuteCap - day.focusMinutes));
@@ -125,7 +130,7 @@ public sealed partial class TaskService
             var reward = new RewardAmounts(eligible, FocusFishForSeconds(elapsedSeconds, day.focusMinutes), tickets);
             AddRewards(data, reward);
             day.focusMinutes += eligible; day.focusTickets += tickets;
-            session.status = endedEarly ? FocusSessionStatus.EndedEarly : FocusSessionStatus.Completed;
+            session.status = endedEarly && session.mode != FocusTimerMode.Stopwatch ? FocusSessionStatus.EndedEarly : FocusSessionStatus.Completed;
             session.completedUtc = clock.UtcNow.ToString("o", CultureInfo.InvariantCulture);
             session.rewardDay = Today; session.eligibleMinutes = minutes; session.rewardedMinutes = eligible;
             session.eligibleSeconds = elapsedSeconds;

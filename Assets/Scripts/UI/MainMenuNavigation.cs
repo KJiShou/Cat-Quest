@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
 
-public enum MainMenuPage { Dashboard, Tasks, Focus, Boss, CatHome, Leaderboard }
+public enum MainMenuPage { Dashboard, Tasks, Focus, Boss, CatHome, Leaderboard, Chat }
 
 // Left navigation switches page containers while keeping the shared header and sidebar alive.
 public sealed class MainMenuNavigation : MonoBehaviour

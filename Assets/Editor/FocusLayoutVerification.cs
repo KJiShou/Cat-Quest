@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 // Opt-in check, using a disposable save rather than the player's quests or rewards.
 [InitializeOnLoad]
@@ -17,6 +18,18 @@ public static class FocusLayoutVerification
     static double next;
     static RewardScreenshotCapture capture;
     static string questId;
+    static FileStream saveLock;
+    static string FolderNow => SessionState.GetString(Flag + ".folder", Folder);
+    static bool Before => SessionState.GetBool(Flag + ".before", false);
+    static EditorWindow View => EditorWindow.GetWindow(typeof(Editor).Assembly.GetType("UnityEditor.GameView"));
+    static PropertyInfo SizeProperty => View.GetType().GetProperty("selectedSizeIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+    static object SizeGroup()
+    {
+        var type=typeof(Editor).Assembly.GetType("UnityEditor.GameViewSizes");
+        var sizes=typeof(ScriptableSingleton<>).MakeGenericType(type).GetProperty("instance",BindingFlags.Public|BindingFlags.Static).GetValue(null);
+        var method=type.GetMethod("GetGroup");return method.Invoke(sizes,new[]{Enum.ToObject(method.GetParameters()[0].ParameterType,0)});
+    }
+    static int Count(object group,string method)=>(int)group.GetType().GetMethod(method).Invoke(group,null);
     static FocusLayoutVerification()
     {
         EditorApplication.update += Poll;
@@ -24,9 +37,16 @@ public static class FocusLayoutVerification
             if (!SessionState.GetBool(Flag, false)) return;
             if (state == PlayModeStateChange.EnteredPlayMode) { step = 0; next = EditorApplication.timeSinceStartup + 3; }
             if (state == PlayModeStateChange.EnteredEditMode) {
+                saveLock?.Dispose(); saveLock=null;
                 SessionState.SetBool(Flag, false);
-                Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", null);
-                File.WriteAllText(Folder + "/done.txt", "Returned to Edit Mode");
+                Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", SessionState.GetBool(Flag+".hadStore",false)?SessionState.GetString(Flag+".store",""):null);
+                var scene=SessionState.GetString(Flag+".scene","");
+                EditorSceneManager.playModeStartScene=string.IsNullOrEmpty(scene)?null:AssetDatabase.LoadAssetAtPath<SceneAsset>(scene);
+                SizeProperty.SetValue(View,SessionState.GetInt(Flag+".size",0));
+                var group=SizeGroup();int builtin=Count(group,"GetBuiltinCount");
+                for(int i=Count(group,"GetCustomCount")-1;i>=SessionState.GetInt(Flag+".count",0);i--)group.GetType().GetMethod("RemoveCustomSize").Invoke(group,new object[]{builtin+i});
+                EditorApplication.isPaused=SessionState.GetBool(Flag+".paused",false);
+                File.WriteAllText(FolderNow + "/done.txt", "Returned to Edit Mode; restored save environment, start scene, pause and Game View.");
             }
         };
     }
@@ -35,22 +55,34 @@ public static class FocusLayoutVerification
     static void Capture(string name)
     {
         if (!capture) capture = new GameObject("Focus Layout Capture").AddComponent<RewardScreenshotCapture>();
-        capture.Begin(Path.GetFullPath(Folder + "/" + name + ".png"));
+        capture.Begin(Path.GetFullPath(FolderNow + "/" + name + ".png"));
     }
     static void Poll()
     {
         if (EditorApplication.isCompiling || EditorApplication.isUpdating) return;
         if (EditorApplication.isPlaying && SessionState.GetBool(Flag, false)) {
             EditorApplication.QueuePlayerLoopUpdate();
+            if(DateTime.UtcNow.Ticks > long.Parse(SessionState.GetString(Flag+".deadline",long.MaxValue.ToString()))) {
+                File.WriteAllText(FolderNow+"/result.txt","FAIL: Focus Play Mode verification exceeded 180 seconds.");saveLock?.Dispose();saveLock=null;EditorApplication.isPlaying=false;return;
+            }
             if (EditorApplication.timeSinceStartup < next || (capture && capture.Pending)) return;
-            try { Tick(); } catch (Exception e) { File.WriteAllText(Folder + "/result.txt", e.ToString()); EditorApplication.isPlaying = false; }
+            try { Tick(); } catch (Exception e) { File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\n"+e); EditorApplication.isPlaying = false; }
             return;
         }
         if (EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists("Temp/verify-focus-layout.request")) return;
-        File.Delete("Temp/verify-focus-layout.request"); Directory.CreateDirectory(Folder);
-        Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", Path.GetFullPath(Folder + "/session-" + Guid.NewGuid().ToString("N") + ".json"));
-        EditorSceneManager.OpenScene("Assets/Scenes/CharacterHome.unity");
-        SessionState.SetBool(Flag, true); Resolution(1920, 1080); EditorApplication.isPlaying = true;
+        SessionState.SetBool(Flag+".before",File.ReadAllText("Temp/verify-focus-layout.request").Trim()=="before");
+        File.Delete("Temp/verify-focus-layout.request");
+        string folder=Folder+"/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+(Before?"-before":"-after");Directory.CreateDirectory(folder);
+        SessionState.SetString(Flag+".folder",folder);
+        string previous=Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");
+        SessionState.SetBool(Flag+".hadStore",previous!=null);SessionState.SetString(Flag+".store",previous??"");
+        SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(EditorSceneManager.playModeStartScene));
+        SessionState.SetInt(Flag+".size",(int)SizeProperty.GetValue(View));SessionState.SetInt(Flag+".count",Count(SizeGroup(),"GetCustomCount"));
+        SessionState.SetBool(Flag+".paused",EditorApplication.isPaused);
+        SessionState.SetString(Flag+".deadline",DateTime.UtcNow.AddSeconds(180).Ticks.ToString());
+        Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", Path.GetFullPath(folder+"/save.json"));
+        EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");
+        SessionState.SetBool(Flag, true); Resolution(1920, 1080); EditorApplication.isPaused=false; EditorApplication.isPlaying = true;
     }
     static void Tick()
     {
@@ -59,6 +91,15 @@ public static class FocusLayoutVerification
         var service = GameDataManager.Instance.Tasks;
         var focus = FocusRunner.EnsureInstance().Controller;
         Check(GameDataManager.Instance.SavePath.Contains("FocusLayoutVerification"), "Verification must use isolated save");
+        if (Before)
+        {
+            if(step==0)nav.ShowPage(MainMenuPage.Focus);
+            if(step==1)Capture("before-1920");
+            if(step==2)Resolution(1280,720);
+            if(step==3)Capture("before-1280");
+            if(step==4){File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+"\nCaptured current authored Focus before UI patch.");EditorApplication.isPlaying=false;return;}
+            step++;next=EditorApplication.timeSinceStartup+1;return;
+        }
         if (step == 0) { Check(nav.ShowPage(MainMenuPage.Focus), "Cannot open Focus"); }
         if (step == 1) {
             Check((!panel.status || !panel.status.gameObject.activeSelf) && (!panel.message || !panel.message.gameObject.activeSelf), "Extra labels on sky");
@@ -102,10 +143,62 @@ public static class FocusLayoutVerification
             Check(panel.questSearch.interactable && panel.focusDuration.interactable, "Settings not unlocked");
         }
         if (step == 7) Capture("focus-ready-1280");
-        if (step == 8) {
-            File.WriteAllText(Folder + "/result.txt", "PASS: full-frame scene, timer only, custom Focus/Rest lengths, reward preview and settlement, case-insensitive search, no-match state, quest selection, locked running settings and restored finished settings. Screenshots at 1920x1080 and 1280x720.");
+        if(step==8){panel.stopwatchMode.isOn=true;Check(focus.CountsUp && !panel.focusDurationCard.activeSelf && !panel.restDurationCard.activeSelf && panel.rewards.text=="0","Stopwatch settings incorrect");Capture("stopwatch-ready-1280");}
+        if(step==9){panel.start.onClick.Invoke();for(int i=0;i<14400;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Focusing && panel.stopwatchMode.interactable==false,"Stopwatch limit/lock wrong");}
+        if(step==10)Capture("stopwatch-four-hours-1280");
+        if(step==11){panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Finished && focus.LastResult.experience==180,"Stopwatch saved incorrectly");Capture("stopwatch-saved-1280");}
+        if(step==12){panel.countdownMode.isOn=true;panel.focusDuration.value=180;Check(focus.Options.focusMinutes==180 && !panel.restDurationCard.activeSelf,"Countdown settings incorrect");Capture("countdown-ready-1280");}
+        if(step==13){Resolution(1920,1080);}
+        if(step==14)Capture("countdown-ready-1920");
+        if(step==15){panel.start.onClick.Invoke();for(int i=0;i<10800;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==360,"Mixed mode cap incorrect");Capture("countdown-saved-1920");}
+        if(step==16){panel.stopwatchMode.isOn=true;Capture("stopwatch-ready-1920");}
+        if(step==17){panel.start.onClick.Invoke();for(int i=0;i<3600;i++)focus.Advance(1);}
+        if(step==18)Capture("stopwatch-capped-1920");
+        if(step==19){panel.cancel.onClick.Invoke();Check(focus.Phase==FocusPhase.Interrupted && service.TodayRewards.focusMinutes==360,"Cancel changed allowance");}
+        if(step==20){
+            panel.start.onClick.Invoke();for(int i=0;i<300;i++)focus.Advance(1);
+            saveLock=File.Open(GameDataManager.Instance.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
+            panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Saving,"Locked save did not enter retry state");
+        }
+        if(step==21){Check(panel.allowance.gameObject.activeInHierarchy && panel.allowance.text.Contains("Retry") && panel.retry.gameObject.activeInHierarchy,"Save error/retry not visible");Capture("save-failure-1920");}
+        if(step==22){saveLock.Dispose();saveLock=null;panel.retry.onClick.Invoke();Check(focus.Phase==FocusPhase.Finished,"Retry did not finish");}
+        if(step==23)Capture("save-retried-1920");
+        if(step==24){
+            var data=new BaseEventData(EventSystem.current);
+            EventSystem.current.SetSelectedGameObject(panel.countdownMode.gameObject);
+            panel.countdownMode.OnSubmit(data);
+            Check(focus.Options.mode==FocusTimerMode.Countdown,"Keyboard mode submit failed");
+            var results=new System.Collections.Generic.List<RaycastResult>();
+            var pointer=new PointerEventData(EventSystem.current){position=RectTransformUtility.WorldToScreenPoint(null,((RectTransform)panel.stopwatchMode.transform).TransformPoint(new Vector3(70,0,0))),button=PointerEventData.InputButton.Left};
+            EventSystem.current.RaycastAll(pointer,results);
+            Check(results.Count>0 && results[0].gameObject.transform.IsChildOf(panel.stopwatchMode.transform),"Mode label blocked from raycasts");
+            panel.stopwatchMode.OnPointerClick(pointer);Check(focus.CountsUp,"Mode row click failed");
+            nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);
+            panel.pomodoroMode.OnSubmit(data);Check(focus.Options.mode==FocusTimerMode.Pomodoro,"Re-enabled mode listener missing");
+        }
+        if(step>=25 && step<=32){
+            var juicy=panel.start.GetComponent<JuicyButton>();Check(juicy,"Start action lost shared feedback");
+            var pointer=new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left};
+            if(step==25)juicy.OnPointerEnter(pointer);
+            if(step==27)juicy.OnPointerDown(pointer);
+            if(step==29)juicy.OnPointerUp(pointer);
+            if(step==30){juicy.OnPointerExit(pointer);EventSystem.current.SetSelectedGameObject(null);}
+            Capture("motion-"+(step-25).ToString("D2"));
+            if(step==32)Check(Vector2.Distance(juicy.DrawScale,Vector2.one)<.015f && Mathf.Abs(juicy.DrawOffset)<.1f,"Feedback did not settle");
+        }
+        if(step==33){
+            // Render the actual vendor reference alongside a radio sample in this disposable scene.
+            var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_DemoScene_Panels/Light/Material_Level_Up.prefab");
+            var reference=UnityEngine.Object.Instantiate(source,panel.transform);reference.name="ReferenceOnly";
+            var rect=(RectTransform)reference.transform;rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.anchoredPosition=Vector2.zero;rect.localScale=Vector3.one*.7f;
+            var radio=UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_UI_Etc/Toggle_Radio_Light.prefab"),panel.transform);
+            var rr=(RectTransform)radio.transform;rr.anchorMin=rr.anchorMax=new Vector2(.85f,.5f);rr.anchoredPosition=Vector2.zero;rr.localScale=Vector3.one*.6f;
+        }
+        if(step==34)Capture("simplecasual-reference-1920");
+        if (step == 35) {
+            File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\nPASS: full-frame scene, custom Focus/Rest, reward preview/settlement, quest search/selection, settings locks, three modes, four-hour stopwatch, mixed daily cap, cancel, save error/retry, mode keyboard/pointer handlers, label raycast and disable/re-enable, shared button feedback settling; rendered captures at 1920x1080 and 1280x720. Visual/motion acceptance requires inspection.");
             EditorApplication.isPlaying = false; return;
         }
-        step++; next = EditorApplication.timeSinceStartup + 1;
+        step++; next = EditorApplication.timeSinceStartup + (step>=25 && step<=32 ? .15 : 1);
     }
 }

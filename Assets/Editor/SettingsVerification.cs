@@ -102,7 +102,7 @@ public static class SettingsVerification
             visibility.hideDashboardTasks=(mask&1)!=0;visibility.hideDashboardDailyRewards=(mask&2)!=0;
             visibility.hideDashboardFocus=(mask&4)!=0;visibility.hideDashboardRanking=(mask&8)!=0;
             visibility.hideDashboardCharacter=(mask&16)!=0;
-            Check(persisted.SaveSettings(visibility),"Dashboard visibility save failed");
+            Check(persisted.SaveSettings(visibility),"Dashboard visibility save failed: "+persisted.LastError);
             var saved=new PlayerDataStore(path).Data.settings;
             Check(saved.hideDashboardTasks==visibility.hideDashboardTasks && saved.hideDashboardDailyRewards==visibility.hideDashboardDailyRewards && saved.hideDashboardFocus==visibility.hideDashboardFocus && saved.hideDashboardRanking==visibility.hideDashboardRanking && saved.hideDashboardCharacter==visibility.hideDashboardCharacter && saved.DashboardRanking==LeaderboardKind.Power && saved.musicVolume==.7f,"Dashboard visibility combinations did not survive reload independently: "+mask);
         }

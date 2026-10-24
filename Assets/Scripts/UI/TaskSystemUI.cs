@@ -280,9 +280,9 @@ public class TaskSystemUI : MonoBehaviour
         if(view.IsHistory && DateTime.TryParse(view.history.completedUtc,out var completed)) return "Completed " + completed.ToLocalTime().ToString("d MMM yyyy HH:mm",System.Globalization.CultureInfo.InvariantCulture);
         if(!view.task.scheduled) return "No schedule";
         string day=view.task.daily && Service.Eligible(view.task) ? TaskService.DateKey(Service.LocalNow) : view.task.date;
-        TaskService.TryDate(day,out var date); var time=TimeSpan.FromMinutes(view.task.minuteOfDay);
+        TaskService.TryDate(day,out var date);
         string prefix=view.Completed ? "Done today | " : view.task.daily && !Service.Eligible(view.task) ? "Starts " : "";
-        return prefix+date.Add(time).ToString("d MMM yyyy h:mm tt",System.Globalization.CultureInfo.InvariantCulture);
+        return prefix+date.ToString("d MMM yyyy",System.Globalization.CultureInfo.InvariantCulture);
     }
     public void SelectTask(string key) { if(!CommitQuickAdd()) return; SelectedKey=key; editing=false; editor.gameObject.SetActive(false); detailsRoot.gameObject.SetActive(true); Refresh(); }
     private void RenderDetails(TaskView view)
@@ -293,6 +293,7 @@ public class TaskSystemUI : MonoBehaviour
             id=>Confirm("Delete task?", "Delete this task? Completed history and rewards will be kept.",
                 ()=> { if(!Service.Delete(id)) Notify(Service.LastError,true); else Notify("Task deleted."); }),
             message=>Notify(message,true));
+
     }
     private static void SpaceSchedule(TMP_Text date)
     {
@@ -327,7 +328,7 @@ public class TaskSystemUI : MonoBehaviour
         var now=Service.LocalNow;
         quickDraft=new QuestTask { title="",difficulty=TaskDifficulty.Normal,
             daily=CurrentTab==TaskTab.Daily,scheduled=CurrentTab==TaskTab.Today || CurrentTab==TaskTab.Daily,
-            date=TaskService.DateKey(now),minuteOfDay=now.Hour*60+now.Minute,tagIds=tagFilters.ToList() };
+            date=TaskService.DateKey(now),tagIds=tagFilters.ToList() };
         var row=Instantiate(inlineTaskTemplate,listContent); row.name="QuickAddTask"; row.SetActive(true);
         TaskUIBuilder.Height(row.GetComponent<RectTransform>(),80); TaskUIBuilder.Flex(row.transform);
         quickInput=row.GetComponentInChildren<TMP_InputField>(true);

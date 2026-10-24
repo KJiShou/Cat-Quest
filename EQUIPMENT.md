@@ -14,6 +14,10 @@ Source: Cat Quest.pdf sections 4.4.8, 4.5.4, Tables 4.6-4.8, 4.5.5 and 4.6.4 (PD
 - Equipment icons use existing GUI Pro assets. Items change combat stats; no new cat skins or crafting/enhancement tree are introduced.
 
 Equipment bindings are already serialized in Assets/Prefabs/Canvas.prefab. The one-off page setup tool has been retired; update the affected component or prefab section without rebuilding the page.
+
+Cat Home static UI is now authored under Canvas/Container/Content/CatHome in that prefab and is present in CharacterHome.unity before Play Mode. EquipmentSurface contains CharacterCard (title, preview, equipped slots and nested EquipmentStats) and the nested EquipmentInventory instance named InventoryCard. ItemDetail, ItemModal and ConfirmEquipment are authored children of CatHome; Boss has its own authored equipment dialogs. EquipmentPageUI binds controls and fills inventory/claim data without constructing these static surfaces. Select/enable CatHome in edit mode (hide the other page containers while previewing) to edit it; keep the saved initial-page configuration unchanged. The scene binds LiveCat to the existing preview camera and character. Settings is also a pre-placed, initially inactive nested prefab in Canvas; SettingsLauncher opens its serialized instance.
+
+This migration preserves existing visual styling and runtime inventory item templates. Task filter/confirmation dialogs and the Focus application-exit confirmation still have runtime construction paths; they have not been migrated by this change.
 Editor verification requests: Temp/verify-equipment.request; Temp/verify-equipment-play.request.
 Rules results: Temp/verify-equipment.result. UI results/screenshots: Library/EquipmentVerification/.
 Checks use isolated saves and never alter the user's save. UI coverage includes 1920/1280, confirmations/cancel, duplicate/stale requests, failed writes, ownership/slot validation, nine items, set bonuses, level/fund restrictions, reload, Stage/Dashboard entry and ASPD animation scaling.

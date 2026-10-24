@@ -91,7 +91,7 @@ public sealed partial class TaskService
     {
         if (view.IsHistory || view.Completed || !view.task.scheduled || !Eligible(view.task)) return false;
         string day = view.task.daily ? Today : view.task.date;
-        return TryDate(day, out var date) && date.AddMinutes(view.task.minuteOfDay) < clock.LocalNow;
+        return TryDate(day, out var date) && date.Date < clock.LocalNow.Date;
     }
 
     private bool CanUndo(PlayerData data, TaskCompletion completion)
@@ -130,6 +130,8 @@ public sealed partial class TaskService
         return occurrence;
     }
     public bool Upsert(QuestTask draft, IEnumerable<string> completedSubtasks, out string savedId)
+        => UpsertChecked(draft, completedSubtasks, null, out savedId);
+    private bool UpsertChecked(QuestTask draft, IEnumerable<string> completedSubtasks, Action<PlayerData> guard, out string savedId)
     {
         var task = PlayerDataStore.Copy(draft);
         task.title = (task.title ?? "").Trim();
@@ -145,12 +147,13 @@ public sealed partial class TaskService
         string id = task.id; savedId = null;
         bool result = Commit(data =>
         {
+            guard?.Invoke(data);
             if (task.title.Length == 0 || task.title.Length > 100) throw new ArgumentException("Enter a task title (1–100 characters).");
             if (task.description.Length > 500) throw new ArgumentException("Description must be 500 characters or fewer.");
             if (task.subtasks.Any(s => s.title.Length > 150)) throw new ArgumentException("Subtask titles must be 150 characters or fewer.");
             if (!Enum.IsDefined(typeof(TaskDifficulty), task.difficulty)) throw new ArgumentException("Choose a valid difficulty.");
             if (task.daily) task.scheduled = true;
-            if (task.scheduled && (!TryDate(task.date, out _) || task.minuteOfDay < 0 || task.minuteOfDay > 1439)) throw new ArgumentException("Choose a valid schedule.");
+            if (task.scheduled && !TryDate(task.date, out _)) throw new ArgumentException("Choose a valid schedule date.");
             task.tagIds = task.tagIds.Distinct().Where(tagId => data.tags.Any(t => t.id == tagId)).ToList();
             var old = data.tasks.FirstOrDefault(t => t.id == id);
             if (old != null)
@@ -296,7 +299,7 @@ public sealed partial class TaskService
         rows = rows.Where(v => (!difficulty.HasValue || v.task.difficulty == difficulty.Value)
             && selectedTags.All(id => v.task.tagIds.Contains(id))
             && (search.Length == 0 || ((v.task.title ?? "") + " " + v.task.description + " " + string.Join(" ", v.tagNames)).IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
-        if (tab != TaskTab.History) rows = rows.OrderBy(v => v.Completed).ThenBy(v => v.task.scheduled ? v.task.date : "9999").ThenBy(v => v.task.minuteOfDay).ThenBy(v => v.task.title).ToList();
+        if (tab != TaskTab.History) rows = rows.OrderBy(v => v.Completed).ThenBy(v => v.task.scheduled ? v.task.date : "9999").ThenBy(v => v.task.title).ToList();
         return rows;
     }
 }

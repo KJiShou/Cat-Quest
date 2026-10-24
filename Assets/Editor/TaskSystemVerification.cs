@@ -110,18 +110,18 @@ public static class TaskSystemVerification
         Check(service.Complete(dailyId,true) && service.Snapshot.fishCoins==30,"New Daily occurrence did not earn its own reward.");
 
         clock.now=new DateTime(2026,10,8,9,0,0);
-        var scheduled=Task("Timed",false,"2026-10-08");
+        var scheduled=Task("Date only",false,"2026-10-08");
         Check(service.Upsert(scheduled,null,out var scheduledId),service.LastError);
         var view=service.Query(TaskTab.Todo).Single(v=>v.task.id==scheduledId);
-        Check(!service.IsOverdue(view),"Task overdue at exact scheduled time.");
-        clock.now=clock.now.AddSeconds(1); Check(service.IsOverdue(view),"Today's past time is not overdue.");
+        Check(!service.IsOverdue(view),"Task overdue on its scheduled date.");
+        clock.now=new DateTime(2026,10,8,23,59,59); Check(!service.IsOverdue(view),"Task became overdue before its scheduled date ended.");
         clock.now=new DateTime(2026,10,9); Check(service.IsOverdue(view),"Previous-day task is not overdue.");
         view.task.scheduled=false; Check(!service.IsOverdue(view),"Unscheduled task is overdue.");
         view.task.scheduled=true; view.occurrence.completed=true; Check(!service.IsOverdue(view),"Completed task is overdue.");
         view.occurrence.completed=false; view.history=receipt; Check(!service.IsOverdue(view),"History is overdue.");
         view.history=null; view.task.daily=true; view.task.date="2026-10-10"; Check(!service.IsOverdue(view),"Future Daily is overdue.");
         view.task.date="2026-10-01"; Check(!service.IsOverdue(view),"Daily used its start date as the deadline.");
-        clock.now=new DateTime(2026,10,9,9,0,1); Check(service.IsOverdue(view),"Daily did not use today's scheduled time.");
+        clock.now=new DateTime(2026,10,9,23,59,59); Check(!service.IsOverdue(view),"Daily became overdue during its current occurrence day.");
         var legacy=JsonUtility.FromJson<TaskCompletion>("{\"id\":\"old\",\"taskId\":\"old-task\",\"day\":\"once\"}");
         Check(!legacy.revoked,"Old history defaults to revoked.");
         var roundTrip=PlayerDataStore.Copy(service.Snapshot);
@@ -129,6 +129,44 @@ public static class TaskSystemVerification
         Check(service.Complete(scheduledId,true),service.LastError);
         var scheduledReceipt=service.Query(TaskTab.History).Single(v=>v.task.id==scheduledId).Key;
         Check(service.UndoCompletion(scheduledReceipt) && PlayerDataStore.Copy(service.Snapshot).history.Single(h=>h.id==scheduledReceipt).revoked,"Revoked receipt did not survive serialization.");
+    }
+
+    private static void VerifyDateOnlySchedules(string folder)
+    {
+        var clock=new Clock { now=new DateTime(2026,10,8) };
+        var memory=new MemoryStore(); var service=new TaskService(memory,clock);
+        var alpha=Task("Alpha",false,"2026-10-08"); alpha.minuteOfDay=1439;
+        var zulu=Task("Zulu",false,"2026-10-08"); zulu.minuteOfDay=0;
+        Check(service.Upsert(zulu,null,out var zuluId),service.LastError);
+        Check(service.Upsert(alpha,null,out var alphaId),service.LastError);
+        Check(service.Query(TaskTab.Today).Select(v=>v.task.id).SequenceEqual(new[]{alphaId,zuluId}),"Legacy times still affect same-date ordering.");
+        foreach(var minute in new[]{0,1,13*60+17,1439})
+        {
+            clock.now=new DateTime(2026,10,8).AddMinutes(minute);
+            Check(service.Query(TaskTab.Today).All(v=>!service.IsOverdue(v)),"Legacy time marks a same-date task overdue.");
+        }
+        clock.now=new DateTime(2026,10,9); service.RefreshDate();
+        Check(service.Query(TaskTab.Today).Count==2 && service.Query(TaskTab.Today).All(service.IsOverdue),"Overdue Todo tasks disappeared at midnight.");
+        var future=Task("Future",false,"2026-10-10");
+        Check(service.Upsert(future,null,out var futureId) && !service.Query(TaskTab.Today).Any(v=>v.task.id==futureId),"Future task routing failed.");
+        var invalid=Task("Invalid",false,"2026-02-30");
+        Check(!service.Upsert(invalid,null,out _),"Invalid schedule date accepted.");
+        var edit=service.Snapshot.tasks.Single(t=>t.id==alphaId);edit.date="2026-10-11";
+        memory.fail=true;Check(!service.Upsert(edit,null,out _) && service.Snapshot.tasks.Single(t=>t.id==alphaId).date=="2026-10-08","Failed date edit changed saved schedule.");
+        memory.fail=false;Check(service.Upsert(edit,null,out _) && service.Upsert(edit,null,out _) && service.Snapshot.tasks.Count==3,"Date edit retry duplicated task.");
+
+        string path=Path.Combine(folder,"date-only-legacy.json");
+        string legacy="{\"version\":5,\"tagsInitialized\":true,\"tasks\":[{\"id\":\"legacy-time\",\"title\":\"Legacy\",\"scheduled\":true,\"date\":\"2026-10-09\",\"minuteOfDay\":797}]}";
+        File.WriteAllText(path,legacy);
+        var disk=new PlayerDataStore(path);var persisted=new TaskService(disk,clock);
+        Check(File.ReadAllText(path)==legacy,"Loading date-only schedules rewrote legacy save.");
+        var old=persisted.Query(TaskTab.Today).Single();
+        Check(!persisted.IsOverdue(old) && old.task.minuteOfDay==797,"Legacy time altered date-only deadline or was erased.");
+        old.task.date="2026-10-10";Check(persisted.Upsert(old.task,null,out _),persisted.LastError);
+        var reload=new TaskService(new PlayerDataStore(path),clock);
+        var saved=reload.Snapshot.tasks.Single();
+        Check(saved.id=="legacy-time" && saved.date=="2026-10-10" && saved.minuteOfDay==797 && reload.Query(TaskTab.Today).Count==0,"Date edit or legacy compatibility failed after reload.");
+        Check(File.ReadAllText(path+".bak")==legacy,"Date-only edit did not preserve previous save backup.");
     }
 
     [MenuItem("Tools/Cat Quest/Verify Task System")]
@@ -142,7 +180,9 @@ public static class TaskSystemVerification
             VerifyTagIdentityAndColors(folder);
             report.Add("PASS: stable tag IDs/name/color edits, live filters, immutable history colors, validation, failed-write rollback/retry, deletion/stale edits, additive legacy load/backup and reload.");
             VerifyReopeningAndOverdue();
-            report.Add("PASS: reopen ordinary/current Daily, history restrictions, duplicate clicks, retained rewards/progress, restored receipts, failed-write rollback, precise overdue deadlines, legacy history compatibility.");
+            report.Add("PASS: reopen ordinary/current Daily, history restrictions, duplicate clicks, retained rewards/progress, restored receipts, failed-write rollback, date-only overdue deadlines, legacy history compatibility.");
+            VerifyDateOnlySchedules(folder);
+            report.Add("PASS: date-only ordering, same-date/midnight deadlines, retained overdue Todo, future/invalid dates, date-edit failure/retry/duplicates, legacy times preserved without load migration, disk reload and backup.");
             var clock=new Clock(); var memory=new MemoryStore(); var service=new TaskService(memory,clock);
             Check(service.Snapshot.tags.Count==12 && service.Snapshot.tasks.Count==0,"Default catalog or empty task list failed.");
             Check(service.Snapshot.fishCoins==0 && service.Snapshot.experience==0 && service.Snapshot.tickets==0,"Mock balances were imported.");

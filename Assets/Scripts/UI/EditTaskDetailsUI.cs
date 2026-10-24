@@ -25,6 +25,7 @@ public class EditTaskDetailsUI : MonoBehaviour
     public ScrollRect subtaskScroll;
     public ScrollRect formScroll;
     public LayoutElement formContentMinimum;
+    // Retained binding to the inactive authored control; schedules now use dates only.
     public TaskTimePicker timePicker;
     public TaskDatePicker datePicker;
     public Toggle dailyToggle;
@@ -36,7 +37,7 @@ public class EditTaskDetailsUI : MonoBehaviour
     private readonly HashSet<string> selectedTagIds = new HashSet<string>();
     private List<QuestTag> tagCatalog = new List<QuestTag>();
 
-    public System.TimeSpan SelectedTime => timePicker.SelectedTime;
+    private int legacyMinuteOfDay;
     private Coroutine pendingSubtaskScroll;
     private LayoutElement tagSelectionSize;
 
@@ -81,7 +82,6 @@ public class EditTaskDetailsUI : MonoBehaviour
         if (dailyToggle.isOn) scheduleToggle.SetIsOnWithoutNotify(true);
         scheduleToggle.interactable = !dailyToggle.isOn;
         datePicker.dateButton.interactable = scheduleToggle.isOn;
-        timePicker.timeButton.interactable = scheduleToggle.isOn;
         datePicker.dateLabel.text = scheduleToggle.isOn ? datePicker.SelectedDate.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture) : "No schedule";
     }
 
@@ -94,7 +94,8 @@ public class EditTaskDetailsUI : MonoBehaviour
         difficulty.SetValueWithoutNotify((int)task.difficulty); UpdateDifficulty((int)task.difficulty);
         dailyToggle.SetIsOnWithoutNotify(task.daily); scheduleToggle.SetIsOnWithoutNotify(task.scheduled || task.daily);
         datePicker.LoadValue(TaskService.TryDate(task.date, out var date) ? date : System.DateTime.Today);
-        timePicker.LoadValue(System.TimeSpan.FromMinutes(task.minuteOfDay)); UpdateSchedule();
+        legacyMinuteOfDay = task.minuteOfDay;
+        UpdateSchedule();
         LoadTagCatalog(tags);
         ClearChildren(subtaskContent); rowIds.Clear();
         var done = new HashSet<string>(completed ?? System.Array.Empty<string>());
@@ -107,7 +108,7 @@ public class EditTaskDetailsUI : MonoBehaviour
         completed = new List<string>();
         var task = new QuestTask { id = editingId, title = taskTitle.text, description = description.text,
             difficulty = (TaskDifficulty)difficulty.value, daily = dailyToggle.isOn, scheduled = scheduleToggle.isOn,
-            date = TaskService.DateKey(datePicker.SelectedDate), minuteOfDay = (int)timePicker.SelectedTime.TotalMinutes };
+            date = TaskService.DateKey(datePicker.SelectedDate), minuteOfDay = legacyMinuteOfDay };
         foreach (Transform row in subtaskContent)
         {
             if (!row.gameObject.activeSelf) continue;

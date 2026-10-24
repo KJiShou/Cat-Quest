@@ -10,6 +10,8 @@ using UnityEngine.UI;
 public sealed class SettingsPanelUI : MonoBehaviour
 {
     public GameObject settingsPage, tagsPage, tagEditorPage, accountPage, confirmPage;
+    public GameObject aiPage;
+    public Button aiButton, aiBack;
     public Toggle notifications, upload;
     public Slider sound, music;
     public SettingsSliderCommit soundCommit, musicCommit;
@@ -52,6 +54,8 @@ public sealed class SettingsPanelUI : MonoBehaviour
         audioPlayer = SettingsAudio.EnsureInstance();
         close.onClick.AddListener(Close);
         accountButton.onClick.AddListener(OpenAccount);
+        if (aiButton) aiButton.onClick.AddListener(OpenAI);
+        if (aiBack) aiBack.onClick.AddListener(BackToSettings);
         tagsButton.onClick.AddListener(OpenTags);
         tagsBack.onClick.AddListener(BackToSettings);
         accountBack.onClick.AddListener(BackToSettings);
@@ -157,7 +161,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         tagList.anchoredPosition = position;
     }
     GameObject ActivePage() => CurrentView == "Tags" ? tagsPage : CurrentView == "TagEditor" ? tagEditorPage
-        : CurrentView == "Account" ? accountPage : CurrentView == "Confirm" ? confirmPage : settingsPage;
+        : CurrentView == "Account" ? accountPage : CurrentView == "AI" ? aiPage : CurrentView == "Confirm" ? confirmPage : settingsPage;
     Selectable[] Controls(GameObject page) => page.GetComponentsInChildren<Selectable>()
         .Where(s => s.IsInteractable() && !backdropButtons.Contains(s as Button)).ToArray();
     void BindNavigation(GameObject page)
@@ -177,6 +181,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     {
         soundCommit.Flush(); musicCommit.Flush();
         foreach (var item in new[] { settingsPage, tagsPage, tagEditorPage, accountPage, confirmPage }) item.SetActive(item == page);
+        if (aiPage) aiPage.SetActive(aiPage == page);
         CurrentView = view;
         BindNavigation(page);
         if (EventSystem.current) EventSystem.current.SetSelectedGameObject(focus);
@@ -190,7 +195,8 @@ public sealed class SettingsPanelUI : MonoBehaviour
     void BackToSettings()
     {
         if (CurrentView == "Account") account.CancelSignIn();
-        RefreshSettings(); Show(settingsPage, "Settings", CurrentView == "Account" ? accountButton.gameObject : tagsButton.gameObject);
+        RefreshSettings(); Show(settingsPage, "Settings", CurrentView == "Account" ? accountButton.gameObject :
+            CurrentView == "AI" && aiButton ? aiButton.gameObject : tagsButton.gameObject);
     }
     AppSettings ReadSettings()
     {
@@ -337,6 +343,19 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public void OpenAccount()
     {
         nameDirty = false; RefreshAccount(); Show(accountPage, "Account", playerName.gameObject);
+    }
+    public void OpenAI()
+    {
+        if (!aiPage) return;
+        Show(aiPage, "AI", aiBack.gameObject);
+    }
+    public void RefreshAiNavigation()
+    {
+        if (CurrentView != "AI" || !aiPage || !aiPage.activeInHierarchy) return;
+        BindNavigation(aiPage);
+        var selected = EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
+        if (!selected || !selected.activeInHierarchy || (selected.GetComponent<Selectable>() is Selectable control && !control.IsInteractable()))
+            if (EventSystem.current) EventSystem.current.SetSelectedGameObject(aiBack.gameObject);
     }
     void RefreshAccount()
     {

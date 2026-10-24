@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 // Editable SimpleCasual inventory surface; EquipmentPageUI owns actions and data.
+[ExecuteAlways]
 public sealed class EquipmentInventoryUI : MonoBehaviour
 {
     public RectTransform backpack;

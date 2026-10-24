@@ -7,6 +7,8 @@ using UnityEngine;
     public string ownerId, sessionId, questTitle, message, playerName;
     public long heartbeatUtcTicks;
     public FocusPhase phase;
+    public FocusTimerMode mode;
+    public double elapsedSeconds;
     public double remainingSeconds;
     public int fishCount, focusMinutes, restMinutes;
     public bool connected = true;

@@ -90,8 +90,9 @@ public sealed class PlayerDataStore : IPlayerDataStore
         EquipmentRules.Normalize(data);
         foreach (var session in data.focusSessions)
         {
-            if (session.focusDurationSeconds <= 0) session.focusDurationSeconds = 1500;
-            if (session.restDurationSeconds <= 0) session.restDurationSeconds = 300;
+            if (session.mode != FocusTimerMode.Stopwatch && session.focusDurationSeconds <= 0) session.focusDurationSeconds = 1500;
+            if (session.mode == FocusTimerMode.Pomodoro && session.restDurationSeconds <= 0) session.restDurationSeconds = 300;
+            if (session.elapsedSeconds <= 0) session.elapsedSeconds = session.eligibleSeconds > 0 ? session.eligibleSeconds : session.eligibleMinutes * 60d;
         }
         data.tasks.RemoveAll(t => t == null);
         data.tags.RemoveAll(t => t == null);

@@ -6,7 +6,7 @@ using UnityEngine;
 // Opt-in standalone integration harness. Never instantiated during normal startup.
 public sealed class FocusBuildSmoke : MonoBehaviour
 {
-    [Serializable] public sealed class Command { public string action; public int focusMinutes=25,restMinutes=5,seconds;public string screenshot;public bool enabled=true; }
+    [Serializable] public sealed class Command { public string action; public FocusTimerMode mode; public int focusMinutes=25,restMinutes=5,seconds;public string screenshot;public bool enabled=true; }
     [Serializable] public sealed class Result {
         public string phase,error,companionDirectory,ownerId,sessionId,questTitle,animationState,ninjaSprite,acornSprite;
         public float animationTime; public bool training;
@@ -14,6 +14,7 @@ public sealed class FocusBuildSmoke : MonoBehaviour
         public bool notificationsEnabled,notificationsRegistered;
         public int notificationAttempts,notificationsAccepted,notificationsShown,notificationActivations;
         public string notificationSessionId,notificationKind,notificationError;
+        public FocusTimerMode mode; public double elapsed; public string timer;
     }
     string directory;float next;MainMenuNavigation navigation;FocusPanelUI panel;FocusController focus;
     void Start() { directory=CompanionProtocol.Argument("--smoke-dir");Directory.CreateDirectory(directory); }
@@ -33,7 +34,7 @@ public sealed class FocusBuildSmoke : MonoBehaviour
             if(command!=null) {
                 File.Delete(commandPath);
                 switch(command.action) {
-                    case "configure": panel.focusDuration.value=command.focusMinutes;panel.restDuration.value=command.restMinutes;break;
+                    case "configure": focus.Configure(new FocusSessionOptions { mode=command.mode, focusMinutes=command.focusMinutes, restMinutes=command.restMinutes });break;
                     case "quest": panel.questList.GetComponentsInChildren<UnityEngine.UI.Button>().Last().onClick.Invoke();break;
                     case "start":panel.start.onClick.Invoke();break;
                     case "end":panel.endEarly.onClick.Invoke();break;
@@ -64,6 +65,7 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                 ninjaSprite=battle?battle.transform.Find("Training Ninja").GetComponent<SpriteRenderer>().sprite.name:"",
                 acornSprite=battle?battle.transform.Find("Acorn").GetComponent<SpriteRenderer>().sprite.name:"",
                 focusMinutes=focus.Options.focusMinutes,restMinutes=focus.Options.restMinutes,settingsLocked=!panel.focusDuration.interactable,phase=focus.Phase.ToString(),remaining=focus.RemainingSeconds,width=Screen.width,height=Screen.height,
+                mode=focus.Options.mode,elapsed=focus.ElapsedSeconds,timer=panel.timer.text,
                 fish=focus.SpectatorFishCount,exp=data.experience,coins=data.fishCoins,tickets=data.tickets,
                 ownerId=host.OwnerId,sessionId=focus.SessionId ?? "",companionDirectory=host.DirectoryPath,widgetOpen=host.IsOpen,error=host.Error,
                 notificationsEnabled=GameDataManager.Instance.Tasks.Settings.notificationsEnabled,notificationsRegistered=runner.NotificationsRegistered,

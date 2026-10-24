@@ -57,3 +57,24 @@ The Play runner restores the previous save environment, Play Mode start scene, G
 For the Windows notification check, run `Tools/Verify-SettingsNotifications.ps1 -Executable '<absolute path to the development CatQuest.exe>' -Run -AttemptBannerClick` in a fresh PowerShell process. The runner uses an isolated save and restores PlayerPrefs, the prior foreground window and cursor. It identifies the app's actual Focus/Rest shell banner, waits for its hit region to settle, clicks its title, and requires both a native activation callback and a restored foreground Unity window. A missing banner or activation fails the run; it never injects a synthetic notification callback. Windows quiet mode or competing notifications can prevent this interactive check, so run on an available desktop without simultaneous mouse input. Reports and cropped captures go under `Temp/SettingsVerification/native-*`.
 
 Review fresh screenshots beside the reference and inspect the recorded motion frames. Separately verify native reminder appearance/click-to-restore and cleanup in the Windows player, and real Google/Firebase flows after configuration. The checks above describe the entrypoints; only a current run's reports and observed output establish which checks actually passed.
+
+## Optional ChatGPT connection
+
+Settings → **AI** is separate from the Google leaderboard account. **Continue with
+ChatGPT** opens the system browser using this installation's own OAuth registration.
+Closing AI settings cancels pending sign-in; an established connection remains
+available to task pages. **Disconnect ChatGPT** clears local tokens and attempts
+remote session revocation, with an explicit message when remote revocation is unconfirmed.
+
+Chat sends user messages and relevant task information requested during the
+conversation to OpenAI using the user's eligible ChatGPT plan. Task proposals
+require confirmation, and difficulty stays manual. The user chooses an
+account-supported model and can open **Manage usage**. Local tasks remain usable
+without a connection or available quota. Chat history is stored separately in
+`ai/chat.dpapi`, and can be cleared without deleting tasks.
+
+Configuration lives in the application data directory's `ai/preferences.json`;
+installation identity is in `ai/host.json`, and `ai/connection.dpapi` is protected
+by Windows current-user DPAPI. These records do not change `catquest-data.json`.
+See `AI_IMPLEMENTATION.md` for protocol, test entrypoints and isolated Windows
+smoke instructions. Never paste credentials into reports or source files.

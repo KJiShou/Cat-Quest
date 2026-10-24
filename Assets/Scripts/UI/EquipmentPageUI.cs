@@ -4,63 +4,51 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+[ExecuteAlways]
 public sealed class EquipmentPageUI : MonoBehaviour
 {
     public EquipmentItemDetailUI itemDetailPrefab;
     public EquipmentStatsUI statsPrefab;
     public EquipmentInventoryUI inventoryPrefab;
     public Sprite[] emptySlotIcons;
-    EquipmentInventoryUI inventory;
-    EquipmentItemDetailUI itemDetail;
+    [SerializeField] EquipmentInventoryUI inventory;
+    [SerializeField] EquipmentItemDetailUI itemDetail;
     public bool claimsOnly; public Texture2D[] gradeSheets; public Sprite catPoster; public Sprite[] statIcons; public Sprite[] tabIcons; public Sprite tabFocus;
     public TMP_FontAsset font; public Sprite rounded,blueButton,redButton;public Sprite[] slotIcons;public GameObject catPrefab;public MainMenuNavigation navigation;
-    TaskUIBuilder ui;TaskService service;TMP_Text title,notice,sets,modalTitle,modalInfo,confirmInfo;
-    RectTransform backpack,modal,confirmation,choices,gear;Button[] slots=new Button[3];Image[] slotImages=new Image[3];
-    Button[] filters=new Button[4]; int filter;
+    TaskUIBuilder ui;TaskService service;[SerializeField] TMP_Text title,notice,sets,modalTitle,modalInfo,confirmInfo;
+    [SerializeField] RectTransform backpack,modal,confirmation,choices,gear;[SerializeField] Button[] slots=new Button[3];[SerializeField] Image[] slotImages=new Image[3];
+    [SerializeField] Button[] filters=new Button[4]; int filter;
     string selected;int expectedLevel;Action confirmAction;
     public bool Ready=>service!=null;public string SelectedItem=>selected;
     static Color Pale=>new Color32(239,248,255,255);
-    void Awake(){ui=new TaskUIBuilder(font,rounded);service=GameDataManager.EnsureInstance().Tasks;Build();}
+    void Awake()
+    {
+        if(!Application.IsPlaying(gameObject))return;
+        ui=new TaskUIBuilder(font,rounded);service=GameDataManager.EnsureInstance().Tasks;
+        BindControls();
+    }
+    void BindControls()
+    {
+        modal.Find("Card/Close").GetComponent<Button>().onClick.AddListener(()=>modal.gameObject.SetActive(false));
+        confirmation.Find("Card/Confirm").GetComponent<Button>().onClick.AddListener(()=>confirmAction?.Invoke());
+        confirmation.Find("Card/Cancel").GetComponent<Button>().onClick.AddListener(()=>{confirmation.gameObject.SetActive(false);if(itemDetail&&itemDetail.gameObject.activeSelf)itemDetail.FocusActions();});
+        itemDetail.close.onClick.AddListener(()=>itemDetail.gameObject.SetActive(false));
+        itemDetail.equip.onClick.AddListener(()=>{if(service.Snapshot.equipment.Any(x=>x.id==selected))ToggleEquip();else ConfirmClaim();});
+        itemDetail.upgrade.onClick.AddListener(Upgrade);
+        itemDetail.gameObject.SetActive(false);modal.gameObject.SetActive(false);confirmation.gameObject.SetActive(false);
+        if(claimsOnly)return;
+        for(int i=0;i<slots.Length;i++){int index=i;slots[i].onClick.AddListener(()=>OpenSlot((EquipmentSlot)index));}
+        for(int i=0;i<filters.Length;i++){int index=i;filters[i].onClick.AddListener(()=>{filter=index;Refresh();});}
+        inventory.autoSelect.onClick.AddListener(AutoSelect);
+    }
     void OnEnable(){if(Ready){service.Changed+=Refresh;Refresh();}}
-    void OnDisable(){if(Ready)service.Changed-=Refresh;if(itemDetail)itemDetail.gameObject.SetActive(false);if(modal)modal.gameObject.SetActive(false);if(confirmation)confirmation.gameObject.SetActive(false);}
+    void OnDisable(){if(!Application.IsPlaying(gameObject))return;if(Ready)service.Changed-=Refresh;if(itemDetail)itemDetail.gameObject.SetActive(false);if(modal)modal.gameObject.SetActive(false);if(confirmation)confirmation.gameObject.SetActive(false);}
     RectTransform Rect(Transform p,string n,float x0,float y0,float x1,float y1){var r=TaskUIBuilder.Rect(p,n);r.anchorMin=new Vector2(x0,y0);r.anchorMax=new Vector2(x1,y1);r.offsetMin=r.offsetMax=Vector2.zero;return r;}
     RectTransform Panel(Transform p,string n,float x0,float y0,float x1,float y1,Color c){var r=Rect(p,n,x0,y0,x1,y1);ui.Image(r,c,rounded).raycastTarget=false;return r;}
     TMP_Text Text(Transform p,string n,string value,float size,float x0,float y0,float x1,float y1,Color? c=null){var t=ui.Text(p,value,size,c);t.name=n;t.rectTransform.anchorMin=new Vector2(x0,y0);t.rectTransform.anchorMax=new Vector2(x1,y1);t.rectTransform.offsetMin=t.rectTransform.offsetMax=Vector2.zero;return t;}
     Button Button(Transform p,string n,string caption,float x0,float y0,float x1,float y1,Action click,bool red=false){var r=Panel(p,n,x0,y0,x1,y1,Color.white);var image=r.GetComponent<Image>();image.sprite=red?redButton:blueButton;image.pixelsPerUnitMultiplier=1;image.raycastTarget=true;var b=r.gameObject.AddComponent<Button>();b.targetGraphic=image;b.onClick.AddListener(()=>click());Text(r,"Label",caption,21,.04f,.08f,.96f,.92f,Color.white).alignment=TextAlignmentOptions.Center;return b;}
     Image Icon(Transform p,EquipmentSlot slot,float x0,float y0,float x1,float y1){var image=ui.Image(Rect(p,"Icon",x0,y0,x1,y1),Color.white,slotIcons[(int)slot]);image.type=Image.Type.Simple;image.preserveAspect=true;image.raycastTarget=false;return image;}
-    void Build(){
-        if(!claimsOnly)BuildHome();
-        modal=Overlay("ItemModal");var card=Panel(modal,"Card",.25f,.19f,.75f,.82f,Color.white);modalTitle=Text(card,"Title","",27,.06f,.82f,.84f,.96f,TaskUIBuilder.Blue);
-        Button(card,"Close","x",.87f,.84f,.96f,.96f,()=>modal.gameObject.SetActive(false));modalInfo=Text(card,"Details","",22,.07f,.30f,.93f,.82f);
-        choices=Rect(card,"Choices",.05f,.12f,.95f,.70f);
-        confirmation=Overlay("ConfirmEquipment");var dialog=Panel(confirmation,"Card",.30f,.31f,.70f,.69f,Color.white);confirmInfo=Text(dialog,"Details","",23,.07f,.32f,.93f,.94f);confirmInfo.alignment=TextAlignmentOptions.Center;
-        Button(dialog,"Confirm","Confirm",.06f,.08f,.48f,.25f,()=>confirmAction?.Invoke());Button(dialog,"Cancel","Cancel",.52f,.08f,.94f,.25f,()=>{confirmation.gameObject.SetActive(false);if(itemDetail&&itemDetail.gameObject.activeSelf)itemDetail.FocusActions();},true);
-        itemDetail=Instantiate(itemDetailPrefab,transform);itemDetail.name="ItemDetail";
-        itemDetail.close.onClick.AddListener(()=>itemDetail.gameObject.SetActive(false));
-        itemDetail.equip.onClick.AddListener(()=>{if(service.Snapshot.equipment.Any(x=>x.id==selected))ToggleEquip();else ConfirmClaim();});
-        itemDetail.upgrade.onClick.AddListener(Upgrade);
-        itemDetail.gameObject.SetActive(false);
-        modal.gameObject.SetActive(false);confirmation.gameObject.SetActive(false);
-    }
-    RectTransform Overlay(string n){var r=Rect(transform,n,0,0,1,1);ui.Image(r,new Color(0,.07f,.15f,.55f)).raycastTarget=true;var layer=r.gameObject.AddComponent<Canvas>();layer.overrideSorting=true;layer.sortingOrder=n=="ConfirmEquipment"?110:100;r.gameObject.AddComponent<EquipmentModalSurface>();return r;}
     static Color Grade(int tier)=>tier==1?new Color32(67,184,255,255):tier==2?new Color32(182,112,245,255):new Color32(255,201,65,255);
-    void BuildHome(){
-        var surface=(RectTransform)transform.Find("EquipmentSurface");
-        var left=(RectTransform)surface.Find("CharacterCard");
-        title=Text(left,"Title","Cat Home",27,.05f,.92f,.95f,.99f,TaskUIBuilder.Blue);
-        var picture=ui.Image(Rect(left,"CatPreview",.04f,.50f,.96f,.91f),Color.white,catPoster);picture.type=Image.Type.Simple;picture.preserveAspect=true;picture.raycastTarget=false;
-        var existingPreview=navigation?navigation.pages[0].GetComponentInChildren<CharacterHomePreview>(true):null;
-        if(existingPreview&&existingPreview.previewCamera&&existingPreview.character){var live=Rect(left,"LiveCat",.04f,.50f,.96f,.91f);live.gameObject.AddComponent<RawImage>();var preview=live.gameObject.AddComponent<CharacterHomePreview>();preview.enabled=false;preview.previewCamera=existingPreview.previewCamera;preview.character=existingPreview.character;preview.showSceneBackground=true;preview.enabled=true;}
-        gear=Rect(left,"EquippedGear",.16f,.34f,.84f,.49f);
-        for(int i=0;i<3;i++){int index=i;slots[i]=Button(gear,"Slot"+i,"",0,0,1,1,()=>OpenSlot((EquipmentSlot)index));slots[i].GetComponent<Image>().sprite=rounded;slots[i].GetComponent<Image>().color=Pale;slotImages[i]=Icon(slots[i].transform,(EquipmentSlot)i,.29f,.29f,.71f,.71f);}
-        sets=Text(left,"SetBonuses","",16,.04f,.285f,.96f,.335f,TaskUIBuilder.Blue);sets.alignment=TextAlignmentOptions.Center;
-        var stats=Instantiate(statsPrefab,left);stats.name="Stats";
-        var statsRect=(RectTransform)stats.transform;statsRect.anchorMin=new Vector2(.05f,.02f);statsRect.anchorMax=new Vector2(.95f,.275f);statsRect.offsetMin=statsRect.offsetMax=Vector2.zero;
-        inventory=Instantiate(inventoryPrefab,surface);inventory.name="InventoryCard";
-        backpack=inventory.backpack;notice=inventory.notice;filters=inventory.filters;
-        for(int i=0;i<filters.Length;i++){int index=i;filters[i].onClick.AddListener(()=>{filter=index;Refresh();});}
-        inventory.autoSelect.onClick.AddListener(AutoSelect);
-    }
     void LateUpdate(){
         if(gear){float side=Mathf.Max(0,Mathf.Min((gear.rect.width-32)/3,gear.rect.height));for(int i=0;i<3;i++)Square((RectTransform)slots[i].transform,new Vector2(.5f,.5f),side,new Vector2((i-1)*(side+16),0));}
         if(choices&&choices.gameObject.activeInHierarchy){float side=Mathf.Max(0,Mathf.Min(InventoryCellSize(),Mathf.Min(choices.rect.width*.30f,choices.rect.height*.64f)));for(int i=0;i<3;i++){var choice=choices.Find("Choice"+i) as RectTransform;if(choice)Square(choice,new Vector2(.17f+i*.33f,.46f),side,Vector2.zero);}}

@@ -118,10 +118,10 @@ public static class RewardSystemVerification
         Check(service.FinishFocus(id, 1500, false) && service.Snapshot.experience == 49 && service.Snapshot.fishCoins == 18 && service.Snapshot.tickets == 1, "Focus reward tiers or idempotency failed.");
         Check(service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes) && service.Snapshot.experience == 69 && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Independent Focus claim failed.");
         clock.now = clock.now.AddDays(1); service.RefreshDate();
-        for (int i = 0; i < 6; i++) Session(service);
-        Check(service.TodayRewards.focusMinutes == 120 && service.TodayRewards.focusTickets == 4 && service.Snapshot.tickets == 5, "Focus daily caps failed.");
+        for (int i = 0; i < 16; i++) Session(service);
+        Check(service.TodayRewards.focusMinutes == 360 && service.TodayRewards.focusTickets == 4 && service.Snapshot.tickets == 5, "Focus daily caps failed.");
         var sessions = service.Snapshot.focusSessions.Where(s => s.rewardDay == TaskService.DateKey(clock.now)).ToArray();
-        Check(sessions[4].experience == 20 && sessions[4].fishCoins == 8 && sessions[4].tickets == 0 && sessions[5].experience == 0, "Focus partial allowance failed.");
+        Check(sessions[14].experience == 10 && sessions[14].fishCoins == 4 && sessions[14].tickets == 0 && sessions[15].experience == 0, "Focus partial allowance failed.");
         Check(service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) == 25 && service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes), "Capped Focus did not satisfy objective.");
         clock.now = new DateTime(2026, 10, 10, 23, 59, 0); service.RefreshDate();
         Check(service.BeginFocus(out string across), service.LastError);

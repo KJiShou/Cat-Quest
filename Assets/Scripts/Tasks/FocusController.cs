@@ -12,12 +12,21 @@ public sealed class FocusController : IFocusPresentation
     public event Action<string> RestCompleted;
     public FocusSessionOptions Options { get; private set; } = new FocusSessionOptions();
     public string SessionId => sessionId;
-    public int FocusSeconds => Options.focusMinutes * 60;
-    public int RestSeconds => Options.restMinutes * 60;
+    public int FocusSeconds => Options.mode == FocusTimerMode.Stopwatch ? 0 : Options.focusMinutes * 60;
+    public int RestSeconds => Options.mode == FocusTimerMode.Pomodoro ? Options.restMinutes * 60 : 0;
+    public bool CountsUp => Options.mode == FocusTimerMode.Stopwatch && Phase != FocusPhase.Resting;
+    public double DisplaySeconds => CountsUp ? (Phase == FocusPhase.Ready || Phase == FocusPhase.Interrupted ? 0 : ElapsedSeconds) : RemainingSeconds;
+    public static int DisplaySecond(double seconds, bool countsUp) => (int)Math.Min(int.MaxValue, Math.Max(0, countsUp ? Math.Floor(seconds) : Math.Ceiling(seconds)));
+    public static string FormatTime(double seconds, bool countsUp)
+    {
+        int value = DisplaySecond(seconds, countsUp);
+        return value >= 3600 ? $"{value / 3600}:{value / 60 % 60:00}:{value % 60:00}" : $"{value / 60:00}:{value % 60:00}";
+    }
     public bool Configure(FocusSessionOptions options)
     {
         if (options == null || !options.IsValid || Phase == FocusPhase.Focusing || Phase == FocusPhase.Saving || Phase == FocusPhase.Resting) return false;
-        Options = options.Copy(); Changed?.Invoke(); return true;
+        Options = options.Copy(); Phase = FocusPhase.Ready; ElapsedSeconds = 0; LastResult = null;
+        Message = ""; Changed?.Invoke(); return true;
     }
     public FocusPhase Phase { get; private set; }
     public string Message { get; private set; } = "25 minutes of Focus, then 5 minutes of Rest.";
@@ -53,8 +62,8 @@ public sealed class FocusController : IFocusPresentation
         {
             // A large gap cannot be verified as active time (sleep, paused player loop, debugger).
             if (seconds > 10) { Cancel(true); return; }
-            ElapsedSeconds = Math.Min(FocusSeconds, ElapsedSeconds + seconds);
-            if (ElapsedSeconds >= FocusSeconds) Settle(false, false, false);
+            ElapsedSeconds = CountsUp ? ElapsedSeconds + seconds : Math.Min(FocusSeconds, ElapsedSeconds + seconds);
+            if (!CountsUp && ElapsedSeconds >= FocusSeconds) Settle(false, false, false);
         }
         else if (Phase == FocusPhase.Resting)
         {
@@ -62,7 +71,7 @@ public sealed class FocusController : IFocusPresentation
             if (restElapsed >= RestSeconds) FinishRest(true);
         }
     }
-    public bool EndEarly() => Phase == FocusPhase.Focusing && Settle(true, false, false);
+    public bool EndEarly() => Phase == FocusPhase.Focusing && Settle(!CountsUp, false, false);
     public bool Cancel(bool invalidate = false) => Phase == FocusPhase.Focusing && Settle(false, true, invalidate);
     private bool Settle(bool endedEarly, bool cancelled, bool invalidated)
     {
@@ -83,8 +92,9 @@ public sealed class FocusController : IFocusPresentation
         }
         else
         {
-            Phase = FocusPhase.Resting; restElapsed = 0;
-            Message = $"Focus saved: +{LastResult.experience} EXP, +{LastResult.fishCoins} Fish Coins, +{LastResult.tickets} Ticket. Time to rest.";
+            Phase = Options.mode == FocusTimerMode.Pomodoro ? FocusPhase.Resting : FocusPhase.Finished; restElapsed = 0;
+            Message = $"Focus saved: +{LastResult.experience} EXP, +{LastResult.fishCoins} Fish Coins, +{LastResult.tickets} Ticket."
+                + (Phase == FocusPhase.Resting ? " Time to rest." : "");
         }
         string completedId = sessionId;
         bool completedNormally = !cancel && LastResult.status == FocusSessionStatus.Completed;

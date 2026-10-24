@@ -78,12 +78,14 @@ public sealed class CompanionWindowUI : MonoBehaviour
     void RefreshState()
     {
         title.text=string.IsNullOrWhiteSpace(state.playerName)?"Player":state.playerName.Trim();
-        int remaining=(int)Math.Ceiling(state.remainingSeconds);timer.text=$"{remaining/60:00}:{remaining%60:00}";
+        bool countsUp=state.mode==FocusTimerMode.Stopwatch && state.phase!=FocusPhase.Resting;
+        double elapsed=state.phase==FocusPhase.Ready || state.phase==FocusPhase.Interrupted ? 0 : state.elapsedSeconds;
+        timer.text=FocusController.FormatTime(countsUp?elapsed:state.remainingSeconds,countsUp);
         timer.color=state.connected?new Color32(29,51,70,255):new Color32(146,91,44,255);
         bool ready=state.phase==FocusPhase.Ready || state.phase==FocusPhase.Finished || state.phase==FocusPhase.Interrupted;
         start.gameObject.SetActive(ready);end.gameObject.SetActive(state.phase==FocusPhase.Focusing);rest.gameObject.SetActive(state.phase==FocusPhase.Resting);retry.gameObject.SetActive(state.phase==FocusPhase.Saving);
         foreach(var b in new[]{start,end,rest,retry})b.interactable=state.connected && pendingAction==null;
-        SetCaption(start,pendingAction=="start"?"Starting...":"Start focus");SetCaption(end,pendingAction=="end"?"Finishing...":"End focus early");SetCaption(rest,pendingAction=="rest"?"Finishing...":"Finish rest");SetCaption(retry,pendingAction=="retry"?"Saving...":"Retry save");
+        SetCaption(start,pendingAction=="start"?"Starting...":"Start focus");SetCaption(end,pendingAction=="end"?"Finishing...":countsUp?"End focus":"End focus early");SetCaption(rest,pendingAction=="rest"?"Finishing...":"Finish rest");SetCaption(retry,pendingAction=="retry"?"Saving...":"Retry save");
     }
     static void SetCaption(Button b,string text){b.GetComponentInChildren<TMP_Text>().text=text;}
     public void ApplyLayout(bool compact,bool showControls)

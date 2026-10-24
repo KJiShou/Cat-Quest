@@ -126,10 +126,8 @@ public static class TaskSystemPlayVerification
                 TaskUIBuilder.Find(system.detailsRoot,"Edit Button").GetComponentInChildren<Button>().onClick.Invoke(); var form=system.editor;
                 Check(form.gameObject.activeSelf && form.scheduleToggle.isOn,"Today add defaults failed.");
                 form.taskTitle.text="UI integration task";
-                form.timePicker.LoadValue(TimeSpan.Zero); Check(form.timePicker.hour==12 && !form.timePicker.isPm && form.SelectedTime==TimeSpan.Zero,"Midnight conversion failed.");
-                form.timePicker.LoadValue(TimeSpan.FromHours(12)); Check(form.timePicker.hour==12 && form.timePicker.isPm && form.SelectedTime.Hours==12,"Noon conversion failed.");
-                form.timePicker.LoadValue(new TimeSpan(23,59,0)); Check(form.timePicker.hour==11 && form.timePicker.isPm && form.SelectedTime.Hours==23,"PM conversion failed.");
-                form.timePicker.LoadValue(new TimeSpan(13,17,0));
+                Check(!form.timePicker.gameObject.activeSelf && !form.timePicker.overlay.activeSelf,"Date-only schedule still exposes time selection.");
+                form.datePicker.LoadValue(system.Service.LocalNow);
                 form.addSubtask.onClick.Invoke(); var row=form.subtaskContent.Cast<Transform>().Last(t=>t.gameObject.activeSelf); row.GetComponentInChildren<TMP_InputField>().text="UI subtask";
                 step=10; next=EditorApplication.timeSinceStartup+.5; return;
             }
@@ -147,7 +145,7 @@ public static class TaskSystemPlayVerification
                 Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-edit-layout-preview.png",true);
                 system.SaveDraft(); Check(!form.gameObject.activeSelf && system.Service.Snapshot.tasks.Count==1,"Add Task was not committed.");
                 var task=system.Service.Snapshot.tasks.Single(); taskId=task.id;
-                Check(task.minuteOfDay==13*60+17 && task.tagIds.Count==1 && task.subtasks.Count==1,"Schedule, tags or subtasks did not persist.");
+                Check(task.date==TaskService.DateKey(system.Service.LocalNow) && task.tagIds.Count==1 && task.subtasks.Count==1,"Date schedule, tags or subtasks did not persist.");
                 system.SelectTask(taskId);
                 Canvas.ForceUpdateCanvases();
                 var taskRow=TaskUIBuilder.Find(system.listContent,"Task_"+taskId);

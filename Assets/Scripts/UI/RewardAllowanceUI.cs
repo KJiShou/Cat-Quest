@@ -15,7 +15,7 @@ public sealed class RewardAllowanceUI : MonoBehaviour
     {
         var day = service.TodayRewards;
         summary.text = $"Task rewards: {day.taskExperience}/120 EXP  |  {day.taskFishCoins}/60 Fish Coins\n" +
-            $"Focus rewards: {day.focusMinutes}/120 minutes  |  {day.focusTickets}/4 Tickets\n" +
+            $"Focus rewards: {day.focusMinutes}/{TaskService.FocusMinuteCap} minutes  |  {day.focusTickets}/{TaskService.FocusTicketCap} Tickets\n" +
             "Daily goal rewards are extra. Goals reset at midnight.";
     }
 }

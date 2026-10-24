@@ -32,6 +32,7 @@ public class GameDataManager : MonoBehaviour
         if (CompanionProtocol.HasArgument("--focus-smoke"))
             path = Path.Combine(CompanionProtocol.Argument("--smoke-dir"), "test-save.json");
         if (AccountBuildSmoke.Enabled) path = AccountBuildSmoke.IsolatedSavePath;
+        if (AiBuildSmoke.Enabled) path = AiBuildSmoke.IsolatedSavePath;
 #if UNITY_EDITOR
         // Editor integration tests use a disposable store, never the player's save.
         string testPath = System.Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");

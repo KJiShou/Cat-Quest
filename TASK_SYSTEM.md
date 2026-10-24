@@ -18,10 +18,10 @@ MainMenu 的任务 UI 现在由真实任务数据驱动。运行 MainMenu 即可
 点击 **+** 在左边直接输入标题，同时隐藏加号；按 Enter 保存非空标题后继续输入下一项。点击其他位置时保存非空标题并收起输入行、恢复加号，空白输入不建立任务，Escape 取消。
 编辑中的 **Save Changes** 才会提交；**Cancel / ×** 丢弃编辑草稿。空白子任务行不保存。
 
-创建任务时，Today 默认安排今天，Todo 默认没有安排，Daily Tasks 默认每日重复。Repeat daily 会要求 Schedule。时间弹窗使用 1–12 小时、00–59 分钟的双列滚轮和 AM/PM；12 AM 是午夜，12 PM 是中午，数据保存为 24 小时制。
+创建任务时，Today 默认安排今天，Todo 默认没有安排，Daily Tasks 默认每日重复。Repeat daily 会要求 Schedule。Schedule 只选择日期，不提供时间选择；列表、快速输入和详情仅显示安排日期。History 仍显示实际完成日期与时间。旧存档的 minuteOfDay 字段保留兼容，编辑时保留原值，但不再参与日程校验、排序或逾期判断，无需迁移或重置存档。
 
 详情页勾选子任务立即保存。Complete 会在还有未完成子任务时要求确认，然后一起完成并领取奖励。
-任务行左侧勾选框可直接完成任务，沿用未完成子任务确认；该点击不会选择任务行。History 和 Daily 当天已完成任务的勾选框可撤销完成，不弹确认。撤销保留子任务进度和已获奖励，同一次任务重新完成恢复原历史记录、更新时间，不重复发奖。未完成且超过完整本地日程时间的任务，其日期时间在列表和详情显示红色；每日任务按当天时间判断。
+任务行左侧勾选框可直接完成任务，沿用未完成子任务确认；该点击不会选择任务行。History 和 Daily 当天已完成任务的勾选框可撤销完成，不弹确认。撤销保留子任务进度和已获奖励，同一次任务重新完成恢复原历史记录、更新时间，不重复发奖。未完成普通任务在安排日期的次日本地午夜起视为逾期，日期在列表和详情显示红色；安排当天不逾期。每日任务以当天为执行日期，当天不逾期，午夜后继续沿用每日重置规则。相同日期的任务按标题排序，不再使用旧时间。
 Easy / Medium / Hard 分别获得 **10 / 20 / 30 EXP 和 5 / 10 / 15 鱼币**；存档内部保留 Normal 的枚举编号，界面统一显示 Medium。普通任务一次，每日任务每个日期一次。任务每天最多发放 120 EXP 和 60 鱼币，分别按剩余额度裁剪；达到上限仍记录任务完成。新存档余额从 0 开始，场景里的示例任务和 500 不导入数据。
 
 删除任务先确认；删除每日模板停止后续重复，历史和奖励仍保留。删除标签仅解除当前任务的标签关联，历史快照不变。
@@ -65,7 +65,7 @@ Dashboard 默认打开；中间沿用 Ninja Cat 角色和现有预览，标题�
 
 右侧 Daily Mission Rewards 拆成两项，各自进度、Claim 和领取状态：当天完成三个不同任务执行记录，或当天累计有效 Focus 满 25 分钟。提前结束的会话也算，按秒累加，进度显示完整分钟；旧存档按已记录的有效分钟兼容。外观直接复用 `Mission` 的红色飘带、任务条目、带刻度的蓝/绿进度条、绿色 Claim 与灰色 In Progress；已领取显示灰色 Claimed。Daily Task 和普通 Todo 都算，子任务不单独计数。每项奖励 20 EXP + 10 鱼币，每天各领一次；不占任务或 Focus 基础奖励额度。撤销完成减少未领取目标进度，已领取奖励保留；重做不会重复发奖。目标在设备本地午夜重置，不结转未领取奖励。
 
-Focus 页提供固定 25 分钟 Focus 和 5 分钟 Rest。正常结束或主动 End Focus Early 按完整有效分钟结算：每分钟 1 EXP，每完整 5 分钟 2 鱼币，每完整 25 分钟 1 Ticket。完整间隔按单次会话计算，不拼接短会话。每天前 120 分钟可获得 EXP / 鱼币，每天最多 4 张 Ticket。完整 25 分钟仍满足目标，即使基础奖励额度已耗尽。
+Focus 页提供番茄钟（专注/休息各 1–60 分钟，默认 25/5）、正计时及倒计时（1–180 分钟）。仅番茄钟在成功结算后进入 Rest；正计时可超过三小时并手动结束。正常结束或主动 End Focus Early 按完整有效分钟结算：每分钟 1 EXP，每完整 5 分钟 2 鱼币，每完整 25 分钟 1 Ticket。完整间隔按单次会话计算，不拼接短会话。每次最多前 180 分钟、三种模式每天共享前 360 分钟可获得 EXP / 鱼币，每天最多 4 张 Ticket。完整 25 分钟仍满足目标，即使基础奖励额度已耗尽。
 
 Focus 计时由持久化管理对象维护，切换页面和切换到其他应用继续计时。设备休眠、暂停或超过 10 秒无法验证的播放器更新间隔使当前 Focus 失效；重启不会奖励未完成会话。Cancel 不发奖、不开始 Rest；End Focus Early 保留完整分钟的奖励。保存成功后才进入 Rest，失败会冻结结算并提供 Retry Save，避免重复发奖。Rest 不发奖，可提前结束；结束后提供再次 Focus 或返回 Dashboard。跨午夜 Focus 归入结算日。
 
@@ -78,19 +78,19 @@ Unity 菜单 **Tools → Cat Quest → Verify Dashboard Rewards Play Flow** 在�
 ## 可重复验证
 
 Unity 菜单 **Tools → Cat Quest → Verify Task System**：
-验证 CRUD、草稿隔离、筛选、标签关联、奖励去重、撤销／重新完成、历史恢复限制、完整日程时间逾期、午夜、未来开始日期、不补离线日期、旧存档迁移、失败回滚及备份恢复。
+验证 CRUD、草稿隔离、筛选、标签关联、奖励去重、撤销／重新完成、历史恢复限制、按日期逾期及排序、旧时间兼容、午夜、未来开始日期、不补离线日期、旧存档迁移、失败回滚及备份恢复。
 
 Unity 菜单 **Tools → Cat Quest → Verify MainMenu Play Flow**：
 在 MainMenu 的 Edit Mode 执行，自动进入 Play Mode，验证实际 UI 操作与落盘，结束后退出 Play Mode。测试使用 `Library/TaskSystemPlayVerification/<GUID>/save.json`，不写入真实玩家存档。
 
 测试报告位于 `Temp/task-system.verification` 和 `Temp/task-system.play-result`。
 
-## Shared reward flight feedback
+## Optional AI Chat
 
-`RewardFlightUI` on the authored `Canvas/RewardFlights` observes committed Fish Coin, Ticket and EXP balance increases. It reuses the header Fish/Ticket artwork and `Light/Mission.prefab`'s `Panel_Right/TableFrame/Item_Group/Group (1)/ItemList_Blue/Item` EXP artwork, already used by `DailyGoalUI`. Its editable icon/text templates are serialized under the same Canvas subtree; vendor prefabs are unchanged.
+Chat can query tasks and propose new tasks or edits. Each proposal requires local
+review and confirmation. Difficulty is manual: new tasks default to Medium and
+edits preserve their previous value. Task completion/rewards never depend on AI.
 
-Quest completion, daily goal claims, Focus settlement (including valid End Early), and Boss currency/EXP rewards use the same bounded pool. Icons pop outward in random directions, then curve into their corresponding header target. Only displayed header values wait for arrival; the authoritative reward is already saved. Zero increases and duplicate settlements do not spawn flights. Spending updates the displayed balance while accounting for pending arrivals. Page changes retain the shared effect; focus loss or disabling settles the display immediately and clears visuals. UI uses unscaled time and never blocks input.
-
-Request `Temp/verify-reward-flight.request` in an idle Editor to run the isolated Play Mode verifier. Current-run results and motion frames are written to `Library/RewardFlightVerification/`. It covers real service settlements, duplicate/cancelled/capped rewards, delayed count arrival, pause, disable/focus cleanup, burst settlement and four window sizes. It restores the previous test-store environment, Play Mode start scene, Game View size and time scale.
-
-Receipt feedback: Fish and Ticket header icons use `JuicyButtonMesh`'s bounded 24% mesh-only pulse (0.32 seconds), preserving authored transforms, layout and hit areas. Consecutive arrivals accumulate into one blue gain number per resource; the stack stays visible for 1.2 seconds after the latest arrival before clearing. Focus loss/disable resets both the pulse and stack. Runtime pools are rebuilt safely after an Editor Play Mode script reload.
+`TaskService.ConfirmChatDraft` reuses the existing atomic upsert validation and
+rejects stale, deleted, settled, duplicate and cross-day proposals. Task text is
+only shared when a chat lookup requests it. See `AI_IMPLEMENTATION.md`.

@@ -67,8 +67,7 @@ public static class ButtonPagesVerification
         contexts.Add(("Task-details",()=>{nav.taskSystem.SelectTab(TaskTab.Daily);nav.taskSystem.SelectTask(id);}));
         contexts.Add(("Task-edit",()=>typeof(TaskSystemUI).GetMethod("BeginEdit",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(nav.taskSystem,new object[]{service.Query(TaskTab.Daily).First()})));
         contexts.Add(("Task-date",()=>nav.taskSystem.editor.datePicker.Open()));
-        contexts.Add(("Task-time",()=>{nav.taskSystem.editor.datePicker.overlay.SetActive(false);nav.taskSystem.editor.timePicker.Open();}));
-        contexts.Add(("Task-edit-close",()=>{nav.taskSystem.editor.timePicker.overlay.SetActive(false);nav.taskSystem.CancelDraft();}));
+        contexts.Add(("Task-edit-close",()=>nav.taskSystem.CancelDraft()));
         contexts.Add(("Task-filter",()=>nav.taskSystem.filterButton.onClick.Invoke()));
         contexts.Add(("Boss-stages",()=>{typeof(TaskSystemUI).GetMethod("CloseModal",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(nav.taskSystem,null);nav.ShowPage(MainMenuPage.Boss);nav.pages[3].GetComponent<BossPageUI>().stageButton.onClick.Invoke();}));
         contexts.Add(("Boss-confirmation",()=>{var b=nav.pages[3].GetComponent<BossPageUI>();b.stagePicker.SetActive(false);b.confirmation.SetActive(true);}));

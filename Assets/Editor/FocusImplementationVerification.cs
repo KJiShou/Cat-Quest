@@ -64,11 +64,12 @@ using UnityEngine;
         }
         {
             var store=new Store();var service=Service(store);
-            for(int i=0;i<3;i++){service.BeginFocus(new FocusSessionOptions{focusMinutes=60},out var id);service.FinishFocus(id,3600,false);}
-            Check(store.Data.experience==120 && store.Data.fishCoins==48 && store.Data.tickets==4,"Daily caps incorrect");
+            for(int i=0;i<7;i++){service.BeginFocus(new FocusSessionOptions{focusMinutes=60},out var id);service.FinishFocus(id,3600,false);}
+            Check(store.Data.experience==360 && store.Data.fishCoins==144 && store.Data.tickets==4,"Daily caps incorrect");
             var old=JsonUtility.FromJson<PlayerData>("{\"version\":3,\"fishCoins\":99,\"focusSessions\":[{\"id\":\"legacy\",\"fishCoins\":10}]}");PlayerDataStore.Normalize(old);
             Check(old.focusSessions[0].focusDurationSeconds==1500 && old.focusSessions[0].restDurationSeconds==300 && old.fishCoins==99,"Legacy data corrupted");
         }
+        VerifyTimerModes();
         VerifyNotifications();
         RewardSystemVerification.Run();
         var canvas=UnityEditor.PrefabUtility.LoadPrefabContents("Assets/Prefabs/Canvas.prefab");
@@ -145,12 +146,74 @@ using UnityEngine;
         }
         {
             var store=new Store();var service=Service(store);
-            for(int i=0;i<2;i++){service.BeginFocus(new FocusSessionOptions{focusMinutes=60},out var id);service.FinishFocus(id,3600,false);}
+            for(int i=0;i<6;i++){service.BeginFocus(new FocusSessionOptions{focusMinutes=60},out var id);service.FinishFocus(id,3600,false);}
             var focus=new FocusController(service);var sink=new NotificationSink();
             using(var notifications=new FocusNotificationCoordinator(focus,()=>true,sink)) {
                 focus.Start(ShortSession());AdvanceFocus(focus);
                 Check(focus.LastResult.experience==0 && sink.calls.SequenceEqual(new[]{FocusNotificationKind.FocusCompleted}),"Reward cap suppressed a valid completion reminder");
             }
         }
+    }
+
+    static void VerifyTimerModes()
+    {
+        Check(FocusController.FormatTime(3599.1, true)=="59:59" && FocusController.FormatTime(3599.1, false)=="1:00:00"
+            && FocusController.FormatTime(10800, true)=="3:00:00", "Timer formatting/rounding incorrect");
+        foreach (var minutes in new[] { 1, 180 })
+        {
+            var store=new Store(); var service=Service(store); var focus=new FocusController(service);
+            Check(focus.Start(new FocusSessionOptions { mode=FocusTimerMode.Countdown, focusMinutes=minutes, restMinutes=0 }), "Countdown rejected");
+            AdvanceFocus(focus, minutes*60-1); Check(focus.Phase==FocusPhase.Focusing && focus.RemainingSeconds==1, "Countdown ended early");
+            focus.Advance(1);
+            Check(focus.Phase==FocusPhase.Finished && focus.RestSeconds==0 && focus.LastResult.experience==minutes
+                && focus.LastResult.restDurationSeconds==0, "Countdown did not finish without Rest");
+            var reloaded=JsonUtility.FromJson<PlayerData>(JsonUtility.ToJson(store.Data)); PlayerDataStore.Normalize(reloaded);
+            Check(reloaded.focusSessions[0].mode==FocusTimerMode.Countdown && reloaded.focusSessions[0].restDurationSeconds==0, "Reload added Rest");
+        }
+        {
+            var store=new Store(); var service=Service(store); var focus=new FocusController(service);
+            Check(!focus.Configure(new FocusSessionOptions { mode=FocusTimerMode.Countdown, focusMinutes=181 })
+                && !focus.Start(new FocusSessionOptions { mode=FocusTimerMode.Countdown, focusMinutes=0 })
+                && !focus.Start(new FocusSessionOptions { mode=(FocusTimerMode)99 }), "Invalid mode/duration accepted");
+            Check(focus.Start(new FocusSessionOptions { mode=FocusTimerMode.Stopwatch, restMinutes=0 }), "Stopwatch rejected");
+            AdvanceFocus(focus, 4*3600);
+            Check(focus.Phase==FocusPhase.Focusing && focus.ElapsedSeconds==14400 && focus.SpectatorFishCount==72, "Stopwatch stopped or preview exceeded session limit");
+            Check(!focus.Configure(new FocusSessionOptions()) && !focus.Start(), "Running mode replaced");
+            store.fail=true; Check(!focus.EndEarly() && focus.Phase==FocusPhase.Saving && store.Data.experience==0, "Failed stopwatch save paid or finished");
+            focus.Advance(5); Check(focus.ElapsedSeconds==14400, "Saving accumulated time");
+            store.fail=false; Check(focus.RetrySettlement(), "Stopwatch retry failed");
+            Check(focus.Phase==FocusPhase.Finished && focus.LastResult.status==FocusSessionStatus.Completed
+                && focus.LastResult.elapsedSeconds==14400 && focus.LastResult.eligibleSeconds==10800
+                && focus.LastResult.experience==180 && focus.LastResult.fishCoins==72 && focus.LastResult.rawTickets==7 && focus.LastResult.tickets==4, "Stopwatch settlement wrong");
+            Check(service.FinishFocus(focus.SessionId,14400,false) && !focus.EndEarly() && !focus.RetrySettlement()
+                && store.Data.experience==180, "Repeated stopwatch settlement paid twice");
+            Check(focus.Start(new FocusSessionOptions { mode=FocusTimerMode.Countdown, focusMinutes=180 }), "Second three-hour session rejected");
+            AdvanceFocus(focus,10800);
+            Check(store.Data.experience==360 && store.Data.fishCoins==144 && store.Data.tickets==4, "Mixed modes did not share daily limits");
+            Check(focus.Start(new FocusSessionOptions()), "Capped session blocked"); AdvanceFocus(focus,1500);
+            Check(focus.LastResult.experience==0 && focus.LastResult.fishCoins==0 && focus.LastResult.tickets==0 && focus.Phase==FocusPhase.Resting, "Capped session behavior wrong");
+            Check(service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes)==25, "New modes lost daily goal");
+            var data=JsonUtility.FromJson<PlayerData>(JsonUtility.ToJson(store.Data)); PlayerDataStore.Normalize(data);
+            Check(data.rewardDays.Single().focusMinutes==360 && data.focusSessions[0].elapsedSeconds==14400
+                && data.focusSessions[0].restDurationSeconds==0 && data.focusSessions[0].focusDurationSeconds==0, "Stopwatch reload corrupted receipt/allowance");
+        }
+        foreach (var mode in new[] { FocusTimerMode.Stopwatch, FocusTimerMode.Countdown })
+        {
+            var store=new Store(); var service=Service(store); var focus=new FocusController(service);
+            focus.Start(new FocusSessionOptions { mode=mode }); AdvanceFocus(focus,359); focus.EndEarly();
+            Check(focus.LastResult.experience==5 && focus.LastResult.fishCoins==2 && focus.LastResult.tickets==0
+                && focus.LastResult.status==(mode==FocusTimerMode.Stopwatch?FocusSessionStatus.Completed:FocusSessionStatus.EndedEarly)
+                && focus.Phase==FocusPhase.Finished, "Manual end rounding/status wrong");
+            focus.Start(); AdvanceFocus(focus,60); focus.Cancel();
+            Check(store.Data.experience==5 && focus.LastResult.status==FocusSessionStatus.Cancelled, "Cancel paid new mode");
+            focus.Start(); focus.Advance(11);
+            Check(focus.Phase==FocusPhase.Interrupted && focus.LastResult.status==FocusSessionStatus.Invalid && store.Data.experience==5, "Gap paid new mode");
+            focus.Start(); var restarted=Service(store);
+            Check(restarted.Snapshot.focusSessions.Last().status==FocusSessionStatus.Invalid, "Restart retained unverifiable new mode");
+        }
+        var legacy=JsonUtility.FromJson<PlayerData>("{\"experience\":120,\"rewardDays\":[{\"day\":\"2026-10-09\",\"focusMinutes\":120}],\"focusSessions\":[{\"id\":\"old\",\"eligibleMinutes\":25}]}");
+        PlayerDataStore.Normalize(legacy);
+        Check(legacy.experience==120 && legacy.rewardDays[0].focusMinutes==120 && legacy.focusSessions[0].mode==FocusTimerMode.Pomodoro
+            && legacy.focusSessions[0].elapsedSeconds==1500, "Legacy allowance/reset or mode migration wrong");
     }
 }
