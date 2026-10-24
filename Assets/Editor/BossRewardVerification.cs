@@ -101,6 +101,7 @@ public static class BossRewardVerification
             Check(panel.resultValues[0].text=="+10"&&panel.resultValues[0].transform.parent.gameObject.activeInHierarchy,"EXP strip");
             Check(panel.resultValues[0].transform.parent.GetComponentsInChildren<Image>().Any(i=>i.sprite==flights.experienceIcon),"EXP icon");
             Check(flights.ActiveCount>0,"Missing committed reward flight");
+            Check(!panel.resultFishValue.transform.parent.gameObject.activeSelf,"Zero Fish reward must be hidden");
             panel.SkipBattle();panel.Settle(BattleOutcome.Victory);Check(service.Snapshot.experience==xp+10,"Duplicate UI settlement");
             Vector3? previous=null;bool moved=false;
             for(int frame=0;frame<14;frame++){
@@ -113,15 +114,39 @@ public static class BossRewardVerification
             Check(flights.catStatus.level.text=="LV "+level&&flights.catStatus.experience.text==$"{current} / {required}","Header totals after flight");
             Capture("victory-"+width);yield return .2;
         }
-        panel.CloseResult();panel.Action();panel.Confirm();yield return .2;
+        panel.CloseResult();manager.PlayerData.experience=100000;
+        manager.PlayerData.bossProgress[0].wins=16;manager.PlayerData.equipmentUnlocked=true;
+        manager.PlayerData.bossProgress[2].wins=1;manager.SaveData();
+        foreach(var id in new[]{"boss1-weapon","boss1-body","boss1-head"})Check(service.ClaimEquipment(id),"Prepare owned boss set");
+        flights.SendMessage("OnApplicationFocus",false);
+        foreach(int width in new[]{1920,1280}){
+            Resolution(width,width==1920?1080:720);yield return .5;
+            panel.CloseResult();panel.SelectStage(1,width==1920?0:1);panel.Action();panel.Confirm();yield return .2;
+            int coins=service.Snapshot.fishCoins;panel.SkipBattle();
+            int reward=width==1920?10:30;
+            Check(service.Snapshot.fishCoins==coins+reward&&panel.resultFishValue.text=="+"+reward,"Fish receipt and count");
+            Check(panel.resultFishValue.transform.parent.gameObject.activeInHierarchy,"Fish reward visible");
+            Check(panel.resultFishValue.transform.parent.GetComponentsInChildren<Image>().Any(i=>i.sprite==flights.fishTarget.sprite),"Fish icon");
+            panel.SkipBattle();panel.Settle(BattleOutcome.Victory);Check(service.Snapshot.fishCoins==coins+reward,"Duplicate Fish settlement");
+            Vector3? previous=null;bool moved=false;
+            for(int frame=0;frame<16;frame++){
+                var icon=flights.GetComponentsInChildren<Image>().FirstOrDefault(i=>i.name=="Reward Icon"&&i.gameObject.activeSelf&&i.sprite==flights.fishTarget.sprite);
+                if(icon){if(previous.HasValue&&Vector3.Distance(previous.Value,icon.transform.position)>1)moved=true;previous=icon.transform.position;}
+                Capture("fish-flight-"+width+"-"+frame.ToString("00"));yield return .08;
+            }
+            yield return 1.0;Check(moved&&flights.ActiveCount==0&&flights.fishValue.text==service.Snapshot.fishCoins.ToString(),"Fish flies and header settles");
+            Check(!panel.resultFishValue.isTextOverflowing,"Fish number overflow");Capture("fish-victory-"+width);yield return .2;
+        }
+        panel.CloseResult();panel.SelectStage(1);panel.Action();panel.Confirm();yield return .2;
+        int fishBefore=service.Snapshot.fishCoins;
         int before=service.Snapshot.experience;
         saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
-        panel.SkipBattle();Check(service.Snapshot.experience==before&&flights.ActiveCount==0,"Failed write cannot animate or award");
-        saveLock.Dispose();saveLock=null;panel.Action();Check(service.Snapshot.experience==before+10&&flights.ActiveCount>0,"Retry reward flight");
+        panel.SkipBattle();Check(service.Snapshot.experience==before&&service.Snapshot.fishCoins==fishBefore&&flights.ActiveCount==0,"Failed write cannot animate or award");
+        saveLock.Dispose();saveLock=null;panel.Action();Check(service.Snapshot.experience==before+10&&service.Snapshot.fishCoins==fishBefore+10&&flights.ActiveCount>0,"Retry reward flight");
         nav.ShowPage(MainMenuPage.Tasks);yield return 2.0;Check(flights.ActiveCount==0,"Page close flight settles");
         Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.experience==before+10,"Persisted EXP");
         nav.ShowPage(MainMenuPage.Boss);panel.CloseResult();manager.PlayerData.experience=0;manager.SaveData();yield return .3;
         panel.Action();panel.Confirm();panel.SkipBattle();Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&service.Snapshot.experience==0&&flights.ActiveCount==0,"Defeat grants no EXP");yield return .2;
-        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: repeat win icon/count; skip and ordinary settlement; moving EXP flights at 1920/1280; header balance/level; duplicate settlement; failed save has no reward/flight; retry exactly once; page close; reload; defeat without rewards.");
+        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: normal and Master Fish icon/count/flights/header at 1920/1280; zero Fish hidden; repeat win icon/count; skip and ordinary settlement; moving EXP flights at 1920/1280; header balance/level; duplicate settlement; failed save has no reward/flight; retry exactly once; page close; reload; defeat without rewards.");
     }
 }

@@ -33,6 +33,7 @@ public sealed class BossPageUI : MonoBehaviour
     public GameObject[] resultPanels;
     public TMP_Text[] resultValues,resultDetails;
     public RewardFlightUI rewardFlights;
+    public TMP_Text resultFishValue;
     public Button[] resultContinue;
     TaskService service;
     BattleAttempt attempt;
@@ -189,7 +190,7 @@ public sealed class BossPageUI : MonoBehaviour
         pendingOutcome=outcome;
         actors.Finish(outcome);
         bool saved;
-        if(rewardFlights)rewardFlights.SetRewardOrigin(resultValues[0].rectTransform);
+        if(rewardFlights)rewardFlights.SetRewardOrigin(resultValues[0].rectTransform, resultFishValue ? resultFishValue.rectTransform : null);
         try { saved=service.ResolveBattle(attempt.id,outcome); }
         finally { if(rewardFlights)rewardFlights.SetRewardOrigin(null); }
         if(!saved){settlementPending=true;message.text=service.LastError;Refresh();return;}
@@ -200,6 +201,10 @@ public sealed class BossPageUI : MonoBehaviour
             foreach(var panel in resultPanels)panel.SetActive(false);
             resultValues[index].text=index==0 ? (receipt.experience>0?$"+{receipt.experience}":"") : "Train and try again";
             resultValues[index].transform.parent.gameObject.SetActive(index!=0||receipt.experience>0);
+            if(resultFishValue) {
+                resultFishValue.text=receipt.fishCoins>0?$"+{receipt.fishCoins}":"";
+                resultFishValue.transform.parent.gameObject.SetActive(index==0&&receipt.fishCoins>0);
+            }
             resultDetails[index].text=index==0?"":"No rewards · Progress kept";
             resultDetails[index].gameObject.SetActive(index!=0);
             resultPanels[index].SetActive(true);resultPanels[index].transform.SetAsLastSibling();message.text="";

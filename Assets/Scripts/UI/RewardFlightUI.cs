@@ -36,11 +36,12 @@ public sealed class RewardFlightUI : MonoBehaviour
     Vector2 pointerOrigin;
     float pointerTime = -10;
     bool initialized;
-    RectTransform rewardOrigin;
+    RectTransform rewardOrigin, fishRewardOrigin;
     public int ActiveCount { get; private set; }
 
     // Scoped by the caller around settlement; only committed balance changes fly.
-    public void SetRewardOrigin(RectTransform origin) => rewardOrigin = origin;
+    public void SetRewardOrigin(RectTransform origin, RectTransform fishOrigin = null)
+    { rewardOrigin = origin; fishRewardOrigin = fishOrigin; }
 
     void Start()
     {
@@ -117,12 +118,12 @@ public sealed class RewardFlightUI : MonoBehaviour
         var data = service.Snapshot;
         int[] totals = { data.fishCoins, data.tickets, data.experience };
         var origin = Time.unscaledTime - pointerTime < .8f ? pointerOrigin : surface.rect.center + new Vector2(0, -40);
-        if (rewardOrigin)
-            origin = Local(RectTransformUtility.WorldToScreenPoint(
-                canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera,
-                rewardOrigin.TransformPoint(rewardOrigin.rect.center)));
         for (int kind = 0; kind < 3; kind++)
         {
+            var source = kind == 0 && fishRewardOrigin ? fishRewardOrigin : rewardOrigin;
+            var flightOrigin = source ? Local(RectTransformUtility.WorldToScreenPoint(
+                canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera,
+                source.TransformPoint(source.rect.center))) : origin + new Vector2((kind - 1) * 55, 0);
             int delta = totals[kind] - observed[kind];
             observed[kind] = totals[kind];
             if (delta <= 0) { displayed[kind] = Math.Max(0, totals[kind] - pending[kind]); continue; }
@@ -135,7 +136,7 @@ public sealed class RewardFlightUI : MonoBehaviour
                 if (free == null) { displayed[kind] += amount; RecordArrival(kind, amount); continue; }
                 free.active = true; free.kind = kind; free.amount = amount; free.age = 0;
                 free.delay = i * .055f + kind * .09f;
-                free.origin = origin + (rewardOrigin ? Vector2.zero : new Vector2((kind - 1) * 55, 0));
+                free.origin = flightOrigin;
                 float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2);
                 free.scatter = free.origin + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * UnityEngine.Random.Range(45f, 105f);
                 free.scatter.x = Mathf.Clamp(free.scatter.x, surface.rect.xMin + 28, surface.rect.xMax - 28);
