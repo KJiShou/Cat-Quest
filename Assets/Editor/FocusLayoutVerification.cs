@@ -169,7 +169,7 @@ public static class FocusLayoutVerification
             panel.countdownMode.OnSubmit(data);
             Check(focus.Options.mode==FocusTimerMode.Countdown,"Keyboard mode submit failed");
             var results=new System.Collections.Generic.List<RaycastResult>();
-            var pointer=new PointerEventData(EventSystem.current){position=RectTransformUtility.WorldToScreenPoint(null,((RectTransform)panel.stopwatchMode.transform).TransformPoint(new Vector3(70,0,0))),button=PointerEventData.InputButton.Left};
+            var pointer=new PointerEventData(EventSystem.current){position=RectTransformUtility.WorldToScreenPoint(null,((RectTransform)panel.stopwatchMode.transform).TransformPoint(new Vector3(((RectTransform)panel.stopwatchMode.transform).rect.width * .25f,0,0))),button=PointerEventData.InputButton.Left};
             EventSystem.current.RaycastAll(pointer,results);
             Check(results.Count>0 && results[0].gameObject.transform.IsChildOf(panel.stopwatchMode.transform),"Mode label blocked from raycasts");
             panel.stopwatchMode.OnPointerClick(pointer);Check(focus.CountsUp,"Mode row click failed");
@@ -187,16 +187,37 @@ public static class FocusLayoutVerification
             if(step==32)Check(Vector2.Distance(juicy.DrawScale,Vector2.one)<.015f && Mathf.Abs(juicy.DrawOffset)<.1f,"Feedback did not settle");
         }
         if(step==33){
-            // Render the actual vendor reference alongside a radio sample in this disposable scene.
-            var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_DemoScene_Panels/Light/Material_Level_Up.prefab");
-            var reference=UnityEngine.Object.Instantiate(source,panel.transform);reference.name="ReferenceOnly";
-            var rect=(RectTransform)reference.transform;rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.anchoredPosition=Vector2.zero;rect.localScale=Vector3.one*.7f;
-            var radio=UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_UI_Etc/Toggle_Radio_Light.prefab"),panel.transform);
-            var rr=(RectTransform)radio.transform;rr.anchorMin=rr.anchorMax=new Vector2(.85f,.5f);rr.anchoredPosition=Vector2.zero;rr.localScale=Vector3.one*.6f;
+            // Render the exact icon-menu reference used by the authored mode cards.
+            var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_Buttons/Btn_MenuButton_Rectangle01-Group.prefab");
+            var reference=UnityEngine.Object.Instantiate(source.transform.Find("Btn_MenuButton_Rectangle01_Light").gameObject,panel.transform);reference.name="ReferenceOnly";
+            var rect=(RectTransform)reference.transform;rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.anchoredPosition=Vector2.zero;rect.localScale=Vector3.one;
         }
         if(step==34)Capture("simplecasual-reference-1920");
         if (step == 35) {
-            File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\nPASS: full-frame scene, custom Focus/Rest, reward preview/settlement, quest search/selection, settings locks, three modes, four-hour stopwatch, mixed daily cap, cancel, save error/retry, mode keyboard/pointer handlers, label raycast and disable/re-enable, shared button feedback settling; rendered captures at 1920x1080 and 1280x720. Visual/motion acceptance requires inspection.");
+            UnityEngine.Object.Destroy(panel.transform.Find("ReferenceOnly").gameObject);
+            panel.stopwatchMode.isOn=true;
+        }
+        if (step >= 36 && step <= 43) {
+            var mode=panel.countdownMode;
+            var pointer=new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left};
+            if(step==36)mode.OnPointerEnter(pointer);
+            if(step==37)mode.OnPointerDown(pointer);
+            if(step==38){mode.OnPointerUp(pointer);mode.OnPointerClick(pointer);Check(focus.Options.mode==FocusTimerMode.Countdown,"Mode card click did not select countdown");}
+            if(step==39){mode.OnPointerExit(pointer);EventSystem.current.SetSelectedGameObject(null);}
+            if(step==40){for(int i=0;i<12;i++){panel.pomodoroMode.OnPointerClick(pointer);mode.OnPointerClick(pointer);}Check(mode.isOn&&!panel.pomodoroMode.isOn&&!panel.stopwatchMode.isOn,"Rapid input broke exclusive mode selection");}
+            if(step==41){panel.start.onClick.Invoke();panel.pomodoroMode.OnPointerClick(pointer);Check(focus.Options.mode==FocusTimerMode.Countdown&&!mode.interactable,"Locked mode changed");}
+            if(step==42){panel.cancel.onClick.Invoke();nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);}
+            if(step==43){
+                Check(mode.isOn&&mode.interactable,"Mode did not survive page reopen");
+                foreach(var choice in new[]{panel.pomodoroMode,panel.stopwatchMode,panel.countdownMode}){
+                    Check(choice.transform.Find("ModeIcon").GetComponent<Image>().sprite,"Mode icon missing");
+                    foreach(var label in choice.GetComponentsInChildren<TMPro.TMP_Text>())Check(!label.isTextOverflowing,"Mode caption clipped: "+label.text);
+                }
+            }
+            Capture("mode-feedback-"+step);
+        }
+        if (step == 44) {
+            File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\nPASS: full-frame scene, custom Focus/Rest, reward preview/settlement, quest search/selection, settings locks, three modes, four-hour stopwatch, mixed daily cap, cancel, save error/retry, mode keyboard/pointer handlers, label raycast and disable/re-enable, shared button feedback settling, mode card icons/captions, rapid exclusive selection and disabled/reopened cards; rendered captures at 1920x1080 and 1280x720. Visual/motion acceptance requires inspection.");
             EditorApplication.isPlaying = false; return;
         }
         step++; next = EditorApplication.timeSinceStartup + (step>=25 && step<=32 ? .15 : 1);

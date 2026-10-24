@@ -2272,6 +2272,7 @@ GameObject:
   - component: {fileID: 3888664909144325052}
   - component: {fileID: 6261442196190774118}
   - component: {fileID: 3670146371139549271}
+  - component: {fileID: 7638055307266329014}
   m_Layer: 0
   m_Name: ItemTemplate
   m_TagString: Untagged
@@ -2871,3 +2872,18 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 2
+--- !u!114 &7638055307266329014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6840955589263131776}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1fcf80849d8ee0d42b335838c5cf5370, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EquipmentHoverTarget
+  owner: {fileID: 0}
+  equippedSlot: 0
+  slot: 0

@@ -31,7 +31,7 @@ public static class EquipmentPlayVerification
     static void Capture(string name){if(!capture)capture=new GameObject("Equipment Capture").AddComponent<RewardScreenshotCapture>();capture.Begin(Path.GetFullPath(Folder+"/"+name+".png"));}
     static void Resolution(int width,int height)=>typeof(DashboardRewardPlayVerification).GetMethod("Resolution",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static).Invoke(null,new object[]{width,height});
     static void Layout(EquipmentPageUI page){Canvas.ForceUpdateCanvases();
-        foreach(var rect in page.GetComponentsInChildren<RectTransform>().Where(r=>r.name=="GradeEffect"||r.name.StartsWith("Item_boss")||(r.name.StartsWith("Choice")&&r.name!="Choices")||(r.name.StartsWith("Slot")&&r.parent.name=="EquippedGear"))){Check(Mathf.Abs(rect.rect.width-rect.rect.height)<.1f,"Equipment is not square: "+rect.name);}
+        foreach(var rect in page.GetComponentsInChildren<RectTransform>().Where(r=>r.name=="GradeEffect"||r.name.StartsWith("Item_boss")||(r.GetComponent<Button>()&&r.name.StartsWith("Choice")&&r.name!="Choices")||(r.name.StartsWith("Slot")&&r.parent.name=="EquippedGear"))){Check(Mathf.Abs(rect.rect.width-rect.rect.height)<.1f,"Equipment is not square: "+rect.name);}
         foreach(var text in page.GetComponentsInChildren<TMP_Text>().Where(t=>!page.claimsOnly||t.transform.IsChildOf(page.transform.Find("ItemModal"))||t.transform.IsChildOf(page.transform.Find("ItemDetail"))||t.transform.IsChildOf(page.transform.Find("ConfirmEquipment")))){text.ForceMeshUpdate();Check(!text.isTextOverflowing,"Clipped: "+text.text);}}
     static void CheckInventory(EquipmentPageUI page){
         var view=page.GetComponentInChildren<EquipmentInventoryUI>();Check(view&&view.grid.constraintCount==6,"Six-column inventory binding");
@@ -92,7 +92,7 @@ public static class EquipmentPlayVerification
         manager.PlayerData.experience=2025;manager.PlayerData.fishCoins=1000;manager.PlayerData.rewardDays.Add(new RewardDay{day="2026-10-20",questsClaimed=true});foreach(var p in manager.PlayerData.bossProgress){p.wins=15;p.pendingClaims=3;}manager.SaveData();
         nav.ShowPage(MainMenuPage.Boss);yield return 1;var boss=nav.pages[3].GetComponent<BossPageUI>();boss.stageButton.onClick.Invoke();yield return .4;boss.masteryBars[0].transform.parent.GetComponent<Button>().onClick.Invoke();yield return .5;
         page=nav.pages[3].GetComponent<EquipmentPageUI>();Check(nav.CurrentPage==MainMenuPage.Boss,"Stage rewards must stay on Boss");Capture("equipment-claim-1920");Layout(page);yield return .4;
-        Click(page.transform,"ItemModal/Card/Choices/Choice0");Click(page.transform,"ItemDetail/Popup/Button_Select");Check(service.Snapshot.equipment.Count==0,"Claim needs confirmation");Click(page.transform,"ConfirmEquipment/Card/Confirm");Check(service.Snapshot.equipment.Count==1&&service.Snapshot.bossProgress[0].pendingClaims==2,"Claim saved");
+        Click(page.transform,"ItemModal/Card/Choices/ChoiceArea0/Choice0");Click(page.transform,"ItemDetail/Popup/Button_Select");Check(service.Snapshot.equipment.Count==0,"Claim needs confirmation");Click(page.transform,"ConfirmEquipment/Card/Confirm");Check(service.Snapshot.equipment.Count==1&&service.Snapshot.bossProgress[0].pendingClaims==2,"Claim saved");
         nav.ShowPage(MainMenuPage.CatHome);yield return .5;page=nav.pages[4].GetComponent<EquipmentPageUI>();page.OpenItem("boss1-weapon");
         Click(page.transform,"ItemDetail/Popup/Button_Select");Check(service.Snapshot.equippedWeaponId=="boss1-weapon","Equip saved directly");
         Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Equip must not ask for confirmation");
@@ -144,7 +144,8 @@ public static class EquipmentPlayVerification
             var setView=page.transform.Find("ItemDetail").GetComponent<EquipmentItemDetailUI>();
             int tierIndex=EquipmentRules.Find(setId).Tier;
             Check(setView.grade.sprite==setView.tierLabels[tierIndex-1],"Set badge follows equipment tier");
-            Check(setView.setBonusTitles.All(t=>t.text.Contains("ACTIVE"))==(tierIndex==3),"Set cards reflect equipped thresholds");
+            Check(setView.setBonusTitles.All(t=>!t.text.Contains("ACTIVE")),"Set cards omit ACTIVE text");
+            foreach(var card in setView.setBonusCards){Color.RGBToHSV(card.color,out _,out float saturation,out _);Check((saturation>.15f)==(tierIndex==3),"Set card colour reflects equipped threshold");}
             Capture("set-cards-tier-"+tierIndex);yield return .3;
         }
         Click(page.transform,"ItemDetail/Popup/TopFrame/Button_Close");page.Refresh();yield return .8;Layout(page);Capture("equipment-full-1920");yield return .5;

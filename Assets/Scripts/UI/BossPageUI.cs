@@ -8,6 +8,7 @@ public sealed class BossPageUI : MonoBehaviour
 {
     public BossArenaPreview arena;
     public BossBattleActors actors;
+    public BossBattleSkipUI skipUI;
     public RectTransform catHealth;
     public Slider bossBar;
     public TMP_Text bossTitle,bossValue,message,actionLabel,confirmText,catDamage,bossDamage;
@@ -21,11 +22,17 @@ public sealed class BossPageUI : MonoBehaviour
     public Image[] masteryIcons;
     public Sprite masteryChestClosed,masteryChestOpen;
     public ChestRewardParticles[] masteryParticles;
+    public Image confirmationPortrait;
+    public Sprite[] bossPortraits;
+    public TMP_Text confirmationTitle,confirmationCost;
+    public TMP_Text[] confirmationStats;
+    public GameObject confirmationStatGroup;
     public GameObject masterLock;
     public Button masterChoice,closeStages;
     public TMP_Text masterCaption;
     public GameObject[] resultPanels;
     public TMP_Text[] resultValues,resultDetails;
+    public RewardFlightUI rewardFlights;
     public Button[] resultContinue;
     TaskService service;
     BattleAttempt attempt;
@@ -49,6 +56,7 @@ public sealed class BossPageUI : MonoBehaviour
         bossHealthRestPosition=((RectTransform)bossBar.transform).anchoredPosition;
         damageNumbers=GetComponent<BattleDamageNumbers>()??gameObject.AddComponent<BattleDamageNumbers>();
         damageNumbers.Initialize(catDamage);catDamage.gameObject.SetActive(false);bossDamage.gameObject.SetActive(false);
+        for(int i=0;i<masteryParticles.Length;i++)masteryParticles[i].Bind(masteryIcons[i].rectTransform);
         service=GameDataManager.EnsureInstance().Tasks;
         action.onClick.AddListener(Action);
         stageButton.onClick.AddListener(()=>{RefreshStages();stagePicker.SetActive(true);});
@@ -56,7 +64,7 @@ public sealed class BossPageUI : MonoBehaviour
         for(int i=0;i<stageChoices.Length;i++){int id=i+1;stageChoices[i].onClick.AddListener(()=>SelectStage(id,0));}
         masterChoice.onClick.AddListener(()=>{int n=service.Snapshot.masterStage;SelectStage(1+(n-1)%3,n);});
         confirm.onClick.AddListener(Confirm);
-        cancel.onClick.AddListener(()=>confirmation.SetActive(false));
+        cancel.onClick.AddListener(()=>{confirmation.SetActive(false);if(UnityEngine.EventSystems.EventSystem.current)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(action.gameObject);});
         foreach(var button in resultContinue)button.onClick.AddListener(CloseResult);
         for(int i=0;i<masteryBars.Length;i++){
             int boss=i+1;var frame=masteryBars[i].transform.parent;
@@ -91,7 +99,7 @@ public sealed class BossPageUI : MonoBehaviour
             int progress=p.wins<=0?0:p.wins>=15?5:1+(p.wins-1)%5;
             masteryBars[i].SetValueWithoutNotify(progress);
             if(masteryIcons!=null&&i<masteryIcons.Length&&masteryIcons[i])masteryIcons[i].sprite=p.pendingClaims>0?masteryChestOpen:masteryChestClosed;
-            if(masteryParticles!=null&&i<masteryParticles.Length&&masteryParticles[i])masteryParticles[i].gameObject.SetActive(p.pendingClaims>0);
+            if(masteryParticles!=null&&i<masteryParticles.Length&&masteryParticles[i])masteryParticles[i].gameObject.SetActive(p.pendingClaims>0&&service.EquipmentUnlocked);
             masteryValues[i].text=$"{progress}/5"+(p.pendingClaims>0?" · Claim":"");
             stageCaptions[i].text=$"Stage {id} · {(id==1?"Cyclope":id==2?"Orc":"Demon")}\n"+(gate??"");
         }
@@ -111,6 +119,7 @@ public sealed class BossPageUI : MonoBehaviour
         }
         actionLabel.text=settlementPending?"Retry Save":attempt!=null?"Stop":"Challenge";
         stageButton.interactable=attempt==null;
+        if(skipUI)skipUI.RefreshState();
     }
     public void Action()
     {
@@ -119,10 +128,19 @@ public sealed class BossPageUI : MonoBehaviour
         if(!confirmStop){
             var error=service.BattleEntryError(selected,master);
             if(error!=null){message.text=error;return;}
-            var b=BattleRules.Boss(selected,master);
-            confirmText.text=$"{Name}\nHP {b.hp}   ATK {b.atk:0.#}   DEF {b.def:0.#}\nASPD {b.aspd:0.00}/s\nEnter for 1 ticket?";
-        } else confirmText.text="Stop this battle?\nThe entry ticket stays spent.";
+        }
+        var b=BattleRules.Boss(selected,master);
+        confirmationTitle.text=confirmStop?"Stop battle?":(master>0?$"Master {master} · ":"")+Name;
+        confirmationPortrait.sprite=bossPortraits[selected-1];
+        confirmationStatGroup.SetActive(true);
+        confirmationStats[0].text=$"{b.hp}";confirmationStats[1].text=$"{b.atk:0.#}";
+        confirmationStats[2].text=$"{b.def:0.#}";confirmationStats[3].text=$"{b.aspd:0.00}/s";
+        confirmationCost.text=confirmStop?"Ticket already used":"1 Boss Ticket";
+        confirmText.text=confirmStop?"The entry ticket stays spent.":"Ready to challenge?";
+        confirm.GetComponentInChildren<TMP_Text>().text=confirmStop?"Stop battle":"Challenge";
+        cancel.GetComponentInChildren<TMP_Text>().text=confirmStop?"Keep fighting":"Cancel";
         confirmation.SetActive(true);
+        if(UnityEngine.EventSystems.EventSystem.current)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(cancel.gameObject);
     }
     public void Confirm()
     {
@@ -143,7 +161,7 @@ public sealed class BossPageUI : MonoBehaviour
             EnsureActors();
             if(actors.Ready) {actors.ResetPose();resetPreview=false;returnToIdleAt=0;damageNumbers.Clear();Refresh();}
         }
-        if(attempt==null||settlementPending)return;
+        if(attempt==null||settlementPending||(skipUI&&skipUI.IsConfirming))return;
         try {
             if(approaching){if(actors.Run(Time.unscaledDeltaTime)){approaching=false;actors.StartCombat(attempt.cat,attempt.boss,attempt.equippedEquipment.FirstOrDefault(i=>EquipmentRules.Find(i.id)?.Slot==EquipmentSlot.Weapon)?.id);}return;}
             simulation.Advance(Time.unscaledDeltaTime,OnHit);
@@ -167,9 +185,14 @@ public sealed class BossPageUI : MonoBehaviour
     public void Settle(BattleOutcome outcome)
     {
         if(attempt==null)return;
+        if(skipUI)skipUI.Dismiss();
         pendingOutcome=outcome;
         actors.Finish(outcome);
-        if(!service.ResolveBattle(attempt.id,outcome)){settlementPending=true;message.text=service.LastError;Refresh();return;}
+        bool saved;
+        if(rewardFlights)rewardFlights.SetRewardOrigin(resultValues[0].rectTransform);
+        try { saved=service.ResolveBattle(attempt.id,outcome); }
+        finally { if(rewardFlights)rewardFlights.SetRewardOrigin(null); }
+        if(!saved){settlementPending=true;message.text=service.LastError;Refresh();return;}
         var receipt=service.Snapshot.battles.Single(b=>b.id==attempt.id);
         message.text=receipt.outcome==BattleOutcome.Victory ? "Victory"+(receipt.experience>0?$" · +{receipt.experience} EXP":"") : receipt.outcome==BattleOutcome.Defeat?"Defeat · Train and try again":receipt.outcome==BattleOutcome.Stopped?"Battle stopped":"Battle interrupted · Ticket restored";
         if(isActiveAndEnabled && (receipt.outcome==BattleOutcome.Victory || receipt.outcome==BattleOutcome.Defeat)) {
@@ -190,6 +213,16 @@ public sealed class BossPageUI : MonoBehaviour
         foreach(var panel in resultPanels)panel.SetActive(false);
         returnToIdleAt=0;resetPreview=true;message.text="";
     }
+    public void SkipBattle()
+    {
+        if(!IsBattling || simulation==null)return;
+        try {
+            // Advance the existing snapshot without playing each hit. Settlement
+            // still recomputes and persists the authoritative result exactly once.
+            simulation.Advance(120);
+            Settle(simulation.Outcome);
+        } catch(Exception e){Debug.LogException(e);Settle(BattleOutcome.Error);}
+    }
     void LateUpdate()
     {
         if(arena.TryGetCatHeadViewport(out var point)){
@@ -205,6 +238,7 @@ public sealed class BossPageUI : MonoBehaviour
     void OnApplicationQuit(){quitting=true;if(attempt!=null)service.ResolveBattle(attempt.id,settlementPending?pendingOutcome:simulation!=null&&simulation.Outcome!=BattleOutcome.Running?simulation.Outcome:BattleOutcome.Error);}
     void OnDisable()
     {
+        if(skipUI)skipUI.Dismiss();
         if(service!=null)service.Changed-=Refresh;
         if(!quitting&&attempt!=null)Settle(settlementPending?pendingOutcome:simulation!=null&&simulation.Outcome!=BattleOutcome.Running?simulation.Outcome:BattleOutcome.Stopped);
         if(resultPanels!=null)foreach(var panel in resultPanels)if(panel)panel.SetActive(false);

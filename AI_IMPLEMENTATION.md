@@ -55,6 +55,11 @@ editing, SidebarNavigationButton and JuicyButton components. Existing Fredoka
 fonts are retained, with a runtime Windows Microsoft YaHei fallback for
 Chinese in Chat and saved tasks; vendor assets and primary typography remain unchanged.
 
+AI Settings opened from Chat dismisses directly back to Chat and restores focus
+to its settings button. Opening AI from general Settings retains its normal back
+navigation. Message bubbles derive their width and height from the editable
+ChatMessage text insets, keeping speaker and body text away from the frame edges.
+
 The new navigation enum is appended after Leaderboard, preserving old indices.
 The Canvas change adds the new page/button and removes only advice subtrees.
 The Settings change removes automatic advice controls and updates privacy copy.

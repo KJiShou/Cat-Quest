@@ -50,11 +50,21 @@ public static class BattleVerification
         Check(service.ResolveBattle(a.id,BattleOutcome.Victory)&&service.ResolveBattle(a.id,BattleOutcome.Victory),"Retry settlement");
         Check(m.Data.experience==xp+30&&m.Data.bossProgress[0].wins==1&&m.Data.tickets==49,"Single first-clear reward");
         for(int i=1;i<15;i++){Check(service.BeginBattle(1,0,out a),"Replay entry");Check(service.ResolveBattle(a.id,BattleOutcome.Victory),"Replay settle");}
-        Check(m.Data.bossProgress[0].pendingClaims==3&&m.Data.bossProgress[0].wins==15&&m.Data.fishCoins==0&&m.Data.experience==xp+30,"Milestones stored, equipment deferred, no repeat EXP");
+        Check(m.Data.bossProgress[0].pendingClaims==3&&m.Data.bossProgress[0].wins==15&&m.Data.fishCoins==0&&m.Data.experience==xp+30+14*10,"Milestones stored, equipment deferred, repeat EXP including milestones");
         Check(service.BeginBattle(1,0,out a),"Stop entry");int tickets=m.Data.tickets;service.ResolveBattle(a.id,BattleOutcome.Stopped);Check(m.Data.tickets==tickets&&m.Data.bossProgress[0].wins==15,"Stop consumes ticket");
         Check(service.BeginBattle(1,0,out a),"Recovery entry");tickets=m.Data.tickets;service=new TaskService(m,new SystemTaskClock());Check(m.Data.tickets==tickets+1,"Recovery refunds");new TaskService(m,new SystemTaskClock());Check(m.Data.tickets==tickets+1,"Recovery exactly once");
         m.Data.experience=0;Check(service.BattleEntryError(2).Contains("10"),"Level gate despite clear");m.Data.experience=Xp(100);
-        foreach(int id in new[]{2,3}){Check(service.BeginBattle(id,0,out a),"Next boss");Check(service.ResolveBattle(a.id,BattleOutcome.Victory),"Next victory");}
+        foreach(int id in new[]{2,3}){
+            xp=m.Data.experience;
+            Check(service.BeginBattle(id,0,out a),"Next boss");Check(service.ResolveBattle(a.id,BattleOutcome.Victory),"Next victory");
+            Check(m.Data.experience==xp+(id==2?60:100),"First clear EXP");
+            Check(service.BeginBattle(id,0,out a),"Repeat boss");xp=m.Data.experience;
+            m.fail=true;Check(!service.ResolveBattle(a.id,BattleOutcome.Victory)&&m.Data.experience==xp,"Repeat EXP rolls back on save failure");m.fail=false;
+            Check(service.ResolveBattle(a.id,BattleOutcome.Victory)&&service.ResolveBattle(a.id,BattleOutcome.Victory),"Repeat retry and duplicate");
+            Check(m.Data.experience==xp+10*id&&m.Data.battles.Last().experience==10*id,"Repeat EXP exactly once");
+            service=new TaskService(m,new SystemTaskClock());service.ResolveBattle(a.id,BattleOutcome.Victory);
+            Check(m.Data.experience==xp+10*id,"Reload cannot repay EXP");
+        }
         Check(service.BeginBattle(1,1,out a),"Master entry");xp=m.Data.experience;int coins=m.Data.fishCoins;service.ResolveBattle(a.id,BattleOutcome.Victory);
         Check(m.Data.masterStage==2&&m.Data.experience==xp+60&&m.Data.fishCoins==coins+30,"Master first reward");
         Check(!service.BeginBattle(1,1,out _),"Master stage cannot repay");

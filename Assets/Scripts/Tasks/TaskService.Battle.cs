@@ -53,7 +53,7 @@ public sealed partial class TaskService
                 bool first=p.wins==0;
                 p.wins=checked(p.wins+1);
                 bool milestone=p.wins==5||p.wins==10||p.wins==15;
-                if(first) b.experience=b.bossId==1?30:b.bossId==2?60:100;
+                b.experience=first ? (b.bossId==1?30:b.bossId==2?60:100) : 10*b.bossId;
                 if(milestone) p.pendingClaims++;
                 else if(p.claimedComponents==3) b.fishCoins=10*b.bossId;
             }

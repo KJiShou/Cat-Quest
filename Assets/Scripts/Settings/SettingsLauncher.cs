@@ -9,4 +9,8 @@ public sealed class SettingsLauncher : MonoBehaviour
         if (!instance) return;
         instance.Open(gameObject);
     }
+    public void OpenAIFromChat(GameObject opener)
+    {
+        if (instance) instance.OpenAIFromChat(opener);
+    }
 }

@@ -39,6 +39,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     string editingTagId, deletingTagId, selectedColor = TagColors.DefaultHex;
     [NonSerialized] bool initialized, subscribed;
     bool refreshing, nameDirty;
+    bool closeAiToOpener;
     LeaderboardKind selectedRanking;
     GameObject lastSelection;
     readonly List<SettingsTagRow> rows = new List<SettingsTagRow>();
@@ -116,7 +117,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     }
     public void Open(GameObject opener)
     {
-        Initialize(); returnFocus = opener;
+        Initialize(); returnFocus = opener; closeAiToOpener = false;
         gameObject.SetActive(true); transform.SetAsLastSibling();
         RefreshSettings(); Show(settingsPage, "Settings", notifications.gameObject);
     }
@@ -194,6 +195,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     }
     void BackToSettings()
     {
+        if (CurrentView == "AI" && closeAiToOpener) { Close(); return; }
         if (CurrentView == "Account") account.CancelSignIn();
         RefreshSettings(); Show(settingsPage, "Settings", CurrentView == "Account" ? accountButton.gameObject :
             CurrentView == "AI" && aiButton ? aiButton.gameObject : tagsButton.gameObject);
@@ -348,6 +350,12 @@ public sealed class SettingsPanelUI : MonoBehaviour
     {
         if (!aiPage) return;
         Show(aiPage, "AI", aiBack.gameObject);
+    }
+    public void OpenAIFromChat(GameObject opener)
+    {
+        Open(opener);
+        closeAiToOpener = true;
+        OpenAI();
     }
     public void RefreshAiNavigation()
     {

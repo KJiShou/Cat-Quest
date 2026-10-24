@@ -21,8 +21,11 @@ public sealed class AiChatRow : MonoBehaviour
     void Resize()
     {
         priorWidth = ((RectTransform)transform).rect.width;
-        float width = Mathf.Min(Mathf.Max(180, text.GetPreferredValues(text.text).x + 40), Mathf.Max(120, Mathf.Min(priorWidth * .84f, priorWidth - 76)));
-        float height = text.GetPreferredValues(text.text, width - 40, 0).y + 66;
+        // Keep wrapping and bubble height aligned with the authored text insets.
+        float horizontalPadding = -text.rectTransform.sizeDelta.x;
+        float verticalPadding = -text.rectTransform.sizeDelta.y;
+        float width = Mathf.Min(Mathf.Max(180, text.GetPreferredValues(text.text).x + horizontalPadding), Mathf.Max(120, Mathf.Min(priorWidth * .84f, priorWidth - 76)));
+        float height = text.GetPreferredValues(text.text, Mathf.Max(1, width - horizontalPadding), 0).y + verticalPadding;
         bubble.anchorMin = bubble.anchorMax = bubble.pivot = new Vector2(user ? 1 : 0, 1);
         bubble.anchoredPosition = new Vector2(user ? -76 : 76, 0); bubble.sizeDelta = new Vector2(width, height);
         GetComponent<LayoutElement>().preferredHeight = Mathf.Max(height,64);

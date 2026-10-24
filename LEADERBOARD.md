@@ -14,6 +14,7 @@ In **Settings → Show on Dashboard**, independent switches show or hide **Tasks
 - Power ties use higher Cat Level, then ascending stable player ID. Other ties use ascending player ID.
 - Boss progression 1–3 displays Boss 1–3; 4 onwards displays Master 1 onwards.
 - The scrollable list shows the leading 50 published records. A fixed **Your Rank** row shows the signed-in participant's exact position, including outside the first 50. If present in the leading list, the player is also marked **(You)** there.
+- The participant's rank, name, Cat Level and score use bold black text in both rows and the shared Dashboard preview. Reused rows restore their authored styling when displaying another player.
 - Outside the first 50, the reader fetches the player's published record and counts records before its full ordering cursor. All reads use the first query's server `readTime`. It never substitutes unsent local statistics or invents rank zero.
 - Opening the page, changing category, pressing Refresh, or a change in account/publication state refreshes the ranking. There is no continuous polling. Closing the page cancels its own requests without cancelling publication.
 - Signed-in users can view rankings without participating. Signed-out, empty, unpublished, opted-out, wrong-account and failed-read states are explicit. Account opens the existing Settings account modal.

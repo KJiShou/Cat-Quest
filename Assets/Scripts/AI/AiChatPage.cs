@@ -37,8 +37,7 @@ public sealed class AiChatPage : MonoBehaviour
         today.onClick.AddListener(() => SendText("What tasks do I have today?"));
         plan.onClick.AddListener(() => { input.text = "Help me plan tasks for "; input.ActivateInputField(); });
         settings.onClick.AddListener(() => {
-            var launcher = FindFirstObjectByType<SettingsLauncher>(); launcher.Open();
-            FindFirstObjectByType<SettingsPanelUI>().OpenAI();
+            FindFirstObjectByType<SettingsLauncher>().OpenAIFromChat(settings.gameObject);
         });
         saveDraft.onClick.AddListener(() => {
             if (editing == null) return;
