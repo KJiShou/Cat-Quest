@@ -33,7 +33,8 @@ public sealed class FocusFishSpectators : MonoBehaviour
 
     public void SetFishCount(int count)
     {
-        count = Mathf.Max(0, count);
+        // Currency scales with level; keep the decorative audience at its original maximum.
+        count = Mathf.Clamp(count, 0, TaskService.FocusSessionMinuteCap / 5 * 2);
         if (!fishPrefab || !ninja) return;
         while (fish.Count > count)
         {

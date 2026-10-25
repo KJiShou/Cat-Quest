@@ -11,6 +11,7 @@ public sealed class FocusScenePreview : MonoBehaviour
     Vector3 cameraHome;
     RawImage view;
     RenderTexture texture;
+    CharacterEquipmentAura equipmentAura;
     public int targetHeight = 720;
     public float minimumOrthographicSize = 10, horizontalHalfWidth = 13;
     public void Bind(IFocusPresentation source)
@@ -18,6 +19,8 @@ public sealed class FocusScenePreview : MonoBehaviour
         if (!Stage) return;
         Stage.GetComponentInChildren<FocusTrainingBattle>().Presentation = source;
         Stage.GetComponentInChildren<FocusFishSpectators>().Presentation = source;
+        if (source is CompanionState state && equipmentAura)
+            equipmentAura.SetRemote(state.connected ? state.equipmentAuraTier : 0, state.connected ? state.equipmentAuraPieces : 0);
     }
 
     void OnEnable()
@@ -28,6 +31,7 @@ public sealed class FocusScenePreview : MonoBehaviour
         {
             Stage = Instantiate(stagePrefab, new Vector3(10000, 10000, 0), Quaternion.identity);
             Stage.name = "Focus Page Stage";
+            equipmentAura = Stage.GetComponentInChildren<CharacterEquipmentAura>(true);
             PreviewCamera = Stage.GetComponentInChildren<Camera>(true);
             cameraHome = PreviewCamera.transform.position;
             Stage.GetComponentInChildren<FocusFishSpectators>().viewportCamera = PreviewCamera;

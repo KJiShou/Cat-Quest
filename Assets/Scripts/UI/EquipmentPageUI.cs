@@ -31,8 +31,8 @@ public sealed class EquipmentPageUI : MonoBehaviour
     }
     void BindControls()
     {
-        for(int i=0;i<claimView.buttons.Length;i++){int slot=i;claimView.buttons[i].onClick.AddListener(()=>OpenItem(EquipmentRules.Catalog.Single(x=>x.Tier==claimView.Boss&&(int)x.Slot==slot).Id));}
-        modal.Find("Card/Close").GetComponent<Button>().onClick.AddListener(()=>modal.gameObject.SetActive(false));
+        for(int i=0;i<claimView.buttons.Length;i++){int slot=i;claimView.buttons[i].onClick.AddListener(()=>ClaimMilestone(slot));}
+        modal.Find("Card/Close").GetComponent<Button>().onClick.AddListener(()=>{HideHover();modal.gameObject.SetActive(false);});
         confirmation.Find("Card/Confirm").GetComponent<Button>().onClick.AddListener(()=>confirmAction?.Invoke());
         confirmation.Find("Card/Cancel").GetComponent<Button>().onClick.AddListener(()=>{confirmation.gameObject.SetActive(false);if(itemDetail&&itemDetail.gameObject.activeSelf)itemDetail.FocusActions();});
         itemDetail.close.onClick.AddListener(()=>itemDetail.gameObject.SetActive(false));
@@ -75,13 +75,15 @@ public sealed class EquipmentPageUI : MonoBehaviour
     public void OpenClaim(int boss){
         if(!Ready)return;HideHover();itemDetail.gameObject.SetActive(false);modal.gameObject.SetActive(true);modal.SetAsLastSibling();choices.gameObject.SetActive(true);modalInfo.text="";modalTitle.text=EquipmentRules.BossName(boss)+" Set";
         claimView.Show(service.Snapshot,boss,service.EquipmentUnlocked);
+        for(int i=0;i<claimView.buttons.Length;i++)claimView.buttons[i].GetComponent<EquipmentHoverTarget>().Bind(this,EquipmentRules.Catalog.Single(x=>x.Tier==boss&&(int)x.Slot==i).Id);
         if(UnityEngine.EventSystems.EventSystem.current)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(modal.Find("Card/Close").gameObject);
     }
     public void ShowHover(EquipmentHoverTarget source,string id,Vector2 position)
     {
-        if(!Ready||claimsOnly||!isActiveAndEnabled||modal.gameObject.activeSelf||confirmation.gameObject.activeSelf||
+        bool reward=source&&source.masteryReward&&source.transform.IsChildOf(claimView.transform)&&modal.gameObject.activeSelf;
+        if(!Ready||(!reward&&(claimsOnly||modal.gameObject.activeSelf))||!isActiveAndEnabled||confirmation.gameObject.activeSelf||
             (itemDetail.gameObject.activeSelf&&!itemDetail.IsHoverPreview))return;
-        if(string.IsNullOrEmpty(id)||!service.Snapshot.equipment.Any(x=>x.id==id)){HideHover();return;}
+        if(string.IsNullOrEmpty(id)||(!reward&&!service.Snapshot.equipment.Any(x=>x.id==id))){HideHover();return;}
         hoverSource=source;ShowItem(id,true,position);
     }
     public void MoveHover(EquipmentHoverTarget source,Vector2 position)
@@ -103,7 +105,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
         bool owned=item!=null;int itemLevel=item?.level??1;
         if(!hover){selected=id;expectedLevel=itemLevel;}
         itemDetail.SetHoverPreview(hover,position);
-        modal.gameObject.SetActive(false);itemDetail.gameObject.SetActive(true);itemDetail.transform.SetAsLastSibling();
+        if(!hover)modal.gameObject.SetActive(false);itemDetail.gameObject.SetActive(true);itemDetail.transform.SetAsLastSibling();
         itemDetail.itemName.text=def.Name;itemDetail.tier.text=EquipmentRules.BossName(def.Tier).ToUpperInvariant()+" SET";
         itemDetail.level.text=itemLevel.ToString();itemDetail.itemIcon.sprite=slotIcons[(int)def.Slot];
         itemDetail.currentLabel.text=def.Slot==EquipmentSlot.Weapon?"Attack":def.Slot==EquipmentSlot.Body?"Defence":"Speed";
@@ -123,15 +125,25 @@ public sealed class EquipmentPageUI : MonoBehaviour
             itemDetail.upgrade.interactable=error==null;itemDetail.status.text=error??"";
         }else{
             itemDetail.equipLabel.text="Claim";
-            itemDetail.equip.interactable=service.EquipmentUnlocked&&d.bossProgress.Single(x=>x.bossId==def.Tier).pendingClaims>0;
+            itemDetail.equip.interactable=service.ClaimEquipmentError(id)==null;
             itemDetail.status.text=!service.EquipmentUnlocked?"Claim a Daily Reward to unlock equipment.":itemDetail.equip.interactable?"Uses 1 mastery reward. Starts at Lv. 1.":"No mastery rewards available.";
         }
         itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().SetPreview($"+{EquipmentRules.Bonus(def,itemLevel+1)-EquipmentRules.Bonus(def,itemLevel):0.##} {(def.Slot==EquipmentSlot.Weapon?"ATK":def.Slot==EquipmentSlot.Body?"DEF":"ASPD")}");
         itemDetail.close.gameObject.SetActive(!hover);
         if(hover){
             itemDetail.equip.gameObject.SetActive(false);itemDetail.upgrade.gameObject.SetActive(false);itemDetail.upgradeCaption.SetActive(false);
-            itemDetail.status.text=$"Upgrade: {EquipmentRules.UpgradeCost(itemLevel)} Fish. Click item to manage.";
+            itemDetail.status.text=hoverSource&&hoverSource.masteryReward?(owned?"Collected":service.ClaimEquipmentError(id)??"Click chest to collect."):$"Upgrade: {EquipmentRules.UpgradeCost(itemLevel)} Fish. Click item to manage.";
         }else itemDetail.FocusActions();
+    }
+
+    void ClaimMilestone(int slot)
+    {
+        if(!Ready)return;
+        var def=EquipmentRules.Catalog.Single(x=>x.Tier==claimView.Boss&&(int)x.Slot==slot);
+        HideHover();
+        bool success=service.ClaimEquipment(def.Id);
+        claimView.Show(service.Snapshot,claimView.Boss,service.EquipmentUnlocked);
+        claimView.status.text=success?"Received "+def.Name+" · "+EquipmentRules.Effect(def,1):service.LastError;
     }
 
     void Ask(string text,Action action){itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().Dismiss();confirmInfo.text=text;confirmAction=action;confirmation.gameObject.SetActive(true);confirmation.SetAsLastSibling();if(UnityEngine.EventSystems.EventSystem.current)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(confirmation.Find("Card/Confirm").gameObject);}

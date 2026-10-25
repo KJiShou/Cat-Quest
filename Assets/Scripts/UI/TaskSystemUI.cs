@@ -44,8 +44,8 @@ public class TaskSystemUI : MonoBehaviour
     private bool refocusQuick;
     private bool suppressQuickBlur;
     private TaskConfirmDialog confirmation;
-    private RectTransform modalOverlay;
-    private RectTransform modalPanel;
+    public TaskFilterDialog filterDialogTemplate;
+    private TaskFilterDialog filters;
     private float nextClockCheck;
     private bool editing;
     private readonly List<(TMP_Text label, TaskView view)> scheduleLabels = new List<(TMP_Text, TaskView)>();
@@ -116,7 +116,7 @@ public class TaskSystemUI : MonoBehaviour
         return true;
     }
     private void OnApplicationFocus(bool focus) { if (focus && Service != null) { Service.RefreshDate(); Refresh(); } }
-    private void OnDestroy() { if (Service != null) Service.Changed -= Refresh; }
+    private void OnDestroy() { if (Service != null) Service.Changed -= Refresh; if(filters) Destroy(filters.gameObject); }
 
     private void BuildDetails()
     {
@@ -137,7 +137,7 @@ public class TaskSystemUI : MonoBehaviour
     private void CaptureOutsideClick(Transform target)
     {
         if(editing || SelectedKey==null || !detailsRoot.gameObject.activeInHierarchy
-            || modalOverlay.gameObject.activeSelf || confirmation.Root.activeSelf) return;
+            || (filters && filters.gameObject.activeSelf) || confirmation.Root.activeSelf) return;
         if(target && target.IsChildOf(detailsRoot)) return;
         for(var current=target; current && current.IsChildOf(listContent); current=current.parent)
             if(current.name.StartsWith("Task_",StringComparison.Ordinal)) return;
@@ -146,25 +146,16 @@ public class TaskSystemUI : MonoBehaviour
     private void BuildModal()
     {
         var canvas=GetComponentInParent<Canvas>().rootCanvas;
-        modalOverlay=TaskUIBuilder.Rect(canvas.transform,"TaskDialog"); TaskUIBuilder.Stretch(modalOverlay); ui.Image(modalOverlay,new Color(0,0,0,.08f));
-        var close=modalOverlay.gameObject.AddComponent<Button>(); close.onClick.AddListener(CloseModal);
-        close.gameObject.AddComponent<JuicyButton>().enabled=false; // Backdrop dismiss surface, not a visible button.
-        modalPanel=ui.Column(modalOverlay,"Dialog",-1,12); modalPanel.anchorMin=modalPanel.anchorMax=new Vector2(.5f,.5f); modalPanel.pivot=new Vector2(.5f,.5f); modalPanel.sizeDelta=new Vector2(540,440);
-        ui.Image(modalPanel,Color.white,roundedSprite); modalPanel.gameObject.AddComponent<Button>();
-        modalPanel.gameObject.AddComponent<JuicyButton>().enabled=false; // Swallow panel clicks without animating the whole dialog.
-        modalPanel.GetComponent<VerticalLayoutGroup>().padding=new RectOffset(24,24,20,20);
-        modalOverlay.gameObject.SetActive(false);
+        filters=Instantiate(filterDialogTemplate,canvas.transform);
+        filters.gameObject.SetActive(false);
         confirmation=new TaskConfirmDialog(confirmDialogTemplate,canvas.transform,font);
     }
     public void Notify(string message,bool error=false)
     {
         if(error) confirmation.ShowNotice("Notice",message);
     }
-    private void OpenModal(string title,float height=440)
-    {
-        TaskUIBuilder.Clear(modalPanel); modalPanel.sizeDelta=new Vector2(540,height); modalOverlay.gameObject.SetActive(true); modalOverlay.SetAsLastSibling(); ui.Text(modalPanel,title,26);
-    }
-    private void CloseModal() => modalOverlay.gameObject.SetActive(false);
+    private void CloseModal() { if(filters) filters.Dismiss(); }
+    private void OnDisable() { CloseModal(); }
     private void Confirm(string title,string message,Action accepted)
     {
         CloseModal(); confirmation.Show(title,message,accepted);
@@ -229,7 +220,12 @@ public class TaskSystemUI : MonoBehaviour
         SpaceSchedule(date);
         var difficulty=TaskUIBuilder.Find(row.transform,"Normal_Difficulty");
         TaskUIBuilder.DifficultyBadge(difficulty,view.task.difficulty,editor.difficultySprites);
-        foreach(var text in row.GetComponentsInChildren<TMP_Text>(true)) if(text.name.StartsWith("FishNum")) text.text=Service.PreviewReward(view).fishCoins.ToString();
+        var reward=Service.PreviewReward(view);
+        // DashboardTask's authored second numeric label belongs to the EXP icon.
+        foreach(var text in row.GetComponentsInChildren<TMP_Text>(true)) {
+            if(text.name=="FishNum") text.text=reward.fishCoins.ToString();
+            else if(text.name=="FishNum (1)") text.text=reward.experience.ToString();
+        }
         var tags=TaskUIBuilder.Find(row.transform,"Tags");
         for (int i=0;i<Math.Min(2,view.tagNames.Count);i++)
         {
@@ -428,27 +424,9 @@ public class TaskSystemUI : MonoBehaviour
     }
     private void ShowFilters()
     {
-        OpenModal("Filter Tasks",540);
-        var selectedDifficulty=difficultyFilter;
-        var radio=modalPanel.gameObject.GetComponent<ToggleGroup>() ?? modalPanel.gameObject.AddComponent<ToggleGroup>(); radio.allowSwitchOff=false;
-        var all=ui.Toggle(modalPanel,"Any difficulty",!selectedDifficulty.HasValue);
-        all.group=radio;
-        var difficultyToggles=new List<Toggle>();
-        foreach(TaskDifficulty value in Enum.GetValues(typeof(TaskDifficulty)))
-        {
-            var toggle=ui.Toggle(modalPanel,TaskService.DifficultyName(value),selectedDifficulty==value); toggle.group=radio; difficultyToggles.Add(toggle);
-            toggle.onValueChanged.AddListener(isOn=> { if(!isOn) return; selectedDifficulty=value; all.SetIsOnWithoutNotify(false); foreach(var other in difficultyToggles) if(other!=toggle) other.SetIsOnWithoutNotify(false); });
-        }
-        all.onValueChanged.AddListener(isOn=> { if(!isOn)return; selectedDifficulty=null; foreach(var toggle in difficultyToggles) toggle.SetIsOnWithoutNotify(false); });
-        var selectedTags=new HashSet<string>(tagFilters); var content=ui.ScrollContent(modalPanel,"Tags",190);
-        foreach(var tag in Service.Snapshot.tags)
-        {
-            var toggle=ui.Toggle(content,tag.name,selectedTags.Contains(tag.id)); toggle.onValueChanged.AddListener(isOn=> { if(isOn) selectedTags.Add(tag.id); else selectedTags.Remove(tag.id); });
-            var swatch=TaskUIBuilder.Rect(toggle.transform,"TagColor"); swatch.SetSiblingIndex(1);
-            var size=TaskUIBuilder.Height(swatch,16); size.minWidth=size.preferredWidth=16;
-            ui.Image(swatch,TagColors.Background(tag.colorHex),tagTintSprite).raycastTarget=false;
-        }
-        var row=ui.Row(modalPanel,"Actions",40); ui.Button(row,"Clear","Clear filters").onClick.AddListener(()=> { difficultyFilter=null; tagFilters.Clear(); CloseModal(); Refresh(); });
-        ui.Button(row,"Apply","Apply").onClick.AddListener(()=> { difficultyFilter=selectedDifficulty; tagFilters.Clear(); tagFilters.UnionWith(selectedTags); CloseModal(); Refresh(); });
+        if(!CommitQuickAdd()) return;
+        filters.Show(difficultyFilter,tagFilters,Service.Snapshot.tags,(difficulty,tags)=> {
+            difficultyFilter=difficulty; tagFilters.Clear(); tagFilters.UnionWith(tags); Refresh();
+        });
     }
 }

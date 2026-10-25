@@ -8,6 +8,25 @@ public sealed partial class TaskService
     public const int FocusSessionMinuteCap = 180;
     public const int FocusDurationSeconds = 25 * 60, RestDurationSeconds = 5 * 60;
     public static readonly RewardAmounts GoalReward = new RewardAmounts(20, 10);
+    public event Action<LevelUpReward> LevelUp;
+
+    public readonly struct LevelUpReward
+    {
+        public readonly int fromLevel, toLevel, fishCoins, tickets;
+        public LevelUpReward(int from, int to, int fish, int ticketCount)
+        { fromLevel=from; toLevel=to; fishCoins=fish; tickets=ticketCount; }
+    }
+    private static LevelUpReward SettleLevelUp(PlayerData before, PlayerData after)
+    {
+        CatLevel(before.experience,out int from,out _,out _);
+        CatLevel(after.experience,out int to,out _,out _);
+        if(to<=from) return new LevelUpReward(from,from,0,0);
+        int fish=checked((int)(5L*(to-from)*(from+to+1L)/2));
+        int tickets=to/5-from/5;
+        after.fishCoins=checked(after.fishCoins+fish);
+        after.tickets=checked(after.tickets+tickets);
+        return new LevelUpReward(from,to,fish,tickets);
+    }
 
     private static RewardDay GetRewardDay(PlayerData data, string day)
     {
@@ -16,16 +35,16 @@ public sealed partial class TaskService
         // Legacy receipts already paid; reopening a task never releases its allowance.
         var receipts = data.history.Where(h => h.rewardedLocalDay == day).ToArray();
         result = new RewardDay { day = day,
-            taskExperience = (int)Math.Min(TaskExperienceCap, receipts.Sum(h => (long)h.experience)),
-            taskFishCoins = (int)Math.Min(TaskFishCap, receipts.Sum(h => (long)h.fishCoins)) };
+            taskExperience = (int)Math.Min(int.MaxValue, receipts.Sum(h => (long)h.experience)),
+            taskFishCoins = (int)Math.Min(int.MaxValue, receipts.Sum(h => (long)h.fishCoins)) };
         data.rewardDays.Add(result);
         return result;
     }
-    private static RewardAmounts TaskAllowance(TaskDifficulty difficulty, RewardDay day)
+    private static RewardAmounts TaskAllowance(TaskDifficulty difficulty, RewardDay day, int level)
     {
         var amount = BaseReward(difficulty);
-        return new RewardAmounts(Math.Max(0, Math.Min(amount.experience, TaskExperienceCap - day.taskExperience)),
-            Math.Max(0, Math.Min(amount.fishCoins, TaskFishCap - day.taskFishCoins)));
+        return new RewardAmounts(Math.Max(0, Math.Min(ScaleRewardAmount(amount.experience, level), ScaleRewardAmount(TaskExperienceCap, level) - day.taskExperience)),
+            Math.Max(0, Math.Min(ScaleRewardAmount(amount.fishCoins, level), ScaleRewardAmount(TaskFishCap, level) - day.taskFishCoins)));
     }
     private static void AddRewards(PlayerData data, RewardAmounts amount)
     {
@@ -42,7 +61,7 @@ public sealed partial class TaskService
             var receipt = store.Data.history.FirstOrDefault(h => h.taskId == view.task.id && h.day == view.occurrence.day);
             return receipt == null ? new RewardAmounts(0, 0) : new RewardAmounts(receipt.experience, receipt.fishCoins);
         }
-        return TaskAllowance(view.task.difficulty, TodayRewards);
+        return TaskAllowance(view.task.difficulty, TodayRewards, RewardLevel);
     }
     private int GoalProgress(PlayerData data, DailyRewardGoal goal)
     {
@@ -68,9 +87,25 @@ public sealed partial class TaskService
             if (GoalProgress(data, goal) < (goal == DailyRewardGoal.ThreeQuests ? 3 : 25))
                 throw new ArgumentException("Complete this goal before claiming its reward.");
             var day = GetRewardDay(data, Today);
-            AddRewards(data, GoalReward);
-            if (goal == DailyRewardGoal.ThreeQuests) day.questsClaimed = true; else day.focusClaimed = true;
+            CatLevel(data.experience,out int level,out _,out _);
+            var reward=new RewardAmounts(ScaleRewardAmount(GoalReward.experience,level),ScaleRewardAmount(GoalReward.fishCoins,level));
+            AddRewards(data, reward);
+            if (goal == DailyRewardGoal.ThreeQuests) {
+                day.questsClaimed=true; day.questsExperience=reward.experience; day.questsFishCoins=reward.fishCoins;
+            } else {
+                day.focusClaimed=true; day.focusGoalExperience=reward.experience; day.focusGoalFishCoins=reward.fishCoins;
+            }
         });
+    }
+    public RewardAmounts PreviewDailyGoal(DailyRewardGoal goal)
+    {
+        var day=TodayRewards;
+        bool quests=goal==DailyRewardGoal.ThreeQuests;
+        if(quests?day.questsClaimed:day.focusClaimed) {
+            int xp=quests?day.questsExperience:day.focusGoalExperience;
+            return xp>0 ? new RewardAmounts(xp,quests?day.questsFishCoins:day.focusGoalFishCoins) : GoalReward;
+        }
+        return new RewardAmounts(ScaleRewardAmount(GoalReward.experience,RewardLevel),ScaleRewardAmount(GoalReward.fishCoins,RewardLevel));
     }
     public bool BeginFocus(out string sessionId)
         => BeginFocus(new FocusSessionOptions(), out sessionId);
@@ -88,8 +123,9 @@ public sealed partial class TaskService
         bool saved = Commit(data => {
             if (data.focusSessions.Any(s => s.status == FocusSessionStatus.Running))
                 throw new ArgumentException("A Focus session is already running.");
+            CatLevel(data.experience, out int rewardLevel, out _, out _);
             data.focusSessions.Add(new FocusSession { id = id, status = FocusSessionStatus.Running,
-                mode = options.mode,
+                mode = options.mode, rewardLevel = rewardLevel,
                 focusDurationSeconds = options.mode == FocusTimerMode.Stopwatch ? 0 : options.focusMinutes * 60,
                 restDurationSeconds = options.mode == FocusTimerMode.Pomodoro ? options.restMinutes * 60 : 0,
                 questId = options.questId, questTitle = options.questTitle, occurrenceDay = options.occurrenceDay,
@@ -98,14 +134,40 @@ public sealed partial class TaskService
         if (saved) sessionId = id;
         return saved;
     }
-    public static int FocusFishForSeconds(double elapsedSeconds, int alreadyRewardedMinutes = 0)
+    // Integer tenths avoid floating-point rounding at reward boundaries.
+    public static int ScaleRewardAmount(int amount, int level)
+        => checked((int)((long)amount * (Math.Max(1, level) + 9L) / 10));
+    public int RewardLevel { get { CatLevel(store.Data.experience, out int level, out _, out _); return level; } }
+    public int TaskExperienceLimit => ScaleRewardAmount(TaskExperienceCap, RewardLevel);
+    public int TaskFishLimit => ScaleRewardAmount(TaskFishCap, RewardLevel);
+    public int FocusRewardLevel
     {
-        if (double.IsNaN(elapsedSeconds) || double.IsInfinity(elapsedSeconds) || elapsedSeconds < 0) return 0;
-        int minutes = (int)Math.Floor(Math.Min(elapsedSeconds, FocusSessionMinuteCap * 60d) / 60);
-        int eligible = Math.Max(0, Math.Min(minutes, FocusMinuteCap - alreadyRewardedMinutes));
-        return eligible / 5 * 2;
+        get
+        {
+            var running = store.Data.focusSessions.FirstOrDefault(s => s.status == FocusSessionStatus.Running);
+            if (running != null) return Math.Max(1, running.rewardLevel);
+            CatLevel(store.Data.experience, out int level, out _, out _);
+            return level;
+        }
     }
-    public int PreviewFocusFish(double elapsedSeconds) => FocusFishForSeconds(elapsedSeconds, TodayRewards.focusMinutes);
+    public int FocusDailyMinuteLimit => FocusMinuteCap;
+    public int FocusSessionMinuteLimit => FocusSessionMinuteCap;
+    public static RewardAmounts FocusRewardsForSeconds(double elapsedSeconds, int rewardedMinutes, int rewardedTickets, int level)
+    {
+        if (double.IsNaN(elapsedSeconds) || double.IsInfinity(elapsedSeconds) || elapsedSeconds < 0) return new RewardAmounts();
+        int minutes = (int)Math.Floor(Math.Min(elapsedSeconds, FocusSessionMinuteCap * 60d) / 60);
+        int eligible = Math.Max(0, Math.Min(minutes, FocusMinuteCap - rewardedMinutes));
+        return new RewardAmounts(ScaleRewardAmount(eligible, level), ScaleRewardAmount(eligible / 5 * 2, level),
+            Math.Max(0, Math.Min(minutes / 25, FocusTicketCap - rewardedTickets)));
+    }
+    public static int FocusFishForSeconds(double elapsedSeconds, int alreadyRewardedMinutes = 0)
+        => FocusRewardsForSeconds(elapsedSeconds, alreadyRewardedMinutes, 0, 1).fishCoins;
+    public RewardAmounts PreviewFocusRewards(double elapsedSeconds)
+    {
+        var day = TodayRewards;
+        return FocusRewardsForSeconds(elapsedSeconds, day.focusMinutes, day.focusTickets, FocusRewardLevel);
+    }
+    public int PreviewFocusFish(double elapsedSeconds) => PreviewFocusRewards(elapsedSeconds).fishCoins;
 
     public bool FinishFocus(string sessionId, double elapsedSeconds, bool endedEarly)
     {
@@ -121,13 +183,14 @@ public sealed partial class TaskService
                 throw new ArgumentException("The Focus duration is invalid.");
             if (session.mode != FocusTimerMode.Stopwatch) elapsedSeconds = Math.Min(elapsedSeconds, session.focusDurationSeconds);
             session.elapsedSeconds = elapsedSeconds;
+            int level = Math.Max(1, session.rewardLevel);
             elapsedSeconds = Math.Min(elapsedSeconds, FocusSessionMinuteCap * 60d);
             int minutes = (int)Math.Floor(elapsedSeconds / 60);
             var day = GetRewardDay(data, Today);
             int eligible = Math.Max(0, Math.Min(minutes, FocusMinuteCap - day.focusMinutes));
             int rawTickets = minutes / 25;
             int tickets = Math.Max(0, Math.Min(rawTickets, FocusTicketCap - day.focusTickets));
-            var reward = new RewardAmounts(eligible, FocusFishForSeconds(elapsedSeconds, day.focusMinutes), tickets);
+            var reward = FocusRewardsForSeconds(elapsedSeconds, day.focusMinutes, day.focusTickets, level);
             AddRewards(data, reward);
             day.focusMinutes += eligible; day.focusTickets += tickets;
             session.status = endedEarly && session.mode != FocusTimerMode.Stopwatch ? FocusSessionStatus.EndedEarly : FocusSessionStatus.Completed;

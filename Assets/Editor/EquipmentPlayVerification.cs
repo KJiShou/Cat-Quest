@@ -24,7 +24,7 @@ public static class EquipmentPlayVerification
         }
         if(SessionState.GetBool(Flag,false)&&EditorApplication.timeSinceStartup-SessionState.GetFloat(Flag+".started",0)>180){File.WriteAllText(Folder+"/play-result.txt","FAIL: timeout");run=null;EditorApplication.isPlaying=false;return;}
         if(!EditorApplication.isPlaying||run==null||EditorApplication.timeSinceStartup<next||(capture&&capture.Pending))return;
-        EditorApplication.QueuePlayerLoopUpdate();try{if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);else{File.WriteAllText(Folder+"/play-result.txt","PASS "+DateTime.UtcNow.ToString("O")+": SimpleCasual inventory templates/six-column layout/filter and auto-select feedback, outside-click dismissal and inside/drag/right-click guards, full-screen modal/header/sidebar raycasts, both character cards stats/power at four sizes and both sidebar states, detail controls/raycast/feedback reset, empty/locked state, Stage claim entry, direct equip/unequip including failure/retry/repeated input, claim confirmation and direct upgrade/Auto Select/failure/retry, persistence, full nine-item inventory, 1920/1280 layouts, hover/press, set stats and faster attack animation.");run=null;EditorApplication.isPlaying=false;}}catch(Exception e){File.WriteAllText(Folder+"/play-result.txt",e.ToString());run=null;EditorApplication.isPlaying=false;}
+        EditorApplication.QueuePlayerLoopUpdate();try{if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);else{File.WriteAllText(Folder+"/play-result.txt","PASS "+DateTime.UtcNow.ToString("O")+": SimpleCasual inventory templates/six-column layout/filter and auto-select feedback, outside-click dismissal and inside/drag/right-click guards, full-screen modal/header/sidebar raycasts, both character cards stats/power at four sizes and both sidebar states, detail controls/raycast/feedback reset, empty/locked state, Stage claim entry, direct equip/unequip including failure/retry/repeated input, direct chest claim and direct upgrade/Auto Select/failure/retry, persistence, full nine-item inventory, 1920/1280 layouts, hover/press, set stats and faster attack animation.");run=null;EditorApplication.isPlaying=false;}}catch(Exception e){File.WriteAllText(Folder+"/play-result.txt",e.ToString());run=null;EditorApplication.isPlaying=false;}
     }
     static void Check(bool ok,string why){if(!ok)throw new Exception(why);}
     static void Click(Transform root,string path){var b=root.Find(path).GetComponent<Button>();Check(b&&b.interactable&&b.gameObject.activeInHierarchy,"Unavailable "+path);b.onClick.Invoke();}
@@ -46,6 +46,15 @@ public static class EquipmentPlayVerification
         Check(view&&view.totalPower.text==$"{service.CatStats.Power:N0}","Total Power must match equipped stats");
         var c=service.CatStats;string[] expected={$"{c.hp:0.##}",$"{c.atk:0.##}",$"{c.def:0.##}",$"{c.aspd:0.00}/s"};
         for(int i=0;i<4;i++)Check(view.values[i].text==expected[i],"Stats value "+i);
+        var baseStats=service.EquipmentStats.Base;
+        double[] bonus={c.hp-baseStats.hp,c.atk-baseStats.atk,c.def-baseStats.def,c.aspd-baseStats.aspd};
+        for(int i=0;i<4;i++){
+            string expectedBonus=i==3?$"+{bonus[i]:0.00}/s gear":$"+{bonus[i]:0.##} gear";
+            if(bonus[i]<=0)expectedBonus=$"<color=#7C8998>{expectedBonus}</color>";
+            Check(view.bonuses[i]&&view.bonuses[i].text==expectedBonus,"Equipment/set bonus "+i);
+            Check(!view.values[i].transform.parent.GetComponent<Image>().enabled,"Stat track still visible");
+            Check(!view.values[i].transform.parent.Find("Fill"),"Obsolete stat fill remains");
+        }
         foreach(var text in view.GetComponentsInChildren<TMP_Text>()){text.ForceMeshUpdate();Check(!text.isTextOverflowing,"Stats text overflow: "+text.text);}
     }
     static void CheckScreenModal(Transform modal){
@@ -67,7 +76,7 @@ public static class EquipmentPlayVerification
     }
     static IEnumerator Run(){
         var statsPrefab=AssetDatabase.LoadAssetAtPath<EquipmentStatsUI>("Assets/Prefabs/EquipmentStats.prefab");
-        Check(statsPrefab&&statsPrefab.totalPower&&statsPrefab.values.Length==4&&statsPrefab.fills.Length==4,"Stats serialized bindings");
+        Check(statsPrefab&&statsPrefab.totalPower&&statsPrefab.values.Length==4&&statsPrefab.bonuses.Length==4&&statsPrefab.bonuses.All(t=>t),"Stats serialized bindings");
         var prefab=AssetDatabase.LoadAssetAtPath<EquipmentItemDetailUI>("Assets/Prefabs/EquipmentItemDetail.prefab");
         Check(prefab&&prefab.card&&prefab.itemName&&prefab.level&&prefab.currentValue&&prefab.nextValue&&prefab.setInfo&&prefab.status&&prefab.equip&&prefab.upgrade&&prefab.close,"Serialized detail bindings");
         foreach(var t in prefab.GetComponentsInChildren<Transform>(true))Check(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject)==0,"Missing detail script: "+t.name);
@@ -92,7 +101,7 @@ public static class EquipmentPlayVerification
         manager.PlayerData.experience=2025;manager.PlayerData.fishCoins=1000;manager.PlayerData.rewardDays.Add(new RewardDay{day="2026-10-20",questsClaimed=true});foreach(var p in manager.PlayerData.bossProgress){p.wins=15;p.pendingClaims=3;}manager.SaveData();
         nav.ShowPage(MainMenuPage.Boss);yield return 1;var boss=nav.pages[3].GetComponent<BossPageUI>();boss.stageButton.onClick.Invoke();yield return .4;boss.masteryBars[0].transform.parent.GetComponent<Button>().onClick.Invoke();yield return .5;
         page=nav.pages[3].GetComponent<EquipmentPageUI>();Check(nav.CurrentPage==MainMenuPage.Boss,"Stage rewards must stay on Boss");Capture("equipment-claim-1920");Layout(page);yield return .4;
-        Click(page.transform,"ItemModal/Card/Choices/ChoiceArea0/Choice0");Click(page.transform,"ItemDetail/Popup/Button_Select");Check(service.Snapshot.equipment.Count==0,"Claim needs confirmation");Click(page.transform,"ConfirmEquipment/Card/Confirm");Check(service.Snapshot.equipment.Count==1&&service.Snapshot.bossProgress[0].pendingClaims==2,"Claim saved");
+        Click(page.transform,"ItemModal/Card/Choices/ChoiceArea0/Choice0");Check(service.Snapshot.equipment.Count==1&&service.Snapshot.bossProgress[0].pendingClaims==2,"Chest claim saved directly");Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Chest does not need a second confirmation");
         nav.ShowPage(MainMenuPage.CatHome);yield return .5;page=nav.pages[4].GetComponent<EquipmentPageUI>();page.OpenItem("boss1-weapon");
         Click(page.transform,"ItemDetail/Popup/Button_Select");Check(service.Snapshot.equippedWeaponId=="boss1-weapon","Equip saved directly");
         Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Equip must not ask for confirmation");

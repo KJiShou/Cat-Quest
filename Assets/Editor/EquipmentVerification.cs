@@ -14,6 +14,19 @@ public static class EquipmentVerification
     static void Near(double a,double b,string why){Check(Math.Abs(a-b)<1e-8,why+": "+a+" != "+b);}
     public static void Run(){
         BattleVerification.Run();
+        var milestones=new Memory();var claims=new TaskService(milestones,new SystemTaskClock());milestones.Data.equipmentUnlocked=true;
+        for(int slot=0;slot<3;slot++){
+            string id="boss1-"+new[]{"weapon","body","head"}[slot];int required=5*(slot+1);
+            milestones.Data.bossProgress[0].wins=required-1;milestones.Data.bossProgress[0].pendingClaims=1;
+            Check(!claims.ClaimEquipment(id),"Reject before fixed milestone "+id);
+            milestones.Data.bossProgress[0].wins=required;milestones.fail=true;
+            Check(!claims.ClaimEquipment(id)&&!milestones.Data.equipment.Any(x=>x.id==id),"Fixed milestone atomic failure");milestones.fail=false;
+            Check(claims.ClaimEquipment(id)&&!claims.ClaimEquipment(id),"Fixed milestone retry/duplicate");
+        }
+        var legacyClaims=new Memory();legacyClaims.Data.equipmentUnlocked=true;var legacyService=new TaskService(legacyClaims,new SystemTaskClock());
+        legacyClaims.Data.equipment.Add(new EquipmentItem{id="boss1-head",level=1});legacyClaims.Data.bossProgress[0].wins=10;legacyClaims.Data.bossProgress[0].claimedComponents=1;legacyClaims.Data.bossProgress[0].pendingClaims=1;
+        Check(legacyService.ClaimEquipment("boss1-weapon")&&legacyClaims.Data.equipment.Any(x=>x.id=="boss1-head"),"Legacy out-of-order item retained");
+        legacyClaims.Data.bossProgress[0].wins=15;legacyClaims.Data.bossProgress[0].pendingClaims=1;Check(legacyService.ClaimEquipment("boss1-body"),"Legacy set can still complete");
         var m=new Memory();var s=new TaskService(m,new SystemTaskClock());
         Check(!s.ClaimEquipment("boss1-weapon"),"First daily reward gate");
         m.Data.rewardDays.Add(new RewardDay{day="2026-10-20",questsClaimed=true});m.Data.experience=2025;m.Data.fishCoins=1000;

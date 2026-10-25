@@ -7,13 +7,15 @@ using UnityEngine.InputSystem;
 
 public sealed class CompanionWindowUI : MonoBehaviour
 {
-    [Serializable] public sealed class ViewState { public int width,height,fish;public bool connected,compact,controls,training,noPlayerStore,pinned;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha; }
+    [Serializable] public sealed class ViewState { public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha; }
     public FocusScenePreview preview;
     public TMP_Text timer,title;
     public RectTransform controls,header,sceneFrame,dragHandle,timerBacking;
     public RectTransform[] edges=new RectTransform[8];
     public CanvasGroup controlFade;
     public Button start,end,rest,retry,close,pin,minimize;
+    public FocusCancelConfirmation cancelConfirmation;
+    string cancellingSession;
     public Image pinIcon;
     public Sprite pinnedSprite,unpinnedSprite;
     string directory,owner,pendingAction;
@@ -29,7 +31,7 @@ public sealed class CompanionWindowUI : MonoBehaviour
         directory=CompanionProtocol.Argument("--companion-dir");owner=CompanionProtocol.Argument("--companion-owner");
         if(string.IsNullOrEmpty(directory)||string.IsNullOrEmpty(owner)){enabled=false;return;}
         startup=Time.unscaledTime;
-        start.onClick.AddListener(()=>Send("start"));end.onClick.AddListener(()=>Send("end"));rest.onClick.AddListener(()=>Send("rest"));retry.onClick.AddListener(()=>Send("retry"));
+        start.onClick.AddListener(()=>Send("start"));end.onClick.AddListener(EndFocus);rest.onClick.AddListener(()=>Send("rest"));retry.onClick.AddListener(()=>Send("retry"));
         close.onClick.AddListener(CloseDisplay);
         pin.onClick.AddListener(TogglePinned);
         minimize.onClick.AddListener(CompanionNativeWindow.Minimize);
@@ -77,6 +79,7 @@ public sealed class CompanionWindowUI : MonoBehaviour
     }
     void RefreshState()
     {
+        if(cancelConfirmation&&cancelConfirmation.IsOpen&&(!state.connected||state.phase!=FocusPhase.Focusing||state.sessionId!=cancellingSession))cancelConfirmation.Dismiss();
         title.text=string.IsNullOrWhiteSpace(state.playerName)?"Player":state.playerName.Trim();
         bool countsUp=state.mode==FocusTimerMode.Stopwatch && state.phase!=FocusPhase.Resting;
         double elapsed=state.phase==FocusPhase.Ready || state.phase==FocusPhase.Interrupted ? 0 : state.elapsedSeconds;
@@ -85,8 +88,17 @@ public sealed class CompanionWindowUI : MonoBehaviour
         bool ready=state.phase==FocusPhase.Ready || state.phase==FocusPhase.Finished || state.phase==FocusPhase.Interrupted;
         start.gameObject.SetActive(ready);end.gameObject.SetActive(state.phase==FocusPhase.Focusing);rest.gameObject.SetActive(state.phase==FocusPhase.Resting);retry.gameObject.SetActive(state.phase==FocusPhase.Saving);
         foreach(var b in new[]{start,end,rest,retry})b.interactable=state.connected && pendingAction==null;
-        SetCaption(start,pendingAction=="start"?"Starting...":"Start focus");SetCaption(end,pendingAction=="end"?"Finishing...":countsUp?"End focus":"End focus early");SetCaption(rest,pendingAction=="rest"?"Finishing...":"Finish rest");SetCaption(retry,pendingAction=="retry"?"Saving...":"Retry save");
+        SetCaption(start,pendingAction=="start"?"Starting...":"Start focus");SetCaption(end,pendingAction=="cancel"?"Cancelling...":state.mode==FocusTimerMode.Pomodoro?"Cancel":pendingAction=="end"?"Finishing...":countsUp?"End focus":"End focus early");SetCaption(rest,pendingAction=="rest"?"Finishing...":"Finish rest");SetCaption(retry,pendingAction=="retry"?"Saving...":"Retry save");
     }
+    void EndFocus()
+    {
+        if(!state.connected||pendingAction!=null||state.phase!=FocusPhase.Focusing)return;
+        if(state.mode!=FocusTimerMode.Pomodoro){Send("end");return;}
+        if(!cancelConfirmation||cancelConfirmation.IsOpen)return;
+        cancellingSession=state.sessionId;string session=cancellingSession;
+        cancelConfirmation.Show(()=>{if(state.connected&&state.phase==FocusPhase.Focusing&&state.sessionId==session)Send("cancel");});
+    }
+    void OnDisable(){if(cancelConfirmation)cancelConfirmation.Dismiss();}
     static void SetCaption(Button b,string text){b.GetComponentInChildren<TMP_Text>().text=text;}
     public void ApplyLayout(bool compact,bool showControls)
     {
@@ -128,7 +140,15 @@ public sealed class CompanionWindowUI : MonoBehaviour
         try
         {
             var battle=preview.Stage?preview.Stage.GetComponentInChildren<FocusTrainingBattle>():null;
-            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
+            var aura=preview.Stage?preview.Stage.GetComponentInChildren<CharacterEquipmentAura>():null;
+            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
+            string input=Path.Combine(directory,"companion-ui.request");
+            if(File.Exists(input)){
+                string action=File.ReadAllText(input).Trim();File.Delete(input);
+                if(action=="cancel")EndFocus();
+                else if(action=="confirm-cancel")cancelConfirmation.Confirm();
+                else if(action=="keep-focus")cancelConfirmation.Dismiss();
+            }
             string capture=Path.Combine(directory,"capture.request");if(File.Exists(capture)){File.Delete(capture);ScreenCapture.CaptureScreenshot(Path.Combine(directory,"companion-capture.png"));}
         }
         catch(IOException) { }

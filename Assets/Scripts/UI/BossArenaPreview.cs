@@ -5,6 +5,17 @@ using UnityEngine.UI;
 public sealed class BossArenaPreview : MonoBehaviour
 {
     public GameObject stagePrefab;
+    public GameObject oldForestStagePrefab, lavaDungeonStagePrefab;
+    public MasterBossAura masterAuraPrefab;
+    MasterBossAura masterAura;
+    public MasterBossAura MasterAura => masterAura;
+    public void ShowMasterAura(Transform boss,Transform cat,int bossId,bool visible)
+    {
+        if(!visible){if(masterAura)masterAura.gameObject.SetActive(false);return;}
+        if(!boss||!cat||!stage||!masterAuraPrefab)return;
+        if(!masterAura)masterAura=Instantiate(masterAuraPrefab,stage.transform);
+        masterAura.gameObject.SetActive(true);masterAura.Bind(boss,cat,bossId);
+    }
     public Texture previewImage;
     public Transform Stage => stage ? stage.transform : null;
     public Camera StageCamera => stageCamera;
@@ -13,18 +24,32 @@ public sealed class BossArenaPreview : MonoBehaviour
     SpriteRenderer cat;
     RawImage view;
     RenderTexture target;
+    GameObject activePrefab;
+
+    public void SelectStage(int id)
+    {
+        var prefab = id == 2 ? oldForestStagePrefab : id == 3 ? lavaDungeonStagePrefab : stagePrefab;
+        if (!prefab) prefab = stagePrefab;
+        if (stage && activePrefab == prefab) return;
+        ReleaseTarget();
+        masterAura = null;
+        if (stage) { stage.SetActive(false); Destroy(stage); }
+        stage = null; stageCamera = null; cat = null;
+        activePrefab = prefab;
+        if (!prefab) return;
+        stage = Instantiate(prefab, new Vector3(20000, 0, 0), Quaternion.identity);
+        foreach(var demo in stage.GetComponentsInChildren<MonsterCharacterAnimation>(true)) demo.enabled=false;
+        stageCamera = stage.GetComponentInChildren<Camera>(true);
+        cat = stage.transform.Find("Ninja Cat")?.GetComponentInChildren<SpriteRenderer>();
+        stage.SetActive(isActiveAndEnabled);
+        UpdateTarget();
+    }
 
     void OnEnable()
     {
         view = GetComponent<RawImage>();
         view.raycastTarget = false;
-        if (!stage && stagePrefab)
-        {
-            stage = Instantiate(stagePrefab, new Vector3(20000, 0, 0), Quaternion.identity);
-            foreach(var demo in stage.GetComponentsInChildren<MonsterCharacterAnimation>(true)) demo.enabled=false;
-            stageCamera = stage.GetComponentInChildren<Camera>(true);
-            cat = stage.transform.Find("Ninja Cat")?.GetComponentInChildren<SpriteRenderer>();
-        }
+        if (!stage) SelectStage(1);
         if (stage) stage.SetActive(true);
         UpdateTarget();
     }

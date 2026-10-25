@@ -65,8 +65,10 @@ public sealed partial class TaskService
         {
             var candidate = PlayerDataStore.Copy(store.Data);
             mutate(candidate);
+            var levelReward=SettleLevelUp(store.Data,candidate);
             if (!store.TrySave(candidate, out var error)) { LastError = error; return false; }
             Changed?.Invoke();
+            if(levelReward.toLevel>levelReward.fromLevel) LevelUp?.Invoke(levelReward);
             return true;
         }
         catch (ArgumentException e) { LastError = e.Message; return false; }
@@ -217,7 +219,8 @@ public sealed partial class TaskService
             if (!occurrence.rewardGranted)
             {
                 var rewardDay = GetRewardDay(data, Today);
-                var amount = TaskAllowance(current.difficulty, rewardDay);
+                CatLevel(data.experience, out int rewardLevel, out _, out _);
+                var amount = TaskAllowance(current.difficulty, rewardDay, rewardLevel);
                 AddRewards(data, amount);
                 rewardDay.taskExperience += amount.experience;
                 rewardDay.taskFishCoins += amount.fishCoins;

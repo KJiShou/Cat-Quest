@@ -137,6 +137,42 @@ public static class BossRewardVerification
             yield return 1.0;Check(moved&&flights.ActiveCount==0&&flights.fishValue.text==service.Snapshot.fishCoins.ToString(),"Fish flies and header settles");
             Check(!panel.resultFishValue.isTextOverflowing,"Fish number overflow");Capture("fish-victory-"+width);yield return .2;
         }
+        // Master result dismissal selects the next stage but never starts/spends an entry.
+        var celebration=UnityEngine.Object.FindFirstObjectByType<LevelUpCelebrationUI>();
+        for(int i=0;celebration&&(celebration.IsShowing||celebration.PendingCount>0)&&i<8;i++){
+            yield return 1.0;celebration.Dismiss();yield return .1;
+        }
+        Check(!celebration||(!celebration.IsShowing&&celebration.PendingCount==0),"Dismiss earlier level rewards before Master captures");
+        foreach(int stage in new[]{2,3,4}){
+            panel.CloseResult();int boss=1+(stage-1)%3;
+            Check(panel.SelectedBoss==boss&&panel.bossTitle.text.StartsWith("Master "+stage+" "),"Master selection after dismissal");
+            int tickets=service.Snapshot.tickets;
+            panel.CloseResult();Check(service.Snapshot.tickets==tickets&&!panel.IsBattling,"Repeated close cannot enter/spend");
+            panel.Action();Check(panel.confirmation.activeSelf&&service.Snapshot.tickets==tickets&&!panel.IsBattling,"Next Master requires confirmation");
+            panel.cancel.onClick.Invoke();Check(service.Snapshot.tickets==tickets&&!panel.IsBattling,"Cancel next entry");
+            panel.Action();panel.Confirm();Check(panel.IsBattling&&service.Snapshot.tickets==tickets-1,"Confirmed Master spends once");yield return .2;
+            if(stage==3){
+                saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
+                panel.SkipBattle();panel.CloseResult();
+                Check(service.Snapshot.masterStage==stage&&panel.SelectedBoss==boss,"Failed Master save cannot advance selection");
+                saveLock.Dispose();saveLock=null;panel.Action();
+            }else panel.SkipBattle();
+            Check(service.Snapshot.masterStage==stage+1&&panel.SelectedBoss==boss,"Victory persists next stage but keeps result stage");
+            panel.Settle(BattleOutcome.Victory);Check(service.Snapshot.masterStage==stage+1&&service.Snapshot.tickets==tickets-1,"Duplicate Master result");
+            if(stage==4){nav.ShowPage(MainMenuPage.Tasks);yield return .2;nav.ShowPage(MainMenuPage.Boss);}
+            else panel.resultContinue[0].onClick.Invoke();
+            yield return .4;
+            Check(panel.SelectedBoss==1+stage%3&&panel.bossTitle.text.StartsWith("Master "+(stage+1)+" ")&&!panel.IsBattling,"Dismiss/reopen selects authoritative next stage");
+            Resolution(stage==2?1920:1280,stage==2?1080:720);yield return .3;Capture("master-next-"+stage);yield return .2;
+        }
+        Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.masterStage==5,"Master progression reload");
+        yield return 2.0;Check(flights.ActiveCount==0,"Master reward flights settle before subsequent failure checks");
+        panel.Action();panel.Confirm();yield return .2;panel.Settle(BattleOutcome.Stopped);panel.CloseResult();
+        Check(service.Snapshot.masterStage==5&&panel.bossTitle.text.StartsWith("Master 5 "),"Stopped Master stays selected");
+        manager.PlayerData.experience=0;manager.SaveData();panel.Action();panel.Confirm();panel.SkipBattle();panel.CloseResult();
+        Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&service.Snapshot.masterStage==5&&panel.bossTitle.text.StartsWith("Master 5 "),"Defeated Master stays selected");
+        manager.PlayerData.experience=100000;manager.SaveData();
+        flights.SendMessage("OnApplicationFocus",false);
         panel.CloseResult();panel.SelectStage(1);panel.Action();panel.Confirm();yield return .2;
         int fishBefore=service.Snapshot.fishCoins;
         int before=service.Snapshot.experience;
@@ -145,8 +181,8 @@ public static class BossRewardVerification
         saveLock.Dispose();saveLock=null;panel.Action();Check(service.Snapshot.experience==before+10&&service.Snapshot.fishCoins==fishBefore+10&&flights.ActiveCount>0,"Retry reward flight");
         nav.ShowPage(MainMenuPage.Tasks);yield return 2.0;Check(flights.ActiveCount==0,"Page close flight settles");
         Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.experience==before+10,"Persisted EXP");
-        nav.ShowPage(MainMenuPage.Boss);panel.CloseResult();manager.PlayerData.experience=0;manager.SaveData();yield return .3;
+        nav.ShowPage(MainMenuPage.Boss);panel.CloseResult();manager.PlayerData.experience=0;manager.SaveData();flights.SendMessage("OnApplicationFocus",false);yield return .3;
         panel.Action();panel.Confirm();panel.SkipBattle();Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&service.Snapshot.experience==0&&flights.ActiveCount==0,"Defeat grants no EXP");yield return .2;
-        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: normal and Master Fish icon/count/flights/header at 1920/1280; zero Fish hidden; repeat win icon/count; skip and ordinary settlement; moving EXP flights at 1920/1280; header balance/level; duplicate settlement; failed save has no reward/flight; retry exactly once; page close; reload; defeat without rewards.");
+        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: normal and Master Fish icon/count/flights/header at 1920/1280; zero Fish hidden; repeat win icon/count; skip and ordinary settlement; moving EXP flights at 1920/1280; header balance/level; duplicate settlement; failed save has no reward/flight; retry exactly once; page close; reload; defeat without rewards; Master dismissal/reopen selects next stage, cyclic boss mapping, repeated close without spending, confirmation/cancel, failed-save retry, stop/defeat preserve stage, progression reload.");
     }
 }

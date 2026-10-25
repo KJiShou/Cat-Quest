@@ -96,7 +96,7 @@ public sealed class CompanionHost : MonoBehaviour
         switch(command.action)
         {
             case "start": return focus.Start();
-            case "end": return focus.EndEarly();
+            case "end": return focus.Options.mode!=FocusTimerMode.Pomodoro && focus.EndEarly();
             case "cancel": return focus.Cancel();
             case "rest": if(focus.Phase!=FocusPhase.Resting) return false; focus.EndRest(); return true;
             case "retry": return focus.RetrySettlement();
@@ -106,7 +106,9 @@ public sealed class CompanionHost : MonoBehaviour
     void Publish()
     {
         if(focus==null) return;
+        CharacterEquipmentAura.Select(GameDataManager.Instance.Tasks.EquipmentStats.SetPieces, out int auraTier, out int auraPieces);
         try { CompanionProtocol.Write(Path.Combine(DirectoryPath,"companion-session.json"),new CompanionState {
+            equipmentAuraTier=auraTier,equipmentAuraPieces=auraPieces,
             ownerId=OwnerId,sessionId=focus.SessionId ?? "",heartbeatUtcTicks=DateTime.UtcNow.Ticks,
             phase=focus.Phase,mode=focus.Options.mode,elapsedSeconds=focus.ElapsedSeconds,remainingSeconds=focus.RemainingSeconds,fishCount=focus.SpectatorFishCount,
             playerName=GameDataManager.Instance.PlayerData.username,questTitle=focus.Options.questTitle,focusMinutes=focus.Options.focusMinutes,restMinutes=focus.Options.restMinutes,message=focus.Message }); }

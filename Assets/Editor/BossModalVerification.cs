@@ -95,12 +95,10 @@ public static class BossModalVerification
         gear.transform.Find("ItemModal/Card/Close").GetComponent<Button>().onClick.Invoke();Check(feedback.DrawScale==Vector2.one,"Disable must reset feedback");gear.OpenClaim(1);yield return .2;
         Check(ParticleTime(view.particles[0])<.6f,"Sparkles must restart on reopen");
         int owned=data.equipment.Count;view.buttons[0].onClick.Invoke();yield return .2;
-        gear.transform.Find("ItemDetail/Popup/Button_Select").GetComponent<Button>().onClick.Invoke();yield return .2;
-        Check(manager.Tasks.Snapshot.equipment.Count==owned,"Preview must not grant equipment");
-        gear.transform.Find("ConfirmEquipment/Card/Confirm").GetComponent<Button>().onClick.Invoke();yield return .3;
+        Check(!gear.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Direct chest claim");
         Check(manager.Tasks.Snapshot.equipment.Count==owned+1,"Claim not committed");Check(!view.buttons[0].interactable&&view.ownedMarks[0].activeSelf,"Owned card remains selectable");Check(!view.particles[0].gameObject.activeSelf&&view.particles[1].gameObject.activeSelf,"Claim sparkle was not settled");
         Capture("claimed");yield return .2;
-        view.buttons[1].onClick.Invoke();gear.transform.Find("ItemDetail/Popup/Button_Select").GetComponent<Button>().onClick.Invoke();gear.transform.Find("ConfirmEquipment/Card/Confirm").GetComponent<Button>().onClick.Invoke();yield return .3;
+        view.buttons[1].onClick.Invoke();yield return .3;
         Check(view.particles.All(p=>!p.gameObject.activeSelf),"No claims remaining must stop glow");
         Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.equipment.Count==owned+2,"Claims did not persist");
         gear.transform.Find("ItemModal/Card/Close").GetComponent<Button>().onClick.Invoke();boss.closeStages.onClick.Invoke();

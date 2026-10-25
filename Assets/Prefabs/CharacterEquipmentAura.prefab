@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &4327712150922362704
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 9191307860323991491}
+  - component: {fileID: 7452395023961616008}
+  m_Layer: 0
+  m_Name: CharacterEquipmentAura
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &9191307860323991491
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4327712150922362704}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7452395023961616008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4327712150922362704}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c8f5556dea6773947936dee0d33980d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterEquipmentAura
+  circlePrefabs:
+  - {fileID: 7760440310327928031, guid: b2791684f03cd80479129fa77fddf228, type: 3}
+  - {fileID: 1044446430421453949, guid: b14177d95cc5bb84f897fdff7cb1333c, type: 3}
+  - {fileID: 4292050936330732294, guid: 30b6e525076202241a1371fbf0b89034, type: 3}
+  - {fileID: 5200337952825546751, guid: 26790380e4db5884284c1554293e196c, type: 3}
+  - {fileID: 4998568762535639581, guid: 28fd5f7f0fe9ed741bf4882eba44e351, type: 3}
+  - {fileID: 6702266640684137550, guid: 3b5a49efd5d7dbf4f993d38a498fc402, type: 3}
+  - {fileID: 7328080876776969217, guid: 06395fa68dd017c41bc73275678013e7, type: 3}
+  - {fileID: 6495062446991044972, guid: 5f1469c6149253647a001f73e35cb804, type: 3}
+  - {fileID: 6498162914342490524, guid: 71affa2bfd7412749bd570cebc4b82d7, type: 3}
+  characterOffset: {x: -0.9, y: -0.55, z: 0}
+  circleScale: {x: 3.5, y: 3.5, z: 3.5}
+  threePieceLift: 0

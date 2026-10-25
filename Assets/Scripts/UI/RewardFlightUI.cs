@@ -38,6 +38,7 @@ public sealed class RewardFlightUI : MonoBehaviour
     bool initialized;
     RectTransform rewardOrigin, fishRewardOrigin;
     public int ActiveCount { get; private set; }
+    public bool IsAnimating => ActiveCount > 0 || pulse[0] > 0 || pulse[1] > 0 || pulse[2] > 0;
 
     // Scoped by the caller around settlement; only committed balance changes fly.
     public void SetRewardOrigin(RectTransform origin, RectTransform fishOrigin = null)

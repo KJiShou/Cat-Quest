@@ -10,6 +10,10 @@ public sealed class FocusPanelUI : MonoBehaviour
     public TMP_Text timer, status, message;
     public Slider progress;
     public Button start, endEarly, cancel, endRest, retry, dashboard;
+    public FocusCancelConfirmation cancelConfirmation;
+    string cancellingSession;
+    Vector2 cancelAnchorMin,cancelAnchorMax;
+    bool cancelLayoutCached;
     public MainMenuNavigation navigation;
     public bool quickStart;
     public Slider focusDuration, restDuration;
@@ -34,6 +38,7 @@ public sealed class FocusPanelUI : MonoBehaviour
     private int displayedSecond = -1;
     private void OnEnable()
     {
+        if(cancel&&!cancelLayoutCached){var slot=(RectTransform)cancel.transform.parent;cancelAnchorMin=slot.anchorMin;cancelAnchorMax=slot.anchorMax;cancelLayoutCached=true;}
         focus = FocusRunner.EnsureInstance().Controller;
         focus.Changed += Refresh;
         GameDataManager.EnsureInstance().Tasks.Changed += RefreshQuests;
@@ -67,6 +72,7 @@ public sealed class FocusPanelUI : MonoBehaviour
     }
     private void OnDisable()
     {
+        if(cancelConfirmation)cancelConfirmation.Dismiss();
         if (pomodoroMode) pomodoroMode.onValueChanged.RemoveListener(ChoosePomodoro);
         if (stopwatchMode) stopwatchMode.onValueChanged.RemoveListener(ChooseStopwatch);
         if (countdownMode) countdownMode.onValueChanged.RemoveListener(ChooseCountdown);
@@ -120,22 +126,32 @@ public sealed class FocusPanelUI : MonoBehaviour
         }
         focus.Start();
     }
-    private void EndEarly() { focus.EndEarly(); }
-    private void Cancel() { focus.Cancel(); }
+    private void EndEarly() { if(focus.Options.mode!=FocusTimerMode.Pomodoro)focus.EndEarly(); }
+    private void Cancel()
+    {
+        if(focus.Phase!=FocusPhase.Focusing)return;
+        if(focus.Options.mode!=FocusTimerMode.Pomodoro){focus.Cancel();return;}
+        if(!cancelConfirmation||cancelConfirmation.IsOpen)return;
+        cancellingSession=focus.SessionId;
+        string session=cancellingSession;
+        cancelConfirmation.Show(()=>{if(focus.Phase==FocusPhase.Focusing&&focus.SessionId==session)focus.Cancel();});
+    }
     private void EndRest() { focus.EndRest(); }
     private void Retry() { focus.RetrySettlement(); }
     private void ReturnToDashboard() { navigation.ShowPage(MainMenuPage.Dashboard); }
     private void Refresh()
     {
         var phase = focus.Phase;
+        if(cancelConfirmation&&cancelConfirmation.IsOpen&&(phase!=FocusPhase.Focusing||focus.SessionId!=cancellingSession))cancelConfirmation.Dismiss();
         status.text = phase == FocusPhase.Focusing ? "Focus Training" : phase == FocusPhase.Resting ? "Rest" : "Focus Training";
         if (message) message.text = focus.Message;
         bool ready = phase == FocusPhase.Ready || phase == FocusPhase.Finished || phase == FocusPhase.Interrupted;
         start.gameObject.SetActive(quickStart || ready);
         start.GetComponentInChildren<TMP_Text>(true).text = quickStart && !ready ? "Open Focus" : phase == FocusPhase.Finished ? "Start Another Focus" : "Start Focus";
-        if (endEarly) endEarly.gameObject.SetActive(phase == FocusPhase.Focusing);
+        if (endEarly) endEarly.gameObject.SetActive(phase == FocusPhase.Focusing && focus.Options.mode != FocusTimerMode.Pomodoro);
         if (endEarly) endEarly.GetComponentInChildren<TMP_Text>(true).text = focus.CountsUp ? "End Focus" : "End Focus Early";
         if (cancel) cancel.gameObject.SetActive(phase == FocusPhase.Focusing);
+        if(cancel&&cancelLayoutCached){var slot=(RectTransform)cancel.transform.parent;float width=cancelAnchorMax.x-cancelAnchorMin.x;bool pomodoro=focus.Options.mode==FocusTimerMode.Pomodoro;slot.anchorMin=new Vector2(pomodoro?.5f-width/2:cancelAnchorMin.x,cancelAnchorMin.y);slot.anchorMax=new Vector2(pomodoro?.5f+width/2:cancelAnchorMax.x,cancelAnchorMax.y);}
         if (endRest) endRest.gameObject.SetActive(phase == FocusPhase.Resting);
         if (retry) retry.gameObject.SetActive(phase == FocusPhase.Saving);
         RefreshTime();
@@ -238,15 +254,21 @@ public sealed class FocusPanelUI : MonoBehaviour
         restDurationLabel.text = focus.Options.restMinutes + " min";
         if (questList) foreach (var button in questList.GetComponentsInChildren<Button>()) Style(button, Ready, button.name == (focus.Options.questId ?? "NoQuest"));
         if (questContext) questContext.text = "CURRENT QUEST\n" + (string.IsNullOrEmpty(focus.Options.questTitle) ? "Free focus" : focus.Options.questTitle);
-        var day = GameDataManager.EnsureInstance().Tasks.TodayRewards;
-        int minutes = Ready ? (focus.CountsUp ? 0 : focus.Options.focusMinutes) : (int)Math.Floor(Math.Min(focus.ElapsedSeconds / 60, TaskService.FocusSessionMinuteCap));
-        int eligible = Math.Max(0, Math.Min(minutes, TaskService.FocusMinuteCap - day.focusMinutes));
-        int tickets = Math.Max(0, Math.Min(minutes/25, TaskService.FocusTicketCap - day.focusTickets));
+        var service = GameDataManager.EnsureInstance().Tasks;
+        var day = service.TodayRewards;
+        int dailyLimit = service.FocusDailyMinuteLimit;
+        int sessionLimit = service.FocusSessionMinuteLimit;
         bool settled = focus.LastResult != null && (focus.Phase == FocusPhase.Resting || focus.Phase == FocusPhase.Finished);
+        int rewardLevel = settled ? focus.LastResult.rewardLevel : service.FocusRewardLevel;
+        int sessionXpCap = TaskService.ScaleRewardAmount(sessionLimit, rewardLevel);
+        int sessionFishCap = TaskService.ScaleRewardAmount(sessionLimit / 5 * 2, rewardLevel);
+        int dailyXpCap = TaskService.ScaleRewardAmount(dailyLimit, rewardLevel);
+        int dailyFishCap = TaskService.ScaleRewardAmount(dailyLimit / 5 * 2, rewardLevel);
+        var previewReward = service.PreviewFocusRewards(Ready ? (focus.CountsUp ? 0 : focus.FocusSeconds) : focus.ElapsedSeconds);
         const string heading = "Rewards";
-        int experience = settled ? focus.LastResult.experience : eligible;
-        int fish = settled ? focus.LastResult.fishCoins : eligible/5*2;
-        int grantedTickets = settled ? focus.LastResult.tickets : tickets;
+        int experience = settled ? focus.LastResult.experience : previewReward.experience;
+        int fish = settled ? focus.LastResult.fishCoins : previewReward.fishCoins;
+        int grantedTickets = settled ? focus.LastResult.tickets : previewReward.tickets;
         if (fishReward && ticketReward)
         {
             rewards.text = experience.ToString();
@@ -254,13 +276,13 @@ public sealed class FocusPanelUI : MonoBehaviour
             ticketReward.text = grantedTickets.ToString();
         }
         else if (rewards) rewards.text = (rewardTitle ? "" : heading + "\n\n") + $"EXP  +{experience}\n\nFish  +{fish}\n\nTickets  +{grantedTickets}";
-        if (rewardAllowanceBar) rewardAllowanceBar.SetValueWithoutNotify(day.focusMinutes);
+        if (rewardAllowanceBar) { rewardAllowanceBar.maxValue = dailyLimit; rewardAllowanceBar.SetValueWithoutNotify(day.focusMinutes); }
         if (ticketAllowanceBar) ticketAllowanceBar.SetValueWithoutNotify(day.focusTickets);
-        if (rewardAllowanceLabel) rewardAllowanceLabel.text = $"Reward time today   {day.focusMinutes} / {TaskService.FocusMinuteCap} min";
+        if (rewardAllowanceLabel) rewardAllowanceLabel.text = $"Reward time today   {day.focusMinutes} / {dailyLimit} min";
         if (ticketAllowanceLabel) ticketAllowanceLabel.text = $"Boss Tickets today   {day.focusTickets} / {TaskService.FocusTicketCap}";
-        if (allowance) allowance.text = (day.focusMinutes >= TaskService.FocusMinuteCap ? "Daily EXP / Fish limit reached. Timer still available."
-                : focus.ElapsedSeconds >= TaskService.FocusSessionMinuteCap * 60 && focus.CountsUp ? (focus.Phase == FocusPhase.Focusing ? "Session reward limit reached. Timer continues." : "Session rewards limited to the first 3 hours.")
-                : "Rewards: up to 3 hours per session / 6 hours per day.");
+        if (allowance) allowance.text = (day.focusMinutes >= dailyLimit ? "Daily EXP / Fish limit reached. Timer still available."
+                : focus.ElapsedSeconds >= sessionLimit * 60d && focus.CountsUp ? (focus.Phase == FocusPhase.Focusing ? "Session reward limit reached. Timer continues." : $"Session rewards limited to {sessionLimit} min.")
+                : $"{sessionLimit} min/session / {dailyLimit} min/day\nSession cap: {sessionXpCap} EXP / {sessionFishCap} Fish\nDaily cap: {dailyXpCap} EXP / {dailyFishCap} Fish");
         // The authored scene intentionally unbinds the old sky message. Keep result feedback
         // in this serialized settings card instead of overriding the scene's sky composition.
         if (allowance && focus.Phase == FocusPhase.Saving)
@@ -282,10 +304,10 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (quickStart)
             foreach (var label in GetComponentsInChildren<TMP_Text>(true))
                 if ((label.text.Contains("min Focus") && label.text.Contains("min Rest")) || label.text.StartsWith("Stopwatch •") || label.text.StartsWith("Countdown •"))
-                    label.text = focus.CountsUp ? "Stopwatch • Up to 3h rewards" : focus.Options.mode == FocusTimerMode.Countdown ? $"Countdown • {focus.Options.focusMinutes} min" : $"{focus.Options.focusMinutes} min Focus / {focus.Options.restMinutes} min Rest";
+                    label.text = focus.CountsUp ? $"Stopwatch • Up to {GameDataManager.EnsureInstance().Tasks.FocusSessionMinuteLimit} min rewards" : focus.Options.mode == FocusTimerMode.Countdown ? $"Countdown • {focus.Options.focusMinutes} min" : $"{focus.Options.focusMinutes} min Focus / {focus.Options.restMinutes} min Rest";
         if (progress)
         {
-            progress.maxValue = focus.CountsUp ? TaskService.FocusSessionMinuteCap * 60 : focus.Phase == FocusPhase.Resting ? focus.RestSeconds : focus.FocusSeconds;
+            progress.maxValue = focus.CountsUp ? GameDataManager.EnsureInstance().Tasks.FocusSessionMinuteLimit * 60f : focus.Phase == FocusPhase.Resting ? focus.RestSeconds : focus.FocusSeconds;
             progress.SetValueWithoutNotify((float)(focus.CountsUp ? Math.Min(progress.maxValue, focus.ElapsedSeconds) : progress.maxValue - focus.RemainingSeconds));
         }
     }

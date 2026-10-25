@@ -15,6 +15,7 @@ public sealed class BossBattleActors : MonoBehaviour
     float slashSpeed=1;
     public int WeaponEffectTier => slashTier;
     Transform stage,cat,boss,originalBoss;
+    int originalBossId;
     Animator catAnimator,bossAnimator;
     Vector3 home, bossScale;
     PoseSnapshot catPose, bossPose, originalBossPose;
@@ -99,7 +100,11 @@ public sealed class BossBattleActors : MonoBehaviour
     {
         if(stage==root) return;
         ClearReactions();ClearSlash();
-        stage=root;stageCamera=stage.GetComponentInChildren<Camera>(true)?.transform;cat=stage.Find("Ninja Cat");originalBoss=stage.Find("Cyclope");boss=originalBoss;
+        stage=root;stageCamera=stage.GetComponentInChildren<Camera>(true)?.transform;cat=stage.Find("Ninja Cat");
+        originalBoss=stage.Find("Cyclope");originalBossId=1;
+        if(!originalBoss){originalBoss=stage.Find("Orc");originalBossId=2;}
+        if(!originalBoss){originalBoss=stage.Find("Demon");originalBossId=3;}
+        boss=originalBoss;
         home=cat.position;bossScale=boss.localScale;
         catPose=new PoseSnapshot(cat);originalBossPose=bossPose=new PoseSnapshot(boss);
         catAnimator=cat.GetComponentInChildren<Animator>();catAnimator.runtimeAnimatorController=catController;
@@ -111,9 +116,9 @@ public sealed class BossBattleActors : MonoBehaviour
         if(!stage) return;
         ClearReactions();
         if(boss && boss!=originalBoss) Destroy(boss.gameObject);
-        originalBoss.gameObject.SetActive(id==1);
+        originalBoss.gameObject.SetActive(id==originalBossId);
         originalBossPose.Restore();
-        if(id==1) {boss=originalBoss;bossPose=originalBossPose;}
+        if(id==originalBossId) {boss=originalBoss;bossPose=originalBossPose;}
         else {
             boss=Instantiate(id==2?orcPrefab:demonPrefab,stage).transform;
             boss.position=originalBoss.position;boss.rotation=originalBoss.rotation;boss.localScale=bossScale;

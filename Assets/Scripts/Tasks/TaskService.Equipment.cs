@@ -6,15 +6,20 @@ public sealed partial class TaskService
     public bool EquipmentUnlocked=>store.Data.equipmentUnlocked||store.Data.rewardDays.Any(r=>r.questsClaimed||r.focusClaimed);
     public EquipmentStats EquipmentStats=>EquipmentRules.Calculate(store.Data);
     string EquipmentAccessError()=>!EquipmentUnlocked?"Claim your first Daily Reward to unlock equipment.":store.Data.battles.Any(b=>b.outcome==BattleOutcome.Running)?"Finish the current battle before changing equipment.":null;
+    public string ClaimEquipmentError(string itemId)
+    {
+        var error=EquipmentAccessError();if(error!=null)return error;
+        var def=EquipmentRules.Find(itemId);if(def==null)return "Unknown equipment.";
+        if(store.Data.equipment.Any(i=>i.id==itemId))return "This component is already owned.";
+        var progress=store.Data.bossProgress.Single(p=>p.bossId==def.Tier);
+        int required=5*((int)def.Slot+1);
+        if(progress.wins<required)return $"Requires {required} wins against this boss.";
+        return progress.pendingClaims<=0?"No mastery rewards available.":null;
+    }
     public bool ClaimEquipment(string itemId)
     {
-        var error=EquipmentAccessError();if(error!=null){LastError=error;return false;}
+        var error=ClaimEquipmentError(itemId);if(error!=null){LastError=error;return false;}
         var def=EquipmentRules.Find(itemId);
-        if(def==null){LastError="Unknown equipment.";return false;}
-        // Repeating a saved claim does not consume another milestone.
-        if(store.Data.equipment.Any(i=>i.id==itemId)){LastError="This component is already owned.";return false;}
-        var progress=store.Data.bossProgress.Single(p=>p.bossId==def.Tier);
-        if(progress.pendingClaims<=0){LastError="Win 5, 10 or 15 battles against this boss to choose equipment.";return false;}
         return Commit(d=>{d.equipmentUnlocked=true;d.equipment.Add(new EquipmentItem{id=itemId,level=1});var p=d.bossProgress.Single(x=>x.bossId==def.Tier);p.pendingClaims--;p.claimedComponents++;});
     }
     public bool Equip(string itemId,EquipmentSlot slot)

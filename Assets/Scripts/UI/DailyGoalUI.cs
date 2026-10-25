@@ -10,6 +10,7 @@ public sealed class DailyGoalUI : MonoBehaviour
     public Button claim;
     public GameObject inProgress;
     public TMP_Text inProgressLabel;
+    public TMP_Text experienceReward, fishReward;
     public Image rowBackground, progressFill;
     public Sprite inProgressSprite, completedSprite;
     public Sprite inProgressFillSprite, completedFillSprite;
@@ -38,6 +39,9 @@ public sealed class DailyGoalUI : MonoBehaviour
         int target = goal == DailyRewardGoal.ThreeQuests ? 3 : 25;
         int value = service.DailyGoalProgress(goal);
         bool claimed = service.DailyGoalClaimed(goal);
+        var reward=service.PreviewDailyGoal(goal);
+        if(experienceReward) experienceReward.text=reward.experience.ToString();
+        if(fishReward) fishReward.text=reward.fishCoins.ToString();
         progress.text = $"{value} / {target}";
         progressBar.maxValue = target;
         progressBar.SetValueWithoutNotify(claimed ? target : value);

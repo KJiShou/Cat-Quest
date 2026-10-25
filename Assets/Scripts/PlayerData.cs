@@ -77,6 +77,8 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
     public int focusTickets;
     public bool questsClaimed;
     public bool focusClaimed;
+    public int questsExperience, questsFishCoins;
+    public int focusGoalExperience, focusGoalFishCoins;
 }
 
 public enum DailyRewardGoal { ThreeQuests, Focus25Minutes }
@@ -84,6 +86,8 @@ public enum FocusSessionStatus { Running, Completed, EndedEarly, Cancelled, Inva
 public enum FocusTimerMode { Pomodoro, Stopwatch, Countdown }
 [Serializable] public class FocusSession
 {
+    // Zero in legacy receipts means the original level-one reward rules.
+    public int rewardLevel;
     public FocusTimerMode mode;
     public double elapsedSeconds;
     public int focusDurationSeconds = 1500;

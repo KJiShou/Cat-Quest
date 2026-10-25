@@ -8,6 +8,7 @@ public sealed class EquipmentHoverTarget : MonoBehaviour, IPointerEnterHandler, 
 {
     public EquipmentPageUI owner;
     public bool equippedSlot;
+    public bool masteryReward;
     public EquipmentSlot slot;
     string itemId;
     Button button;
@@ -15,7 +16,7 @@ public sealed class EquipmentHoverTarget : MonoBehaviour, IPointerEnterHandler, 
     public void Bind(EquipmentPageUI page,string id){owner=page;itemId=id;}
     public void OnPointerEnter(PointerEventData data)
     {
-        if(!owner||!owner.Ready||!button||!button.IsInteractable())return;
+        if(!owner||!owner.Ready||!button||(!masteryReward&&!button.IsInteractable()))return;
         string id=equippedSlot?EquipmentRules.Equipped(GameDataManager.Instance.Tasks.Snapshot,slot):itemId;
         owner.ShowHover(this,id,data.position);
     }

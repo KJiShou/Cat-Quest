@@ -11,7 +11,7 @@ public sealed class FocusBuildSmoke : MonoBehaviour
         public string phase,error,companionDirectory,ownerId,sessionId,questTitle,animationState,ninjaSprite,acornSprite;
         public float animationTime; public bool training;
         public double remaining;public int width,height,fish,exp,coins,tickets,focusMinutes,restMinutes;public bool settingsLocked;public bool controlsBound,forest,widgetOpen;
-        public bool notificationsEnabled,notificationsRegistered;
+        public bool notificationsEnabled,notificationsRegistered,cancelPrompt,endEarlyVisible;
         public int notificationAttempts,notificationsAccepted,notificationsShown,notificationActivations;
         public string notificationSessionId,notificationKind,notificationError;
         public FocusTimerMode mode; public double elapsed; public string timer;
@@ -39,6 +39,8 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                     case "start":panel.start.onClick.Invoke();break;
                     case "end":panel.endEarly.onClick.Invoke();break;
                     case "cancel":panel.cancel.onClick.Invoke();break;
+                    case "confirm-cancel":panel.cancelConfirmation.Confirm();break;
+                    case "keep-focus":panel.cancelConfirmation.Dismiss();break;
                     case "rest":panel.endRest.onClick.Invoke();break;
                     case "retry":focus.RetrySettlement();break;
                     case "advance":for(int i=0;i<command.seconds;i++)focus.Advance(1);break;
@@ -65,7 +67,7 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                 ninjaSprite=battle?battle.transform.Find("Training Ninja").GetComponent<SpriteRenderer>().sprite.name:"",
                 acornSprite=battle?battle.transform.Find("Acorn").GetComponent<SpriteRenderer>().sprite.name:"",
                 focusMinutes=focus.Options.focusMinutes,restMinutes=focus.Options.restMinutes,settingsLocked=!panel.focusDuration.interactable,phase=focus.Phase.ToString(),remaining=focus.RemainingSeconds,width=Screen.width,height=Screen.height,
-                mode=focus.Options.mode,elapsed=focus.ElapsedSeconds,timer=panel.timer.text,
+                mode=focus.Options.mode,elapsed=focus.ElapsedSeconds,timer=panel.timer.text,cancelPrompt=panel.cancelConfirmation&&panel.cancelConfirmation.IsOpen,endEarlyVisible=panel.endEarly.gameObject.activeSelf,
                 fish=focus.SpectatorFishCount,exp=data.experience,coins=data.fishCoins,tickets=data.tickets,
                 ownerId=host.OwnerId,sessionId=focus.SessionId ?? "",companionDirectory=host.DirectoryPath,widgetOpen=host.IsOpen,error=host.Error,
                 notificationsEnabled=GameDataManager.Instance.Tasks.Settings.notificationsEnabled,notificationsRegistered=runner.NotificationsRegistered,

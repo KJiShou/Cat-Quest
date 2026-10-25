@@ -35,7 +35,7 @@ public static class FocusLayoutVerification
         EditorApplication.update += Poll;
         EditorApplication.playModeStateChanged += state => {
             if (!SessionState.GetBool(Flag, false)) return;
-            if (state == PlayModeStateChange.EnteredPlayMode) { step = 0; next = EditorApplication.timeSinceStartup + 3; }
+            if (state == PlayModeStateChange.EnteredPlayMode) { step = SessionState.GetBool(Flag+".lateOnly",false)?44:0; next = EditorApplication.timeSinceStartup + 3; }
             if (state == PlayModeStateChange.EnteredEditMode) {
                 saveLock?.Dispose(); saveLock=null;
                 SessionState.SetBool(Flag, false);
@@ -70,7 +70,9 @@ public static class FocusLayoutVerification
             return;
         }
         if (EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists("Temp/verify-focus-layout.request")) return;
-        SessionState.SetBool(Flag+".before",File.ReadAllText("Temp/verify-focus-layout.request").Trim()=="before");
+        string request=File.ReadAllText("Temp/verify-focus-layout.request").Trim();
+        SessionState.SetBool(Flag+".before",request=="before");
+        SessionState.SetBool(Flag+".lateOnly",request=="late");
         File.Delete("Temp/verify-focus-layout.request");
         string folder=Folder+"/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+(Before?"-before":"-after");Directory.CreateDirectory(folder);
         SessionState.SetString(Flag+".folder",folder);
@@ -217,7 +219,65 @@ public static class FocusLayoutVerification
             Capture("mode-feedback-"+step);
         }
         if (step == 44) {
-            File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\nPASS: full-frame scene, custom Focus/Rest, reward preview/settlement, quest search/selection, settings locks, three modes, four-hour stopwatch, mixed daily cap, cancel, save error/retry, mode keyboard/pointer handlers, label raycast and disable/re-enable, shared button feedback settling, mode card icons/captions, rapid exclusive selection and disabled/reopened cards; rendered captures at 1920x1080 and 1280x720. Visual/motion acceptance requires inspection.");
+            // Only this runner's isolated save: exercise late-game preview and larger allowance text.
+            if(!service.Snapshot.tasks.Any(t=>t.id==questId))
+                Check(service.Upsert(new QuestTask {title="Read chapter"},null,out questId),service.LastError);
+            var data=GameDataManager.Instance.PlayerData;
+            data.experience=13050;
+            foreach(var day in data.rewardDays) { day.focusMinutes=0; day.focusTickets=0; }
+            GameDataManager.Instance.SaveData();
+            // The fixture bypasses domain events; resync the existing HUD before capturing it.
+            foreach(var feedback in UnityEngine.Object.FindObjectsByType<RewardFlightUI>(FindObjectsSortMode.None)) {
+                feedback.enabled=false; feedback.enabled=true;
+            }
+            focus.Configure(new FocusSessionOptions()); nav.ShowPage(MainMenuPage.Focus); Resolution(1920,1080);
+        }
+        if(step==45) {
+            Check(panel.rewards.text=="97" && panel.fishReward.text=="39" && panel.ticketReward.text=="1", "Late-game reward preview");
+            Check(panel.rewardAllowanceBar.maxValue==360 && panel.rewardAllowanceLabel.text.Contains("360")
+                && panel.allowance.text.Contains("702") && panel.allowance.text.Contains("1404"), "Late-game allowance display");
+            Capture("level30-ready-1920");
+        }
+        if(step==46)Resolution(1280,720);
+        if(step==47) {
+            foreach(var label in new[]{panel.rewards,panel.fishReward,panel.ticketReward,panel.rewardAllowanceLabel,panel.allowance})
+                Check(!label.isTextOverflowing,"Late-game text clipped: "+label.text);
+            Capture("level30-ready-1280");
+        }
+        if(step==48) {
+            panel.focusDuration.value=10;panel.start.onClick.Invoke(); for(int i=0;i<600;i++)focus.Advance(1);
+            Check(focus.Phase==FocusPhase.Resting && panel.rewards.text=="39" && panel.fishReward.text=="15", "Late-game completed Pomodoro UI settlement");
+            Capture("level30-completed-1280");
+        }
+        if (step == 49) {
+            panel.endRest.onClick.Invoke();
+            nav.ShowPage(MainMenuPage.Tasks);
+        }
+        if(step==50) {
+            // Let TaskSystemUI.Start initialize its default tab before selecting the fixture.
+            var owner=nav.pages[1].GetComponent<TaskSystemUI>();
+            owner.SelectTab(TaskTab.Todo);
+            owner.SelectTask(service.Query(TaskTab.Todo).First(v=>v.task.id==questId).Key);
+        }
+        if(step==51 || step==53) Capture(step==51?"level30-task-1280":"level30-task-1920");
+        if(step==52 || step==54) {
+            var owner=nav.pages[1].GetComponent<TaskSystemUI>();
+            var body=owner.detailsRoot.Find("ScrollRect/Content/Rewards/RewardsItem");
+            var xp=body.Find("EXP/Text (TMP)").GetComponent<TMPro.TMP_Text>();
+            var fish=body.Find("FishCoins/Text (TMP)").GetComponent<TMPro.TMP_Text>();
+            Check(xp.text=="78" && fish.text=="39" && !xp.isTextOverflowing && !fish.isTextOverflowing,
+                "Level-30 task preview or clipping: EXP="+xp.text+" overflow="+xp.isTextOverflowing+" Fish="+fish.text+" overflow="+fish.isTextOverflowing+" active="+owner.detailsRoot.gameObject.activeInHierarchy);
+            var row=owner.listContent.Find("Task_"+owner.SelectedKey);
+            Check(row && row.Find("FishNum").GetComponent<TMPro.TMP_Text>().text=="39"
+                && row.Find("FishNum (1)").GetComponent<TMPro.TMP_Text>().text=="78", "Task row and detail rewards differ");
+        }
+        if(step==52)Resolution(1920,1080);
+        if (step == 54) {
+            string scope=SessionState.GetBool(Flag+".lateOnly",false)
+                ? "Late-game checks only. "
+                : "Full Focus flow: duration settings, three modes, fixed time caps, cancel, save retry, search, keyboard/pointer, disable/reopen and feedback reset. ";
+            File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\nPASS: "+scope+
+                "Lv.30 Focus preview, amount caps, End Early, task reward preview and overflow checks; captures at 1920x1080 and 1280x720. Visual/motion review is separate.");
             EditorApplication.isPlaying = false; return;
         }
         step++; next = EditorApplication.timeSinceStartup + (step>=25 && step<=32 ? .15 : 1);

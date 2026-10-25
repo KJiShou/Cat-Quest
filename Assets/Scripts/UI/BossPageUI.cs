@@ -30,6 +30,7 @@ public sealed class BossPageUI : MonoBehaviour
     public GameObject masterLock;
     public Button masterChoice,closeStages;
     public TMP_Text masterCaption;
+    public TMP_Text masterDescription,masterEntryLabel;
     public GameObject[] resultPanels;
     public TMP_Text[] resultValues,resultDetails;
     public RewardFlightUI rewardFlights;
@@ -77,13 +78,22 @@ public sealed class BossPageUI : MonoBehaviour
             });
         }
     }
-    void OnEnable(){resetPreview=true;if(service!=null){service.Changed+=Refresh;Refresh();}}
+    void OnEnable(){resetPreview=true;if(service!=null){service.Changed+=Refresh;if(!SyncMasterSelection())Refresh();}}
     void Start(){EnsureActors();Refresh();}
-    void EnsureActors(){if(arena.Stage)actors.Bind(arena.Stage);}
+    void EnsureActors(){if(arena.Stage){actors.Bind(arena.Stage);arena.ShowMasterAura(actors.Boss,actors.Cat,selected,master>0);}}
+    bool SyncMasterSelection()
+    {
+        // Keep the completed stage visible until its result is dismissed.
+        if(service==null||master<=0||attempt!=null)return false;
+        int next=service.Snapshot.masterStage;
+        if(next==master)return false;
+        SelectStage(1+(next-1)%3,next);
+        return true;
+    }
     public void SelectStage(int id,int stage=0)
     {
         if(attempt!=null)return;
-        returnToIdleAt=0;resetPreview=false;selected=id;master=stage;EnsureActors();actors.Select(id);stagePicker.SetActive(false);message.text="";simulation=null;Refresh();
+        returnToIdleAt=0;resetPreview=false;selected=id;master=stage;actors.ResetPose();arena.SelectStage(id);EnsureActors();actors.Select(id);arena.ShowMasterAura(actors.Boss,actors.Cat,id,stage>0);stagePicker.SetActive(false);message.text="";simulation=null;Refresh();
     }
     string Name => selected==1?"Cyclope":selected==2?"Orc":"Demon";
     void RefreshStages()
@@ -106,7 +116,11 @@ public sealed class BossPageUI : MonoBehaviour
         }
         bool masterUnlocked=data.bossProgress.Single(p=>p.bossId==3).wins>0;
         masterChoice.interactable=masterUnlocked;masterLock.SetActive(!masterUnlocked);
-        masterCaption.text="Master "+data.masterStage+(masterUnlocked?"":" · Defeat Demon");
+        masterCaption.text="Master "+data.masterStage;
+        if(masterDescription)masterDescription.text=masterUnlocked
+            ? (data.masterStage%3==1?"Cyclope":data.masterStage%3==2?"Orc":"Demon")+" · Stronger bosses each round"
+            : "Defeat Demon to unlock";
+        if(masterEntryLabel)masterEntryLabel.text=masterUnlocked?"Enter  >":"Locked";
     }
     void Refresh()
     {
@@ -216,6 +230,7 @@ public sealed class BossPageUI : MonoBehaviour
     public void CloseResult()
     {
         foreach(var panel in resultPanels)panel.SetActive(false);
+        if(SyncMasterSelection())return;
         returnToIdleAt=0;resetPreview=true;message.text="";
     }
     public void SkipBattle()
