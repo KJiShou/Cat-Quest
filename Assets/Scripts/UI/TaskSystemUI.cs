@@ -313,7 +313,10 @@ public class TaskSystemUI : MonoBehaviour
         {
             int before=Service.Snapshot.fishCoins;
             if(!Service.Complete(id,true)) Notify(Service.LastError,true);
-            else Notify(Service.Snapshot.fishCoins>before ? "Task completed. Rewards added!" : "Task completed. Previously earned rewards are kept.");
+            else {
+                SettingsAudio.Instance?.PlayTaskComplete();
+                Notify(Service.Snapshot.fishCoins>before ? "Task completed. Rewards added!" : "Task completed. Previously earned rewards are kept.");
+            }
         };
         if(Service.HasIncompleteSubtasks(id)) Confirm("Complete remaining subtasks?","Some subtasks are unfinished. Confirm to complete them all and collect the task rewards.",complete); else complete();
     }

@@ -48,8 +48,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SettingsAudio
   soundSource: {fileID: 3420851244244890253}
   musicSource: {fileID: 5020061640349550299}
-  musicClip: {fileID: 0}
-  previewClip: {fileID: 0}
+  musicClip: {fileID: 8300000, guid: 87990986b2de3974290b4683ad3a594a, type: 3}
+  focusMusic: {fileID: 8300000, guid: af33e7bd169615e4b9be25070dac0496, type: 3}
+  restMusic: {fileID: 8300000, guid: dc1686946ddeb764e8342171eb174bfa, type: 3}
+  battleMusic: {fileID: 8300000, guid: a76185b129fe99647a73e60c8358d5f8, type: 3}
+  previewClip: {fileID: 8300000, guid: b60fd39dfefaec948be5ad885e839727, type: 3}
+  buttonClick: {fileID: 8300000, guid: fbbe98da312644a4ba9fb00251035066, type: 3}
+  taskComplete: {fileID: 8300000, guid: 570d29ba0b1984346942113e7e2640dc, type: 3}
+  levelUp: {fileID: 8300000, guid: a5c54caabfdce3545a2757654551486e, type: 3}
+  catAttack: {fileID: 8300000, guid: 8cd64ecc0317fee4f9e6998b2d4101f2, type: 3}
+  bossAttack: {fileID: 8300000, guid: a4fd9ff0af4eba249950b66f9c9acca1, type: 3}
+  battleVictory: {fileID: 8300000, guid: 1ecfd54185ca5be4c9bddc9f983ec0b1, type: 3}
+  battleDefeat: {fileID: 8300000, guid: 614535994d4b9fa4d9a48fb62e93a814, type: 3}
+  focusComplete: {fileID: 8300000, guid: 95f3d57bdf59f234fbd429185b9298fe, type: 3}
+  restComplete: {fileID: 8300000, guid: 97fe61e28f13c704da05a88b884865ee, type: 3}
 --- !u!1 &3418469208860788409
 GameObject:
   m_ObjectHideFlags: 0

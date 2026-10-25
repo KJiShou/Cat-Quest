@@ -37,6 +37,10 @@ public sealed class FocusRunner : MonoBehaviour
         controller = new FocusController(service);
         if (!CompanionProtocol.HasArgument("--companion"))
         {
+            controller.Changed += RefreshAudio;
+            controller.FocusCompleted += PlayFocusComplete;
+            controller.RestCompleted += PlayRestComplete;
+            RefreshAudio();
             notificationSink = new WindowsFocusNotificationSink();
             notifications = new FocusNotificationCoordinator(controller, () => notificationsEnabled, notificationSink);
             service.Changed += RefreshNotificationSettings;
@@ -53,6 +57,9 @@ public sealed class FocusRunner : MonoBehaviour
         lastTime = now;
         notificationSink?.Tick();
     }
+    private void RefreshAudio() => SettingsAudio.Instance?.SetFocusPhase(controller.Phase);
+    private void PlayFocusComplete(string sessionId) => SettingsAudio.Instance?.PlayFocusComplete();
+    private void PlayRestComplete(string sessionId) => SettingsAudio.Instance?.PlayRestComplete();
     private void RefreshNotificationSettings()
     {
         notificationsEnabled = service.Settings.notificationsEnabled;
@@ -68,6 +75,12 @@ public sealed class FocusRunner : MonoBehaviour
     private void DisposeNotifications()
     {
         if (service != null) service.Changed -= RefreshNotificationSettings;
+        if (controller != null)
+        {
+            controller.Changed -= RefreshAudio;
+            controller.FocusCompleted -= PlayFocusComplete;
+            controller.RestCompleted -= PlayRestComplete;
+        }
         notifications?.Dispose(); notificationSink?.Dispose();
     }
 }

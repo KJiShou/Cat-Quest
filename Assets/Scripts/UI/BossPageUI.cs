@@ -165,6 +165,7 @@ public sealed class BossPageUI : MonoBehaviour
         EnsureActors();
         if(!actors.Ready){message.text="Battle scene is not ready.";return;}
         if(!service.BeginBattle(selected,master,out var entry)){message.text=service.LastError;return;}
+        SettingsAudio.Instance?.SetBattleMusic(true);
         attempt=entry;simulation=new BattleSimulation(entry.cat,entry.boss);
         returnToIdleAt=0;resetPreview=false;SetHealth(entry.cat.hp,entry.cat.hp,entry.boss.hp,entry.boss.hp);
         damageNumbers.Clear();
@@ -186,6 +187,7 @@ public sealed class BossPageUI : MonoBehaviour
     void OnHit(BattleHit hit)
     {
         actors.Hit(hit.catAttacks);
+        SettingsAudio.Instance?.PlayAttack(hit.catAttacks);
         SetHealth(hit.catHp,attempt.cat.hp,hit.bossHp,attempt.boss.hp,true);
         damageNumbers.Spawn(hit.damage,!hit.catAttacks,hit.catAttacks?actors.Boss:actors.Cat,arena.StageCamera);
     }
@@ -209,6 +211,8 @@ public sealed class BossPageUI : MonoBehaviour
         finally { if(rewardFlights)rewardFlights.SetRewardOrigin(null); }
         if(!saved){settlementPending=true;message.text=service.LastError;Refresh();return;}
         var receipt=service.Snapshot.battles.Single(b=>b.id==attempt.id);
+        SettingsAudio.Instance?.SetBattleMusic(false);
+        if(isActiveAndEnabled)SettingsAudio.Instance?.PlayBattleResult(receipt.outcome);
         message.text=receipt.outcome==BattleOutcome.Victory ? "Victory"+(receipt.experience>0?$" · +{receipt.experience} EXP":"") : receipt.outcome==BattleOutcome.Defeat?"Defeat · Train and try again":receipt.outcome==BattleOutcome.Stopped?"Battle stopped":"Battle interrupted · Ticket restored";
         if(isActiveAndEnabled && (receipt.outcome==BattleOutcome.Victory || receipt.outcome==BattleOutcome.Defeat)) {
             int index=receipt.outcome==BattleOutcome.Victory?0:1;
@@ -258,6 +262,7 @@ public sealed class BossPageUI : MonoBehaviour
     void OnApplicationQuit(){quitting=true;if(attempt!=null)service.ResolveBattle(attempt.id,settlementPending?pendingOutcome:simulation!=null&&simulation.Outcome!=BattleOutcome.Running?simulation.Outcome:BattleOutcome.Error);}
     void OnDisable()
     {
+        SettingsAudio.Instance?.SetBattleMusic(false);
         if(skipUI)skipUI.Dismiss();
         if(service!=null)service.Changed-=Refresh;
         if(!quitting&&attempt!=null)Settle(settlementPending?pendingOutcome:simulation!=null&&simulation.Outcome!=BattleOutcome.Running?simulation.Outcome:BattleOutcome.Stopped);

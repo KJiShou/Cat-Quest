@@ -60,6 +60,7 @@ public class DashboardTasksUI : MonoBehaviour
                 service.LastError,
                 () => { });
         }
+        else SettingsAudio.Instance?.PlayTaskComplete();
     }
 
     private void OnDestroy()
