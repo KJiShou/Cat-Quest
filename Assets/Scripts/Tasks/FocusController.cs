@@ -51,6 +51,7 @@ public sealed class FocusController : IFocusPresentation
         Options = options.Copy();
         var receipt = service.Snapshot.focusSessions.First(s => s.id == sessionId);
         Options.questTitle = receipt.questTitle; Options.occurrenceDay = receipt.occurrenceDay;
+        Options.tagIds = receipt.tagIds.ToList(); Options.tagNames = receipt.tagNames.ToList();
         Phase = FocusPhase.Focusing; ElapsedSeconds = 0; restElapsed = 0; LastResult = null;
         Message = "Stay focused. Your cat is training with you.";
         Changed?.Invoke(); return true;

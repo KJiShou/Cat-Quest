@@ -20,6 +20,9 @@ public sealed class LeaderboardReader : ILeaderboardSource
         int owner = generation;
         var state = account.State;
         var result = new LeaderboardSnapshot { kind = kind };
+        var tasks = GameDataManager.EnsureInstance().Tasks;
+        if (!tasks.CanAccess(ProgressionFeature.Leaderboard))
+        { result.message = tasks.AccessMessage(ProgressionFeature.Leaderboard); complete(result); yield break; }
         if (!state.configured || !state.signedIn)
         {
             result.message = state.configured ? "Sign in with Google to view the leaderboard." : "Leaderboards are not available in this build yet.";

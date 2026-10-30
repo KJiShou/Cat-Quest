@@ -14,6 +14,17 @@ public sealed class MainMenuNavigation : MonoBehaviour
     public TaskSystemUI taskSystem;
     public TMP_Text fishCoins, tickets;
     public MainMenuPage CurrentPage { get; private set; }
+    public event System.Action<MainMenuPage> PageChanged;
+    public event System.Action<string> AccessDenied;
+    public bool CanOpen(MainMenuPage page)
+    {
+        var tasks = service ?? GameDataManager.EnsureInstance().Tasks;
+        if (page == MainMenuPage.Focus)
+            return tasks.CanAccess(ProgressionFeature.Focus) || FocusRunner.EnsureInstance().Controller.Phase is FocusPhase.Focusing or FocusPhase.Saving or FocusPhase.Resting;
+        if (page == MainMenuPage.Boss)
+            return tasks.CanAccess(ProgressionFeature.Boss) || tasks.Snapshot.battles.Exists(b => b.outcome == BattleOutcome.Running);
+        return page != MainMenuPage.Leaderboard || tasks.CanAccess(ProgressionFeature.Leaderboard);
+    }
     private TaskService service;
     private UnityAction[] listeners;
     private float nextClockCheck;
@@ -26,12 +37,13 @@ public sealed class MainMenuNavigation : MonoBehaviour
             int index=i; listeners[i]=()=>ShowPage((MainMenuPage)index);
             buttons[i].onClick.AddListener(listeners[i]);
         }
-        ShowPage(initialPage); RefreshHeader();
+        ShowPage(CanOpen(initialPage) ? initialPage : MainMenuPage.Dashboard); RefreshHeader();
     }
     public bool ShowPage(MainMenuPage page)
     {
         int index=(int)page;
         if(index<0 || index>=pages.Length || !pages[index]) return false;
+        if (!CanOpen(page)) { AccessDenied?.Invoke("Unlocks at Lv." + (page == MainMenuPage.Focus ? 2 : 5)); return false; }
         if(taskSystem.gameObject.activeInHierarchy && taskSystem.Service!=null && page!=MainMenuPage.Tasks)
             if(!taskSystem.PrepareToLeavePage()) return false;
         service?.RefreshDate();
@@ -41,7 +53,7 @@ public sealed class MainMenuNavigation : MonoBehaviour
             ((SidebarNavigationButton)buttons[i]).SetPageSelected(i==index);
         }
         if(taskSystem.Service!=null && page==MainMenuPage.Tasks) taskSystem.Refresh();
-        RefreshHeader(); return true;
+        RefreshHeader(); PageChanged?.Invoke(page); return true;
     }
     private void Update()
     {

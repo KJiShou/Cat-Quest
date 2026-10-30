@@ -39,7 +39,7 @@ public static class BattleVerification
             Check(sim.CatHp==reference.CatHp&&Math.Abs(sim.Elapsed-reference.Elapsed)<1e-7,"Frame-rate deterministic HP/time");
         }
         var fast=new BattleSimulation(new CombatStats(10000,1,0,2),new CombatStats(10000,1,0,1));int hits=0;fast.Advance(5,h=>{if(h.catAttacks)hits++;});Check(hits==10,"2 ASPD = 10 attacks in 5s");
-        var m=new Memory();var service=new TaskService(m,new SystemTaskClock());
+        var m=new Memory();m.Data.experience=Xp(5);var service=new TaskService(m,new SystemTaskClock());
         Check(!service.BeginBattle(1,0,out _),"No tickets");m.Data.tickets=50;
         Check(!service.BeginBattle(2,0,out _),"Boss 2 gate");
         m.fail=true;Check(!service.BeginBattle(1,0,out _)&&m.Data.tickets==50&&m.Data.battles.Count==0,"Atomic entry failure");m.fail=false;
@@ -53,7 +53,7 @@ public static class BattleVerification
         Check(m.Data.bossProgress[0].pendingClaims==3&&m.Data.bossProgress[0].wins==15&&m.Data.fishCoins==0&&m.Data.experience==xp+30+14*10,"Milestones stored, equipment deferred, repeat EXP including milestones");
         Check(service.BeginBattle(1,0,out a),"Stop entry");int tickets=m.Data.tickets;service.ResolveBattle(a.id,BattleOutcome.Stopped);Check(m.Data.tickets==tickets&&m.Data.bossProgress[0].wins==15,"Stop consumes ticket");
         Check(service.BeginBattle(1,0,out a),"Recovery entry");tickets=m.Data.tickets;service=new TaskService(m,new SystemTaskClock());Check(m.Data.tickets==tickets+1,"Recovery refunds");new TaskService(m,new SystemTaskClock());Check(m.Data.tickets==tickets+1,"Recovery exactly once");
-        m.Data.experience=0;Check(service.BattleEntryError(2).Contains("10"),"Level gate despite clear");m.Data.experience=Xp(100);
+        m.Data.experience=Xp(5);Check(service.BattleEntryError(2).Contains("10"),"Level gate despite clear");m.Data.experience=Xp(100);
         foreach(int id in new[]{2,3}){
             xp=m.Data.experience;
             Check(service.BeginBattle(id,0,out a),"Next boss");Check(service.ResolveBattle(a.id,BattleOutcome.Victory),"Next victory");

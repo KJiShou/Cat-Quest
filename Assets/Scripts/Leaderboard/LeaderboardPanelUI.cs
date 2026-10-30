@@ -20,6 +20,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     public LeaderboardRowUI template, ownRow;
     public LeaderboardKind CurrentKind { get; private set; }
     public bool Loading { get; private set; }
+    public bool TutorialOwnsInput { get; set; }
     public LeaderboardSnapshot Snapshot { get; private set; }
     readonly List<LeaderboardRowUI> rows = new List<LeaderboardRowUI>();
     AccountController account;
@@ -85,6 +86,9 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
         }
         powerCategoryIcon.color = categoryLabels[(int)LeaderboardKind.Power].color;
         scroll.StopMovement(); scroll.verticalNormalizedPosition = 1;
+        var tasks = GameDataManager.EnsureInstance().Tasks;
+        if (!tasks.CanAccess(ProgressionFeature.Leaderboard))
+        { empty.text = tasks.AccessMessage(ProgressionFeature.Leaderboard); ownMessage.text = "Complete tasks to grow your cat."; refresh.interactable = false; return; }
         Loading = true; refresh.interactable = false;
         int owner = generation;
         running = StartCoroutine(Load(owner));
@@ -137,6 +141,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     }
     void Update()
     {
+        if(TutorialOwnsInput) return;
         if (!Input.GetKeyDown(KeyCode.Tab) || EventSystem.current == null) return;
         var selected = EventSystem.current.currentSelectedGameObject;
         if (selected && selected.GetComponentInParent<SettingsPanelUI>()) return;

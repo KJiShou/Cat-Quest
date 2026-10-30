@@ -83,6 +83,9 @@ public static class ChestRewardVerification
     }
     static System.Collections.IEnumerator Run(){
         var manager=GameDataManager.Instance;Check(manager.SavePath.Contains("ChestRewardVerification"),"Isolated save");var service=manager.Tasks;
+        // The Boss page requires Lv.5; keep onboarding out of this isolated reward flow.
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
+        manager.PlayerData.experience=550;manager.SaveData();
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();nav.ShowPage(MainMenuPage.Boss);var gear=nav.pages[3].GetComponent<EquipmentPageUI>();var view=gear.claimView;
         manager.PlayerData.equipmentUnlocked=true;foreach(var p in manager.PlayerData.bossProgress){p.wins=15;p.pendingClaims=3;}manager.SaveData();
         foreach(int width in new[]{1920,1280}){
@@ -101,16 +104,52 @@ public static class ChestRewardVerification
         for(int i=0;i<5;i++){feedback.OnPointerUp(pointerEvent);feedback.OnPointerDown(pointerEvent);}feedback.OnPointerExit(pointerEvent);yield return .6;
         Check(Vector2.Distance(feedback.DrawScale,Vector2.one)<.01f&&hitRect.rect.size==originalSize,"Feedback settles without hit area movement");feedback.SendMessage("OnApplicationFocus",false);Check(feedback.DrawScale==Vector2.one,"Focus loss reset");
         int count=service.Snapshot.equipment.Count;
-        saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);view.buttons[0].onClick.Invoke();Check(service.Snapshot.equipment.Count==count&&!view.ownedMarks[0].activeSelf,"Failed save cannot show collected");saveLock.Dispose();saveLock=null;
+        var audio=SettingsAudio.Instance;
+        Check(audio&&audio.soundSource&&audio.equipmentClaim&&audio.equipmentClaim.loadState==AudioDataLoadState.Loaded,"Equipment audio is bound and preloaded");
+        audio.soundSource.Stop();
+        saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);view.buttons[0].onClick.Invoke();Check(service.Snapshot.equipment.Count==count&&!view.ownedMarks[0].activeSelf&&!view.particles[0].IsCelebrating,"Failed save cannot show collected or celebrate");saveLock.Dispose();saveLock=null;
+        Check(!audio.soundSource.isPlaying,"Failed save must not play reward audio");
         for(int slot=0;slot<3;slot++){
-            view.buttons[slot].onClick.Invoke();Check(service.Snapshot.equipment.Count==count+slot+1&&view.ownedMarks[slot].activeSelf&&!view.chests[slot].enabled,"Chest reveals actual reward");
+            Resolution(slot==0?1920:1280,slot==0?1080:720);yield return .3;
+            Capture("before-claim-"+slot);yield return .1;
+            if(slot==1){
+                EventSystem.current.SetSelectedGameObject(view.buttons[slot].gameObject);
+                ExecuteEvents.Execute(view.buttons[slot].gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler);
+            }else view.buttons[slot].onClick.Invoke();
+            Check(service.Snapshot.equipment.Count==count+slot+1&&view.ownedMarks[slot].activeSelf&&!view.chests[slot].enabled,"Chest reveals actual reward");
+            Check(view.particles[slot].IsCelebrating&&!view.particles[slot].raycastTarget,"Committed reward starts nonblocking feedback");
+            Check(audio.soundSource.isPlaying,"Equipment audio starts alongside the reveal");
             view.buttons[slot].onClick.Invoke();Check(service.Snapshot.equipment.Count==count+slot+1,"Duplicate click no duplicate item");
+            Check(view.particles[slot].IsCelebrating,"Duplicate input must not interrupt feedback");
+            for(int frame=0;frame<5;frame++){yield return .06;Capture("reveal-"+slot+"-"+frame);}
+            yield return .8;
+            Check(!view.particles[slot].IsCelebrating&&!view.particles[slot].gameObject.activeSelf&&view.itemIcons[slot].GetComponent<JuicyButtonMesh>().RewardScale==1,"Reveal settles to owned state");
+            audio.soundSource.Stop();view.buttons[slot].onClick.Invoke();
+            Check(!audio.soundSource.isPlaying,"Duplicate owned claim must not replay reward audio");
         }
+        view.PlayCollected(0);view.particles[0].SendMessage("OnApplicationFocus",false);
+        Check(!view.particles[0].IsCelebrating&&view.itemIcons[0].GetComponent<JuicyButtonMesh>().RewardScale==1,"Focus loss clears reward effect");
+        // Disabled effects may miss the focus-gained callback; enabling must resync it.
+        view.PlayCollected(0);yield return 1;
+        Check(!view.particles[0].IsCelebrating,"Re-enabled effect recovers after focus loss");
+        view.PlayCollected(1);gear.transform.Find("ItemModal").gameObject.SetActive(false);
+        Check(!view.particles[1].IsCelebrating&&view.itemIcons[1].GetComponent<JuicyButtonMesh>().RewardScale==1,"Modal close clears reward effect");
         gear.OpenClaim(3);yield return .4;Capture("collected-1280");yield return .2;
+        audio.soundSource.Stop();gear.OpenClaim(3);
+        Check(!audio.soundSource.isPlaying,"Reopening owned rewards must stay silent");
+        var muted=service.Settings;muted.soundVolume=0;audio.Preview(muted);
+        try{view.PlayCollected(2);Check(audio.soundSource.volume==0,"Equipment cue respects sound mute");}
+        finally{audio.soundSource.Stop();audio.ApplySaved();gear.OpenClaim(3);}
+        Check(view.particles.All(p=>!p.IsCelebrating),"Reopening collected rewards does not replay success");
+        float previousScale=Time.timeScale;
+        try{
+            Time.timeScale=0;view.PlayCollected(2);yield return 1;
+            Check(!view.particles[2].IsCelebrating&&view.itemIcons[2].GetComponent<JuicyButtonMesh>().RewardScale==1,"Reward animation settles while paused");
+        }finally{Time.timeScale=previousScale;}
         Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.equipment.Count==3,"Reload collected items");
         var target=view.buttons[0].GetComponent<EquipmentHoverTarget>();target.OnPointerEnter(new PointerEventData(EventSystem.current){position=new Vector2(1000,500)});yield return .2;Check(gear.transform.Find("ItemDetail").gameObject.activeSelf,"Collected disabled chest still has stats");gear.transform.Find("ItemModal/Card/Close").GetComponent<Button>().onClick.Invoke();Check(!gear.transform.Find("ItemDetail").gameObject.activeSelf,"Close clears hover");
         manager.PlayerData.bossProgress[0].wins=7;manager.PlayerData.bossProgress[0].pendingClaims=1;manager.SaveData();gear.OpenClaim(1);Check(view.buttons[0].interactable&&!view.buttons[1].interactable&&!view.buttons[2].interactable,"5/10/15 locks");yield return .3;Capture("locked-1280");yield return .2;
         nav.ShowPage(MainMenuPage.Tasks);Check(!view.gameObject.activeInHierarchy,"Page close");
-        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: three tier backgrounds at 1920/1280, unowned/collected hover actual stats and no mutation, direct chest claim/reveal, save failure/retry, duplicate claim, reload, fixed milestone locks, close cleanup.");
+        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: three tier backgrounds at 1920/1280, unowned/collected hover actual stats and no mutation, direct and keyboard chest claim/reveal with preloaded audio, silent failed/duplicate/reopened claims, SFX mute, save failure without celebration/retry, duplicate claim without effect interruption, unscaled settling, focus loss/close/reopen cleanup, reload, fixed milestone locks. Reveal frame sequences: reveal-slot-frame.png.");
     }
 }

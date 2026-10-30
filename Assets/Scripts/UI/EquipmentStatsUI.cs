@@ -20,7 +20,7 @@ public sealed class EquipmentStatsUI : MonoBehaviour
             values[i].text=i==3?$"{numbers[i]:0.00}/s":$"{numbers[i]:0.##}";
             string bonus=i==3?$"+{added[i]:0.00}/s gear":$"+{added[i]:0.##} gear";
             if(bonuses!=null && i<bonuses.Length && bonuses[i])
-                bonuses[i].text=added[i]>0?bonus:$"<color=#7C8998>{bonus}</color>";
+                bonuses[i].text=added[i]>0?bonus:"";
         }
     }
 }

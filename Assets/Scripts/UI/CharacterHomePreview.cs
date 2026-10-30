@@ -8,6 +8,14 @@ public sealed class CharacterHomePreview : MonoBehaviour
     public Camera previewCamera;
     public SpriteRenderer character;
     public GameObject characterPrefab;
+    public string idleAnimation = "ninja-idle";
+    public bool fixedFraming;
+    [Min(.1f)] public float framingZoom = 1;
+    public Vector2 framingOffset;
+    public Vector3 stageOffset;
+    public Material characterMaterial;
+    private Vector3 fixedCenter;
+    public Animator CharacterAnimator => character ? character.GetComponent<Animator>() : null;
     public bool showSceneBackground;
     [Min(.1f)] public float backgroundOrthographicSize = 6.7f;
     private GameObject ownedStage;
@@ -36,18 +44,19 @@ public sealed class CharacterHomePreview : MonoBehaviour
             originalTexture = view.texture;
             initialized = true;
         }
-        halfSize = character.bounds.extents;
+        if (!fixedFraming || halfSize == Vector2.zero) { halfSize = character.bounds.extents; fixedCenter = character.bounds.center; }
     }
 
     private void CreatePreview()
     {
         ownedStage = new GameObject("Dashboard Character Preview");
-        ownedStage.transform.position = new Vector3(-10000, 10000, 0);
+        ownedStage.transform.position = new Vector3(-10000, 10000, 0) + stageOffset;
         var model = Instantiate(characterPrefab, ownedStage.transform);
         model.transform.localPosition = Vector3.zero;
         character = model.GetComponentInChildren<SpriteRenderer>();
+        if(characterMaterial) character.sharedMaterial = characterMaterial;
         var animator = model.GetComponentInChildren<Animator>();
-        if (animator) { animator.cullingMode = AnimatorCullingMode.AlwaysAnimate; animator.Play("ninja-idle", 0, 0); animator.Update(0); }
+        if (animator) { animator.cullingMode = AnimatorCullingMode.AlwaysAnimate; animator.Play(idleAnimation, 0, 0); animator.Update(0); }
         var cameraObject = new GameObject("Dashboard Preview Camera");
         cameraObject.transform.SetParent(ownedStage.transform, false);
         cameraObject.transform.localPosition = new Vector3(0, 0, -10);
@@ -100,11 +109,11 @@ public sealed class CharacterHomePreview : MonoBehaviour
         view.texture = texture;
         previewCamera.orthographic = true;
         previewCamera.aspect = aspect;
-        halfSize = character.bounds.extents;
+        if (!fixedFraming || halfSize == Vector2.zero) { halfSize = character.bounds.extents; fixedCenter = character.bounds.center; }
         float fill = ownedStage ? .8f : .55f;
         previewCamera.orthographicSize = showSceneBackground && !ownedStage ? backgroundOrthographicSize : Mathf.Max(ownedStage ? .1f : 1f,
-            halfSize.y / fill, halfSize.x / (aspect * fill));
-        var center = character.bounds.center;
+            halfSize.y / fill, halfSize.x / (aspect * fill)) / Mathf.Max(.1f, framingZoom);
+        var center = (fixedFraming ? fixedCenter : character.bounds.center) + new Vector3(framingOffset.x * halfSize.x, framingOffset.y * halfSize.y, 0);
         previewCamera.transform.position = new Vector3(center.x, center.y, previewCamera.transform.position.z);
     }
 

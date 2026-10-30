@@ -8,6 +8,7 @@ public sealed partial class TaskService
     {
         var d=store.Data;
         if(d.battles.Any(b=>b.outcome==BattleOutcome.Running)) return "Finish the current battle first.";
+        if(!CanAccess(ProgressionFeature.Boss)) return AccessMessage(ProgressionFeature.Boss);
         if(bossId<1||bossId>3||masterStage<0) return "Invalid boss.";
         int Wins(int id)=>d.bossProgress.FirstOrDefault(p=>p.bossId==id)?.wins??0;
         CatLevel(d.experience,out int level,out _,out _);

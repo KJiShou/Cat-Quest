@@ -14,6 +14,7 @@ public sealed class SettingsAudio : MonoBehaviour
     [Header("UI and progression")]
     public AudioClip previewClip;
     public AudioClip buttonClick, taskComplete, levelUp;
+    public AudioClip equipmentClaim;
     [Header("Boss battle (impact sounds)")]
     public AudioClip catAttack, bossAttack, battleVictory, battleDefeat;
     [Header("Timer notifications")]
@@ -83,6 +84,7 @@ public sealed class SettingsAudio : MonoBehaviour
     public void PlayPreview() => PlaySound(previewClip ? previewClip : buttonClick);
     public void PlayButtonClick() => PlaySound(buttonClick);
     public void PlayTaskComplete() => PlaySound(taskComplete);
+    public void PlayEquipmentClaim() => PlaySound(equipmentClaim);
     public void PlayAttack(bool catAttacks) => PlaySound(catAttacks ? catAttack : bossAttack);
     public void PlayBattleResult(BattleOutcome outcome)
     {

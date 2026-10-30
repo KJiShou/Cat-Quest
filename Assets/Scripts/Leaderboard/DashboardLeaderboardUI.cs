@@ -18,6 +18,7 @@ public sealed class DashboardLeaderboardUI : MonoBehaviour
     string context;
     int generation;
     TaskService service;
+    bool wasUnlocked;
     public LeaderboardKind CurrentKind { get; private set; }
 
     void Awake() { viewAll.onClick.AddListener(OpenLeaderboard); }
@@ -49,7 +50,7 @@ public sealed class DashboardLeaderboardUI : MonoBehaviour
     {
         if (!isActiveAndEnabled) return;
         var kind = service.Settings.DashboardRanking;
-        if (kind == CurrentKind) return;
+        if (kind == CurrentKind && wasUnlocked == service.CanAccess(ProgressionFeature.Leaderboard)) return;
         CurrentKind = kind;
         Reload();
     }
@@ -72,6 +73,8 @@ public sealed class DashboardLeaderboardUI : MonoBehaviour
         title.text = CurrentKind == LeaderboardKind.FocusMinutes ? "Focus Leaderboard" : LeaderboardQuery.Title(CurrentKind) + " Leaderboard";
         foreach (var row in rows) row.gameObject.SetActive(false);
         message.gameObject.SetActive(true);
+        wasUnlocked = service.CanAccess(ProgressionFeature.Leaderboard);
+        if (!wasUnlocked) { message.text = service.AccessMessage(ProgressionFeature.Leaderboard); return; }
         message.text = "Loading rankings…";
         int owner = generation;
         running = StartCoroutine(Load(owner));

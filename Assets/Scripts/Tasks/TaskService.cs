@@ -172,6 +172,8 @@ public sealed partial class TaskService
                 data.tasks.Remove(old);
             }
             data.tasks.Add(task);
+            if (old == null && data.tutorial != null && !data.tutorial.dismissed && data.tutorial.taskStep is 1 or 2)
+            { data.tutorial.taskStep = 3; data.tutorial.taskId = id; }
             if (Eligible(task))
             {
                 var occurrence = GetOccurrence(data, task, Today);

@@ -10,6 +10,8 @@ public sealed class TaskConfirmDialog
     private readonly TMP_Text heading, message;
     private readonly Button confirm, cancel;
     private Action accepted;
+    private readonly TaskDialogKeyboard keyboard;
+    private readonly Button closeButton;
     public TaskConfirmDialog(GameObject template, Transform canvas, TMP_FontAsset font)
     {
         Root=UnityEngine.Object.Instantiate(template,canvas); Root.name="TaskConfirmDialog";
@@ -40,12 +42,15 @@ public sealed class TaskConfirmDialog
         var close=popup.Find("Button_Close").GetComponent<Button>();
         Place(close.GetComponent<RectTransform>(),new Vector2(1,1),new Vector2(-28,-28),new Vector2(38,38));
         close.onClick.RemoveAllListeners(); close.onClick.AddListener(Close);
+        closeButton=close;
         var icon=close.transform.Find("Icon_Close").GetComponent<RectTransform>(); icon.sizeDelta=new Vector2(20,20);
         var dim=Root.transform.Find("ScreenDim").GetComponent<Image>(); dim.color=new Color(0,0,0,.18f);
         dim.raycastTarget=true; var outside=dim.gameObject.GetComponent<Button>() ?? dim.gameObject.AddComponent<Button>();
         (outside.GetComponent<JuicyButton>()??outside.gameObject.AddComponent<JuicyButton>()).enabled=false;
         outside.onClick.RemoveAllListeners(); outside.onClick.AddListener(Close);
+        outside.navigation=new Navigation { mode=Navigation.Mode.None };
         Root.SetActive(false);
+        keyboard=Root.AddComponent<TaskDialogKeyboard>();
     }
     private static void Place(RectTransform rect,Vector2 anchor,Vector2 position,Vector2 size)
     {
@@ -57,15 +62,17 @@ public sealed class TaskConfirmDialog
         var text=button.GetComponentInChildren<TMP_Text>(true); text.text=caption; text.font=font; text.fontSize=22;
         text.enableAutoSizing=false; text.alignment=TextAlignmentOptions.Center; TaskUIBuilder.Stretch(text.rectTransform,14,14,4,4);
     }
-    public void Show(string title,string body,Action onConfirm)
+    public void Show(string title,string body,Action onConfirm,string confirmLabel="Confirm")
     {
-        cancel.gameObject.SetActive(true); confirm.GetComponentInChildren<TMP_Text>(true).text="Confirm";
+        cancel.gameObject.SetActive(true); confirm.GetComponentInChildren<TMP_Text>(true).text=confirmLabel;
         accepted=onConfirm; heading.text=title; message.text=body; Root.SetActive(true); Root.transform.SetAsLastSibling();
+        keyboard.Open(new[]{cancel,confirm,closeButton},Close);
     }
     public void ShowNotice(string title,string body)
     {
         Show(title,body,null); cancel.gameObject.SetActive(false);
         confirm.GetComponentInChildren<TMP_Text>(true).text="OK";
+        keyboard.Open(new[]{confirm,closeButton},Close);
     }
     public void Dismiss() => Close();
     private void Close() { Root.SetActive(false); accepted=null; }

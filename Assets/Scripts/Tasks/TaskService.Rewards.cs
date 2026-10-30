@@ -112,6 +112,7 @@ public sealed partial class TaskService
     public bool BeginFocus(FocusSessionOptions options, out string sessionId)
     {
         string id = Guid.NewGuid().ToString("N"); sessionId = null;
+        if (!CanAccess(ProgressionFeature.Focus)) { LastError = AccessMessage(ProgressionFeature.Focus); return false; }
         if (options == null || !options.IsValid) { LastError = "Choose a valid Focus and Rest duration."; return false; }
         options = options.Copy();
         if (!string.IsNullOrEmpty(options.questId))
@@ -120,6 +121,11 @@ public sealed partial class TaskService
             if (quest == null) { LastError = "This quest is no longer available. Choose another quest."; return false; }
             options.questTitle = quest.task.title; options.occurrenceDay = quest.occurrence.day;
         }
+        if (options.tagIds.Distinct().Count() > 1)
+        { LastError = "Choose one tag for this Focus session."; return false; }
+        var tags = store.Data.tags.Where(t => options.tagIds.Contains(t.id)).ToList();
+        if (options.tagIds.Any(id => !tags.Any(t => t.id == id)))
+        { LastError = "A selected tag is no longer available. Choose tags again."; return false; }
         bool saved = Commit(data => {
             if (data.focusSessions.Any(s => s.status == FocusSessionStatus.Running))
                 throw new ArgumentException("A Focus session is already running.");
@@ -129,6 +135,7 @@ public sealed partial class TaskService
                 focusDurationSeconds = options.mode == FocusTimerMode.Stopwatch ? 0 : options.focusMinutes * 60,
                 restDurationSeconds = options.mode == FocusTimerMode.Pomodoro ? options.restMinutes * 60 : 0,
                 questId = options.questId, questTitle = options.questTitle, occurrenceDay = options.occurrenceDay,
+                tagIds = tags.Select(t => t.id).ToList(), tagNames = tags.Select(t => t.name).ToList(),
                 startedUtc = clock.UtcNow.ToString("o", CultureInfo.InvariantCulture) });
         });
         if (saved) sessionId = id;

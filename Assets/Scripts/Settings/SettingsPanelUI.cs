@@ -44,6 +44,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     GameObject lastSelection;
     readonly List<SettingsTagRow> rows = new List<SettingsTagRow>();
     public string CurrentView { get; private set; }
+    public bool TutorialOwnsInput { get; set; }
 
     void Awake() => Initialize();
     void Initialize()
@@ -130,6 +131,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     }
     void Update()
     {
+        if(TutorialOwnsInput) return;
         if (Input.GetKeyDown(KeyCode.Escape)) { Back(); return; }
         // Keep keyboard focus within the visible modal, including after dynamic rows refresh.
         if (Input.GetKeyDown(KeyCode.Tab) && EventSystem.current)

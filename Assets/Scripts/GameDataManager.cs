@@ -8,6 +8,7 @@ public class GameDataManager : MonoBehaviour
     public TaskService Tasks { get; private set; }
     public string SavePath => store.Path;
     public string LoadNotice => store.LoadNotice;
+    public bool IsSaveReadOnly => store.WriteBlockReason != null;
     private PlayerDataStore store;
 
     public static GameDataManager EnsureInstance()

@@ -169,6 +169,36 @@ public static class TaskSystemVerification
         Check(File.ReadAllText(path+".bak")==legacy,"Date-only edit did not preserve previous save backup.");
     }
 
+    private static void VerifyNewerSaveProtection(string folder)
+    {
+        const string future="{\"version\":6,\"username\":\"Future player\",\"tasks\":{\"newSchema\":true}}";
+        const string supported="{\"version\":5,\"username\":\"Previous player\",\"tagsInitialized\":true}";
+        for(int scenario=0;scenario<5;scenario++)
+        {
+            string path=Path.Combine(folder,"future-"+scenario+".json");
+            if(scenario!=2)File.WriteAllText(path,scenario==0||scenario==1?future:scenario==3?"{broken":supported);
+            if(scenario==1)File.WriteAllText(path+".bak",supported);
+            if(scenario==2||scenario==3||scenario==4)File.WriteAllText(path+".bak",future);
+            var files=Directory.GetFiles(folder,"future-"+scenario+"*").ToDictionary(p=>p,File.ReadAllText);
+            for(int attempt=0;attempt<2;attempt++)
+            {
+                var store=new PlayerDataStore(path);
+                Check(store.WriteBlockReason!=null && store.LoadNotice.Contains("newer version"),"Newer save was not identified distinctly.");
+                var service=new TaskService(store,new Clock());
+                Check(!service.Upsert(Task("Must not save"),null,out _) && service.LastError.Contains("newer version"),"Service initialization or mutation bypassed write protection.");
+                Check(!store.TrySave(PlayerDataStore.Copy(store.Data),out var error) && error.Contains("newer version"),"Retry bypassed read-only state.");
+                Check(files.All(f=>File.ReadAllText(f.Key)==f.Value) && Directory.GetFiles(folder,"future-"+scenario+"*").Length==files.Count,"Protected primary/backup changed or temporary/corrupt files were created.");
+            }
+        }
+        string replaced=Path.Combine(folder,"externally-replaced.json");File.WriteAllText(replaced,supported);
+        var existing=new PlayerDataStore(replaced);File.WriteAllText(replaced,future);
+        Check(!existing.TrySave(PlayerDataStore.Copy(existing.Data),out _) && File.ReadAllText(replaced)==future && !File.Exists(replaced+".tmp"),"Newer save installed after load was overwritten.");
+        var invalidCandidate=new PlayerData {version=6};
+        var target=new PlayerDataStore(Path.Combine(folder,"future-candidate.json"));
+        Check(!target.TrySave(invalidCandidate,out _) && invalidCandidate.version==6 && !File.Exists(target.Path),"Newer candidate was normalized or saved.");
+        Check(target.TrySave(new PlayerData(),out _),"Rejected candidate permanently blocked an ordinary new save.");
+    }
+
     [MenuItem("Tools/Cat Quest/Verify Task System")]
     public static void Run()
     {
@@ -177,6 +207,8 @@ public static class TaskSystemVerification
         var report=new List<string>();
         try
         {
+            VerifyNewerSaveProtection(folder);
+            report.Add("PASS: future primary/backup/missing/corrupt combinations, service initialization, retries/reload and external replacement preserve every original byte; future candidate rejected; supported saves remain writable.");
             VerifyTagIdentityAndColors(folder);
             report.Add("PASS: stable tag IDs/name/color edits, live filters, immutable history colors, validation, failed-write rollback/retry, deletion/stale edits, additive legacy load/backup and reload.");
             VerifyReopeningAndOverdue();

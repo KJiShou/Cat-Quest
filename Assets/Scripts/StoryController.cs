@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -884,25 +884,7 @@ public class StoryController : MonoBehaviour
 
         dialogueText.text = text;
 
-        dialogueText.maxVisibleCharacters = 0;
-
-        dialogueText.ForceMeshUpdate();
-
-        int totalCharacters =
-            dialogueText.textInfo.characterCount;
-
-        for (int i = 0;
-             i <= totalCharacters;
-             i++)
-        {
-            dialogueText.maxVisibleCharacters = i;
-
-            yield return new WaitForSeconds(
-                typingSpeed
-            );
-        }
-
-        CompleteDialogueTyping();
+        yield return StoryDialogueView.RevealText(dialogueText, typingSpeed, CompleteDialogueTyping);
     }
 
 

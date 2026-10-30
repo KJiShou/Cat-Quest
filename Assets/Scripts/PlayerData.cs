@@ -4,6 +4,7 @@ using System.Collections.Generic;
 [Serializable]
 public class PlayerData
 {
+    public TutorialProgress tutorial;
     public string username;
     public int version = 5;
     public AppSettings settings;
@@ -93,6 +94,8 @@ public enum FocusTimerMode { Pomodoro, Stopwatch, Countdown }
     public int focusDurationSeconds = 1500;
     public int restDurationSeconds = 300;
     public string questId, questTitle, occurrenceDay;
+    public List<string> tagIds = new List<string>();
+    public List<string> tagNames = new List<string>();
     public string id;
     public FocusSessionStatus status;
     public string startedUtc;
@@ -112,10 +115,18 @@ public enum FocusTimerMode { Pomodoro, Stopwatch, Countdown }
     public FocusTimerMode mode;
     public int focusMinutes = 25, restMinutes = 5;
     public string questId, questTitle, occurrenceDay;
+    public List<string> tagIds = new List<string>();
+    public List<string> tagNames = new List<string>();
     public bool IsValid => Enum.IsDefined(typeof(FocusTimerMode), mode)
         && (mode == FocusTimerMode.Stopwatch || (focusMinutes >= 1 && focusMinutes <= (mode == FocusTimerMode.Countdown ? 180 : 60)))
         && (mode != FocusTimerMode.Pomodoro || (restMinutes >= 1 && restMinutes <= 60));
-    public FocusSessionOptions Copy() => (FocusSessionOptions)MemberwiseClone();
+    public FocusSessionOptions Copy()
+    {
+        var copy = (FocusSessionOptions)MemberwiseClone();
+        copy.tagIds = new List<string>(tagIds ?? new List<string>());
+        copy.tagNames = new List<string>(tagNames ?? new List<string>());
+        return copy;
+    }
 }
 
 public readonly struct RewardAmounts

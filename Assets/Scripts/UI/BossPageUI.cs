@@ -61,7 +61,7 @@ public sealed class BossPageUI : MonoBehaviour
         for(int i=0;i<masteryParticles.Length;i++)masteryParticles[i].Bind(masteryIcons[i].rectTransform);
         service=GameDataManager.EnsureInstance().Tasks;
         action.onClick.AddListener(Action);
-        stageButton.onClick.AddListener(()=>{RefreshStages();stagePicker.SetActive(true);});
+        stageButton.onClick.AddListener(ShowStages);
         closeStages.onClick.AddListener(()=>stagePicker.SetActive(false));
         for(int i=0;i<stageChoices.Length;i++){int id=i+1;stageChoices[i].onClick.AddListener(()=>SelectStage(id,0));}
         masterChoice.onClick.AddListener(()=>{int n=service.Snapshot.masterStage;SelectStage(1+(n-1)%3,n);});
@@ -96,6 +96,7 @@ public sealed class BossPageUI : MonoBehaviour
         returnToIdleAt=0;resetPreview=false;selected=id;master=stage;actors.ResetPose();arena.SelectStage(id);EnsureActors();actors.Select(id);arena.ShowMasterAura(actors.Boss,actors.Cat,id,stage>0);stagePicker.SetActive(false);message.text="";simulation=null;Refresh();
     }
     string Name => selected==1?"Cyclope":selected==2?"Orc":"Demon";
+    public void ShowStages() { if(IsBattling)return; RefreshStages(); stagePicker.SetActive(true); }
     void RefreshStages()
     {
         var data=service.Snapshot;
@@ -151,7 +152,7 @@ public sealed class BossPageUI : MonoBehaviour
         confirmationStats[0].text=$"{b.hp}";confirmationStats[1].text=$"{b.atk:0.#}";
         confirmationStats[2].text=$"{b.def:0.#}";confirmationStats[3].text=$"{b.aspd:0.00}/s";
         confirmationCost.text=confirmStop?"Ticket already used":"1 Boss Ticket";
-        confirmText.text=confirmStop?"The entry ticket stays spent.":"Ready to challenge?";
+        confirmText.text=confirmStop?"The entry ticket stays spent.":"";
         confirm.GetComponentInChildren<TMP_Text>().text=confirmStop?"Stop battle":"Challenge";
         cancel.GetComponentInChildren<TMP_Text>().text=confirmStop?"Keep fighting":"Cancel";
         confirmation.SetActive(true);

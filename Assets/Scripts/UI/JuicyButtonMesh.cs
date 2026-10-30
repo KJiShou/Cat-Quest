@@ -15,11 +15,24 @@ public sealed class JuicyButtonMesh : BaseMeshEffect
         Refresh();
     }
     float rewardAge = .32f, rewardStart = 1;
+    bool rewardReveal;
     public float RewardScale { get; private set; } = 1;
-    public void PlayRewardPulse() { rewardStart = RewardScale; rewardAge = 0; }
-    public void ResetRewardPulse() { rewardAge = .32f; RewardScale = 1; Refresh(); }
+    public void PlayRewardPulse() { rewardReveal = false; rewardStart = RewardScale; rewardAge = 0; }
+    public void PlayRewardReveal() { rewardReveal = true; rewardAge = 0; RewardScale = .35f; Refresh(); }
+    public void ResetRewardPulse() { rewardReveal = false; rewardAge = .32f; RewardScale = 1; Refresh(); }
     void Update()
     {
+        if (rewardReveal) {
+            rewardAge = Mathf.Min(.55f, rewardAge + Time.unscaledDeltaTime);
+            if (rewardAge < .18f)
+                RewardScale = Mathf.Lerp(.35f, 1.34f, 1 - Mathf.Pow(1 - rewardAge / .18f, 3));
+            else if (rewardAge < .38f)
+                RewardScale = Mathf.Lerp(1.34f, .96f, Mathf.SmoothStep(0, 1, (rewardAge - .18f) / .20f));
+            else
+                RewardScale = Mathf.Lerp(.96f, 1, Mathf.SmoothStep(0, 1, (rewardAge - .38f) / .17f));
+            if (rewardAge >= .55f) rewardReveal = false;
+            Refresh();return;
+        }
         if (rewardAge >= .32f) return;
         rewardAge = Mathf.Min(.32f, rewardAge + Time.unscaledDeltaTime);
         if (rewardAge < .08f)

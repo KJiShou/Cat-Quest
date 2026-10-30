@@ -25,6 +25,7 @@ public sealed class FocusPanelUI : MonoBehaviour
     public Button questDropdown;
     public RectTransform questPopup;
     public TMP_Text questContext, rewards, rewardTitle, allowance;
+    public GameObject allowanceNotice;
     public TMP_Text fishReward, ticketReward;
     public Slider rewardAllowanceBar, ticketAllowanceBar;
     public TMP_Text rewardAllowanceLabel, ticketAllowanceLabel;
@@ -190,23 +191,35 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (!questList || focus == null) return;
         foreach (Transform child in questList) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
         var ui = new TaskUIBuilder(settingsFont, settingsSprite);
-        AddQuest(ui, null);
+        AddTag(ui, null);
         var service = GameDataManager.EnsureInstance().Tasks;
+        if (Ready)
+        {
+            focus.Options.tagIds.RemoveAll(id => !service.Snapshot.tags.Any(t => t.id == id));
+            focus.Options.tagNames = service.Snapshot.tags.Where(t => focus.Options.tagIds.Contains(t.id)).Select(t => t.name).ToList();
+        }
         string query = questSearch ? questSearch.text.Trim() : "";
         int matches = 0;
-        foreach (var view in service.Query(TaskTab.Daily).Concat(service.Query(TaskTab.Todo)).Where(v => !v.Completed && service.Eligible(v.task)
-            && (query.Length == 0 || v.task.title.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))) { AddQuest(ui, view); matches++; }
-        if (matches == 0) { var empty = ui.Text(questList, query.Length == 0 ? "No available quests" : "No matching quests", 16); TaskUIBuilder.Height(empty.rectTransform, 40); }
+        foreach (var tag in service.Snapshot.tags.Where(t => query.Length == 0 || t.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
+        { AddTag(ui, tag); matches++; }
+        if (matches == 0) { var empty = ui.Text(questList, query.Length == 0 ? "Create tags in Tasks" : "No matching tags", 16); TaskUIBuilder.Height(empty.rectTransform, 40); }
         var scroll = questList.GetComponentInParent<ScrollRect>(); if (scroll) scroll.verticalNormalizedPosition = 1;
         RefreshSummary();
     }
-    private void AddQuest(TaskUIBuilder ui, TaskView view)
+    private void AddTag(TaskUIBuilder ui, QuestTag tag)
     {
-        var button = ui.Button(questList, view?.task.id ?? "NoQuest", view?.task.title ?? "No quest");
+        var button = ui.Button(questList, tag?.id ?? "NoTags", tag?.name ?? "No tags");
         TaskUIBuilder.Height((RectTransform)button.transform, 48);
         var label = button.GetComponentInChildren<TMP_Text>(); label.fontSize = 17; label.enableAutoSizing = true; label.fontSizeMin = 13; label.fontSizeMax = 17;
         button.onClick.AddListener(() => {
-            var options = focus.Options.Copy(); options.questId = view?.task.id; options.questTitle = view?.task.title; options.occurrenceDay = view?.occurrence.day;
+            if (!Ready) return;
+            var options = focus.Options.Copy();
+            options.questId = options.questTitle = options.occurrenceDay = null;
+            if (tag == null) options.tagIds.Clear();
+            else { options.tagIds.Clear(); options.tagIds.Add(tag.id); }
+            var catalog = GameDataManager.EnsureInstance().Tasks.Snapshot.tags;
+            options.tagIds.RemoveAll(id => !catalog.Any(t => t.id == id));
+            options.tagNames = catalog.Where(t => options.tagIds.Contains(t.id)).Select(t => t.name).ToList();
             focus.Configure(options);
             CloseQuests();
         });
@@ -236,7 +249,10 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (questSearch)
         {
             questSearch.interactable = Ready;
-            ((TMP_Text)questSearch.placeholder).text = string.IsNullOrEmpty(focus.Options.questTitle) ? "Search or choose quest" : focus.Options.questTitle;
+            var placeholder = (TMP_Text)questSearch.placeholder;
+            placeholder.textWrappingMode = TextWrappingModes.NoWrap;
+            placeholder.overflowMode = TextOverflowModes.Ellipsis;
+            ((TMP_Text)questSearch.placeholder).text = focus.Options.tagNames.Count == 0 ? "Search or choose a tag" : string.Join(", ", focus.Options.tagNames);
         }
         if (questDropdown) questDropdown.interactable = Ready;
         if (!Ready) CloseQuests();
@@ -252,18 +268,13 @@ public sealed class FocusPanelUI : MonoBehaviour
         SetDurationButton(restIncrease, Ready && focus.Options.restMinutes < 60);
         focusDurationLabel.text = focus.Options.focusMinutes + " min";
         restDurationLabel.text = focus.Options.restMinutes + " min";
-        if (questList) foreach (var button in questList.GetComponentsInChildren<Button>()) Style(button, Ready, button.name == (focus.Options.questId ?? "NoQuest"));
-        if (questContext) questContext.text = "CURRENT QUEST\n" + (string.IsNullOrEmpty(focus.Options.questTitle) ? "Free focus" : focus.Options.questTitle);
+        if (questList) foreach (var button in questList.GetComponentsInChildren<Button>()) Style(button, Ready, focus.Options.tagIds.Contains(button.name) || (button.name == "NoTags" && focus.Options.tagIds.Count == 0));
+        if (questContext) questContext.text = "TAGS\n" + (focus.Options.tagNames.Count == 0 ? "Free focus" : string.Join(", ", focus.Options.tagNames));
         var service = GameDataManager.EnsureInstance().Tasks;
         var day = service.TodayRewards;
         int dailyLimit = service.FocusDailyMinuteLimit;
         int sessionLimit = service.FocusSessionMinuteLimit;
         bool settled = focus.LastResult != null && (focus.Phase == FocusPhase.Resting || focus.Phase == FocusPhase.Finished);
-        int rewardLevel = settled ? focus.LastResult.rewardLevel : service.FocusRewardLevel;
-        int sessionXpCap = TaskService.ScaleRewardAmount(sessionLimit, rewardLevel);
-        int sessionFishCap = TaskService.ScaleRewardAmount(sessionLimit / 5 * 2, rewardLevel);
-        int dailyXpCap = TaskService.ScaleRewardAmount(dailyLimit, rewardLevel);
-        int dailyFishCap = TaskService.ScaleRewardAmount(dailyLimit / 5 * 2, rewardLevel);
         var previewReward = service.PreviewFocusRewards(Ready ? (focus.CountsUp ? 0 : focus.FocusSeconds) : focus.ElapsedSeconds);
         const string heading = "Rewards";
         int experience = settled ? focus.LastResult.experience : previewReward.experience;
@@ -282,15 +293,16 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (ticketAllowanceLabel) ticketAllowanceLabel.text = $"Boss Tickets today   {day.focusTickets} / {TaskService.FocusTicketCap}";
         if (allowance) allowance.text = (day.focusMinutes >= dailyLimit ? "Daily EXP / Fish limit reached. Timer still available."
                 : focus.ElapsedSeconds >= sessionLimit * 60d && focus.CountsUp ? (focus.Phase == FocusPhase.Focusing ? "Session reward limit reached. Timer continues." : $"Session rewards limited to {sessionLimit} min.")
-                : $"{sessionLimit} min/session / {dailyLimit} min/day\nSession cap: {sessionXpCap} EXP / {sessionFishCap} Fish\nDaily cap: {dailyXpCap} EXP / {dailyFishCap} Fish");
+                : "");
         // The authored scene intentionally unbinds the old sky message. Keep result feedback
         // in this serialized settings card instead of overriding the scene's sky composition.
         if (allowance && focus.Phase == FocusPhase.Saving)
-            allowance.text = "Focus not saved\nYour result is waiting to be saved.\nUse Retry Save below.";
+            allowance.text = "Focus not saved. Retry to save your result.";
         else if (allowance && focus.Phase == FocusPhase.Finished && focus.LastResult != null)
-            allowance.text = "Focus saved\n" + allowance.text;
+            allowance.text = "Focus saved." + (string.IsNullOrEmpty(allowance.text) ? "" : "\n" + allowance.text);
         else if (allowance && focus.Phase == FocusPhase.Interrupted)
-            allowance.text = "Session ended without rewards.\n" + allowance.text;
+            allowance.text = "Session ended without rewards.";
+        if(allowanceNotice)allowanceNotice.SetActive(allowance&&!string.IsNullOrEmpty(allowance.text));
     }
     private static void Style(Button button, bool enabled, bool selected)
     {

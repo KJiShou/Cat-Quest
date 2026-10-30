@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -17,8 +18,9 @@ public static class FocusLayoutVerification
     static int step;
     static double next;
     static RewardScreenshotCapture capture;
-    static string questId;
+    static string questId, tagId;
     static FileStream saveLock;
+    static IEnumerator pointerFlow;
     static string FolderNow => SessionState.GetString(Flag + ".folder", Folder);
     static bool Before => SessionState.GetBool(Flag + ".before", false);
     static EditorWindow View => EditorWindow.GetWindow(typeof(Editor).Assembly.GetType("UnityEditor.GameView"));
@@ -37,6 +39,7 @@ public static class FocusLayoutVerification
             if (!SessionState.GetBool(Flag, false)) return;
             if (state == PlayModeStateChange.EnteredPlayMode) { step = SessionState.GetBool(Flag+".lateOnly",false)?44:0; next = EditorApplication.timeSinceStartup + 3; }
             if (state == PlayModeStateChange.EnteredEditMode) {
+                (pointerFlow as IDisposable)?.Dispose(); pointerFlow=null;
                 saveLock?.Dispose(); saveLock=null;
                 SessionState.SetBool(Flag, false);
                 Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", SessionState.GetBool(Flag+".hadStore",false)?SessionState.GetString(Flag+".store",""):null);
@@ -57,6 +60,54 @@ public static class FocusLayoutVerification
         if (!capture) capture = new GameObject("Focus Layout Capture").AddComponent<RewardScreenshotCapture>();
         capture.Begin(Path.GetFullPath(FolderNow + "/" + name + ".png"));
     }
+    // Resolve the visible topmost hit, just as the EventSystem does. Never dispatch
+    // straight to a covered control: that hides modal/overlay regressions.
+    static PointerEventData Pointer(Selectable control, Vector2 fraction)
+    {
+        Canvas.ForceUpdateCanvases();
+        var rect = (RectTransform)control.transform;
+        var canvas = control.GetComponentInParent<Canvas>().rootCanvas;
+        var camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        var local = new Vector2(Mathf.Lerp(rect.rect.xMin, rect.rect.xMax, fraction.x), Mathf.Lerp(rect.rect.yMin, rect.rect.yMax, fraction.y));
+        return new PointerEventData(EventSystem.current) { position = RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(local)), button = PointerEventData.InputButton.Left };
+    }
+    static GameObject Hit(Selectable control, PointerEventData pointer)
+    {
+        var hits = new System.Collections.Generic.List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointer, hits);
+        var target = hits.Count == 0 ? null : ExecuteEvents.GetEventHandler<IPointerClickHandler>(hits[0].gameObject);
+        Check(target == control.gameObject, "Blocked " + control.name + " at " + pointer.position + ": " + string.Join(" | ", hits.Select(h => AnimationUtility.CalculateTransformPath(h.gameObject.transform, null))));
+        return target;
+    }
+    static void Click(Selectable control)
+    {
+        var pointer = Pointer(control, new Vector2(.5f, .5f));
+        var target = Hit(control, pointer);
+        ExecuteEvents.Execute(target, pointer, ExecuteEvents.pointerEnterHandler);
+        ExecuteEvents.Execute(target, pointer, ExecuteEvents.pointerDownHandler);
+        ExecuteEvents.Execute(target, pointer, ExecuteEvents.pointerUpHandler);
+        ExecuteEvents.Execute(target, pointer, ExecuteEvents.pointerClickHandler);
+        ExecuteEvents.Execute(target, pointer, ExecuteEvents.pointerExitHandler);
+    }
+    static bool DismissLevelUps(FocusPanelUI panel)
+    {
+        var modal = UnityEngine.Object.FindFirstObjectByType<LevelUpCelebrationUI>();
+        if (!modal || (!modal.IsShowing && modal.PendingCount == 0)) return false;
+        if (modal.IsShowing)
+        {
+            var hits = new System.Collections.Generic.List<RaycastResult>();
+            EventSystem.current.RaycastAll(Pointer(panel.stopwatchMode, new Vector2(.5f,.5f)), hits);
+            Check(hits.Count > 0 && hits[0].gameObject.transform.IsChildOf(modal.panel.transform), "Level-up modal leaked input to Focus");
+            if (modal.continueButton.interactable)
+            {
+                Click(modal.continueButton);
+                Check(!modal.IsShowing, "Continue failed to dismiss level-up modal");
+                File.AppendAllText(FolderNow+"/interactions.txt", "Confirmed modal blocking, clicked Continue through topmost raycast.\n");
+            }
+        }
+        next = EditorApplication.timeSinceStartup + .2;
+        return true;
+    }
     static void Poll()
     {
         if (EditorApplication.isCompiling || EditorApplication.isUpdating) return;
@@ -73,6 +124,7 @@ public static class FocusLayoutVerification
         string request=File.ReadAllText("Temp/verify-focus-layout.request").Trim();
         SessionState.SetBool(Flag+".before",request=="before");
         SessionState.SetBool(Flag+".lateOnly",request=="late");
+        SessionState.SetBool(Flag+".tagsOnly",request=="tags");
         File.Delete("Temp/verify-focus-layout.request");
         string folder=Folder+"/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+(Before?"-before":"-after");Directory.CreateDirectory(folder);
         SessionState.SetString(Flag+".folder",folder);
@@ -85,6 +137,84 @@ public static class FocusLayoutVerification
         Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", Path.GetFullPath(folder+"/save.json"));
         EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");
         SessionState.SetBool(Flag, true); Resolution(1920, 1080); EditorApplication.isPaused=false; EditorApplication.isPlaying = true;
+    }
+    static IEnumerator PointerChecks(FocusPanelUI panel, MainMenuNavigation nav)
+    {
+        var focus=panel.Controller;
+        var oldTimeScale=Time.timeScale;
+        try
+        {
+            Check(focus.Configure(new FocusSessionOptions()), "Cannot prepare pointer checks");
+            nav.ShowPage(MainMenuPage.Focus);
+            foreach (var size in new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720) })
+            {
+                Resolution(size.x,size.y); yield return .5;
+                while (DismissLevelUps(panel)) yield return .2;
+                foreach (var mode in new[] {panel.pomodoroMode,panel.stopwatchMode,panel.countdownMode})
+                {
+                    foreach(var point in new[]{new Vector2(.25f,.5f),new Vector2(.5f,.8f),new Vector2(.5f,.2f),new Vector2(.75f,.5f)}) Hit(mode,Pointer(mode,point));
+                    Click(mode); yield return .15;
+                    Check(mode.isOn && new[]{panel.pomodoroMode,panel.stopwatchMode,panel.countdownMode}.Count(t=>t.isOn)==1,"Mouse did not select one exclusive mode");
+                }
+                Click(panel.pomodoroMode); yield return .15;
+                var modePointer=Pointer(panel.countdownMode,new Vector2(.5f,.5f));
+                var modeTarget=Hit(panel.countdownMode,modePointer);
+                var modeRect=(RectTransform)modeTarget.transform;var position=modeRect.anchoredPosition;var scale=modeRect.localScale;
+                EventSystem.current.SetSelectedGameObject(null);
+                ExecuteEvents.Execute(modeTarget,modePointer,ExecuteEvents.pointerEnterHandler); yield return .2;
+                float hover=panel.countdownMode.targetGraphic.canvasRenderer.GetColor().r;
+                ExecuteEvents.Execute(modeTarget,modePointer,ExecuteEvents.pointerDownHandler); yield return .2;
+                Check(panel.countdownMode.targetGraphic.canvasRenderer.GetColor().r<hover-.02f,"Mode press tint missing");
+                Capture("pointer-mode-pressed-"+size.x); yield return .1;
+                ExecuteEvents.Execute(modeTarget,modePointer,ExecuteEvents.pointerUpHandler);
+                ExecuteEvents.Execute(modeTarget,modePointer,ExecuteEvents.pointerExitHandler);
+                EventSystem.current.SetSelectedGameObject(null); yield return .3;
+                Check(modeRect.anchoredPosition==position&&modeRect.localScale==scale,"Mode feedback moved hit area");
+                Check(Mathf.Abs(panel.countdownMode.targetGraphic.canvasRenderer.GetColor().r-panel.countdownMode.colors.normalColor.r)<.02f,"Mode tint did not reset");
+                Click(panel.questDropdown); yield return .15;
+                var tag=panel.questList.GetComponentsInChildren<Button>().First(b=>b.name!="NoTags");
+                Click(tag); Check(focus.Options.tagIds.Contains(tag.name),"Raycast tag click failed");
+                Click(panel.questDropdown); yield return .15;
+                Click(panel.questList.GetComponentsInChildren<Button>().Single(b=>b.name=="NoTags"));
+                Check(!panel.questPopup.gameObject.activeSelf,"Clear did not close tags");
+                var slider=panel.focusDuration; var sliderPointer=Pointer(slider,new Vector2(.65f,.5f));
+                var hits=new System.Collections.Generic.List<RaycastResult>();EventSystem.current.RaycastAll(sliderPointer,hits);
+                Check(hits.Count>0 && ExecuteEvents.GetEventHandler<IPointerDownHandler>(hits[0].gameObject)==slider.gameObject,"Slider pointer blocked");
+                ExecuteEvents.Execute(slider.gameObject,sliderPointer,ExecuteEvents.pointerDownHandler);
+                ExecuteEvents.Execute(slider.gameObject,sliderPointer,ExecuteEvents.pointerUpHandler);
+                Check(focus.Options.focusMinutes==Mathf.RoundToInt(slider.value),"Mouse slider not bound");
+                var juicy=panel.start.GetComponent<JuicyButton>();var rect=(RectTransform)panel.start.transform;var startPosition=rect.anchoredPosition;var startScale=rect.localScale;
+                var pointer=Pointer(panel.start,new Vector2(.5f,.5f));var target=Hit(panel.start,pointer);
+                Time.timeScale=0; EventSystem.current.SetSelectedGameObject(null);
+                for(int frame=0;frame<24;frame++)
+                {
+                    if(frame==0)ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerEnterHandler);
+                    if(frame==6){Check(juicy.DrawScale.y>1.02f,"Unscaled hover missing");ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerDownHandler);}
+                    if(frame==12){Check(juicy.DrawScale.y<.95f,"Unscaled press missing");ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerUpHandler);}
+                    if(frame==16){ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerExitHandler);EventSystem.current.SetSelectedGameObject(null);}
+                    Capture("pointer-motion-"+size.x+"-"+frame.ToString("D2"));
+                    File.AppendAllText(FolderNow+"/motion.csv",$"{size.x},{frame},{Time.unscaledTime:F3},{juicy.DrawScale.x:F4},{juicy.DrawScale.y:F4},{juicy.DrawOffset:F4}\n");
+                    yield return .05;
+                }
+                Check(Vector2.Distance(juicy.DrawScale,Vector2.one)<.015f&&Mathf.Abs(juicy.DrawOffset)<.1f,"Release/exit failed to settle");
+                Check(rect.anchoredPosition==startPosition&&rect.localScale==startScale,"Motion moved start hit area");
+                for(int i=0;i<12;i++){ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerDownHandler);ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerUpHandler);}
+                panel.start.interactable=false;yield return .4;
+                Check(Vector2.Distance(juicy.DrawScale,Vector2.one)<.015f,"Disabled feedback did not settle");panel.start.interactable=true;
+                ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerDownHandler);
+                juicy.SendMessage("OnApplicationFocus",false);Check(juicy.DrawScale==Vector2.one,"Focus-loss feedback reset failed");
+                ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerDownHandler);
+                nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);yield return .2;
+                Check(juicy.DrawScale==Vector2.one&&juicy.DrawOffset==0,"Page close/reopen left feedback pressed");
+                Time.timeScale=oldTimeScale;
+                Click(panel.start); yield return .2;
+                var previous=focus.Options.mode;Click(panel.stopwatchMode);
+                Check(focus.Phase==FocusPhase.Focusing&&focus.Options.mode==previous&&!panel.stopwatchMode.interactable,"Disabled mode accepted mouse input");
+                focus.Cancel();yield return .2;
+                File.AppendAllText(FolderNow+"/interactions.txt",$"PASS {size.x}x{size.y}: topmost raycasts, modes, tags, slider, hover/press/release, stable hit area, unscaled spring, rapid input, disabled/page/focus reset. Pointer events dispatched through EventSystem; OS hardware mouse not driven.\n");
+            }
+        }
+        finally { Time.timeScale=oldTimeScale; }
     }
     static void Tick()
     {
@@ -102,6 +232,37 @@ public static class FocusLayoutVerification
             if(step==4){File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+"\nCaptured current authored Focus before UI patch.");EditorApplication.isPlaying=false;return;}
             step++;next=EditorApplication.timeSinceStartup+1;return;
         }
+        if (SessionState.GetBool(Flag+".tagsOnly",false) && step >= 8)
+        {
+            if (step == 8)
+            {
+                var clear = panel.questList.GetComponentsInChildren<Button>().Single(b => b.name == "NoTags");
+                clear.OnSubmit(new BaseEventData(EventSystem.current));
+                Check(focus.Options.tagIds.Count == 0 && !panel.questPopup.gameObject.activeSelf, "Keyboard clear failed");
+                nav.ShowPage(MainMenuPage.Dashboard); nav.ShowPage(MainMenuPage.Focus);
+                panel.questDropdown.onClick.Invoke(); panel.questSearch.text = "Reading";
+                var choice = panel.questList.GetComponentsInChildren<Button>().Single(b => b.name == tagId);
+                choice.OnSubmit(new BaseEventData(EventSystem.current));
+                Check(focus.Options.tagIds.Count == 1, "Keyboard selection/reopen duplicated listeners");
+                Capture("tags-selected-1280");
+            }
+            if (step == 9) { Resolution(1920,1080); }
+            if (step == 10)
+            {
+                var source = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_UI_Etc/InputField_WhiteCustom.prefab");
+                var reference = UnityEngine.Object.Instantiate(source.GetComponentsInChildren<Transform>(true).Single(t => t.name == "InputField_Light_Username").gameObject,panel.transform);
+                reference.name = "ReferenceOnly";
+                var rect = (RectTransform)reference.transform; rect.anchorMin = rect.anchorMax = new Vector2(.55f,.35f); rect.anchoredPosition = Vector2.zero; rect.localScale = Vector3.one * .5f;
+            }
+            if (step == 11) Capture("tags-simplecasual-reference-1920");
+            if (step == 12)
+            {
+                UnityEngine.Object.Destroy(panel.transform.Find("ReferenceOnly").gameObject);
+                File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+"\nPASS: Focus tags only: search, empty search, single-tag selection/replacement, keyboard selection/clear, page reopen, session lock, committed rewards and 1920x1080/1280x720 captures. Full mode raycast/motion flow is separate.");
+                EditorApplication.isPlaying=false; return;
+            }
+            step++; next=EditorApplication.timeSinceStartup+1; return;
+        }
         if (step == 0) { Check(nav.ShowPage(MainMenuPage.Focus), "Cannot open Focus"); }
         if (step == 1) {
             Check((!panel.status || !panel.status.gameObject.activeSelf) && (!panel.message || !panel.message.gameObject.activeSelf), "Extra labels on sky");
@@ -112,6 +273,7 @@ public static class FocusLayoutVerification
             Check(preview.GetComponent<RectTransform>().anchorMin == Vector2.zero && preview.GetComponent<RectTransform>().anchorMax == Vector2.one, "Scene does not fill frame");
             Check(service.Upsert(new QuestTask { title = "Read chapter", daily = false }, null, out questId), service.LastError);
             Check(service.Upsert(new QuestTask { title = "Practice piano", daily = false }, null, out _), service.LastError);
+            Check(service.SaveTag(null, "Reading", out tagId), service.LastError);
             panel.focusDuration.value = 37; panel.restDuration.value = 7;
             Check(focus.Options.focusMinutes == 37 && focus.Options.restMinutes == 7, "Sliders not bound");
             Check(panel.rewards.text == "37" && panel.fishReward.text == "14" && panel.ticketReward.text == "1", "Reward numbers incorrect");
@@ -120,17 +282,24 @@ public static class FocusLayoutVerification
         if (step == 2) {
             panel.questDropdown.onClick.Invoke(); panel.questSearch.text = "READ";
             var buttons = panel.questList.GetComponentsInChildren<Button>();
-            Check(buttons.Length == 2 && buttons.Any(b => b.name == questId), "Case-insensitive quest search failed");
+            Check(buttons.Length == 2 && buttons.Any(b => b.name == tagId), "Case-insensitive tag search failed");
             Capture("focus-search-1920");
         }
         if (step == 3) {
             panel.questSearch.text = "zzz-no-match";
             Check(panel.questList.GetComponentsInChildren<Button>().Length == 1, "Empty search should keep free focus");
-            panel.questSearch.text = "chapter";
+            panel.questSearch.text = "reading";
         }
         if (step == 4) {
-            panel.questList.GetComponentsInChildren<Button>().Single(b => b.name == questId).onClick.Invoke();
-            Check(focus.Options.questId == questId && !panel.questPopup.gameObject.activeSelf && panel.questSearch.text == "", "Selection did not close or bind");
+            panel.questList.GetComponentsInChildren<Button>().Single(b => b.name == tagId).onClick.Invoke();
+            Check(focus.Options.tagIds.Contains(tagId) && !panel.questPopup.gameObject.activeSelf && string.IsNullOrEmpty(focus.Options.questId), "Tag selection did not bind independently of quests");
+            panel.questSearch.text = "Study";
+            panel.questList.GetComponentsInChildren<Button>().Single(b => b.name != "NoTags").onClick.Invoke();
+            Check(focus.Options.tagIds.Count == 1 && !focus.Options.tagIds.Contains(tagId), "Tag selection did not replace previous tag");
+            panel.questSearch.text = "Study";
+            panel.questList.GetComponentsInChildren<Button>().Single(b => b.name != "NoTags").onClick.Invoke();
+            Check(focus.Options.tagIds.Count == 1, "Repeated tag selection duplicated tag");
+            Check(!panel.questPopup.gameObject.activeSelf && panel.questSearch.text == "", "Dropdown dismissal failed");
             panel.start.onClick.Invoke();
             Check(focus.Phase == FocusPhase.Focusing && !panel.questSearch.interactable && !panel.restDuration.interactable, "Session settings not locked");
             Capture("focus-running-1920");
@@ -144,7 +313,8 @@ public static class FocusLayoutVerification
             panel.endRest.onClick.Invoke(); Resolution(1280, 720);
             Check(panel.questSearch.interactable && panel.focusDuration.interactable, "Settings not unlocked");
         }
-        if (step == 7) Capture("focus-ready-1280");
+        if (step == 7) { panel.questDropdown.onClick.Invoke(); Capture("focus-tags-1280"); }
+        if (step == 8) { panel.questList.GetComponentsInChildren<Button>().Single(b => b.name == "NoTags").onClick.Invoke(); Check(focus.Options.tagIds.Count == 0 && !panel.questPopup.gameObject.activeSelf, "No tags did not clear selection"); }
         if(step==8){panel.stopwatchMode.isOn=true;Check(focus.CountsUp && !panel.focusDurationCard.activeSelf && !panel.restDurationCard.activeSelf && panel.rewards.text=="0","Stopwatch settings incorrect");Capture("stopwatch-ready-1280");}
         if(step==9){panel.start.onClick.Invoke();for(int i=0;i<14400;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Focusing && panel.stopwatchMode.interactable==false,"Stopwatch limit/lock wrong");}
         if(step==10)Capture("stopwatch-four-hours-1280");
@@ -166,15 +336,15 @@ public static class FocusLayoutVerification
         if(step==22){saveLock.Dispose();saveLock=null;panel.retry.onClick.Invoke();Check(focus.Phase==FocusPhase.Finished,"Retry did not finish");}
         if(step==23)Capture("save-retried-1920");
         if(step==24){
+            if (DismissLevelUps(panel)) return;
             var data=new BaseEventData(EventSystem.current);
             EventSystem.current.SetSelectedGameObject(panel.countdownMode.gameObject);
             panel.countdownMode.OnSubmit(data);
             Check(focus.Options.mode==FocusTimerMode.Countdown,"Keyboard mode submit failed");
-            var results=new System.Collections.Generic.List<RaycastResult>();
-            var pointer=new PointerEventData(EventSystem.current){position=RectTransformUtility.WorldToScreenPoint(null,((RectTransform)panel.stopwatchMode.transform).TransformPoint(new Vector3(((RectTransform)panel.stopwatchMode.transform).rect.width * .25f,0,0))),button=PointerEventData.InputButton.Left};
-            EventSystem.current.RaycastAll(pointer,results);
-            Check(results.Count>0 && results[0].gameObject.transform.IsChildOf(panel.stopwatchMode.transform),"Mode label blocked from raycasts");
-            panel.stopwatchMode.OnPointerClick(pointer);Check(focus.CountsUp,"Mode row click failed");
+            foreach (var mode in new[] { panel.pomodoroMode, panel.stopwatchMode, panel.countdownMode })
+                foreach (var point in new[] { new Vector2(.25f,.5f), new Vector2(.5f,.8f), new Vector2(.5f,.2f), new Vector2(.75f,.5f) })
+                    Hit(mode, Pointer(mode, point));
+            Click(panel.stopwatchMode); Check(focus.CountsUp,"Mode row click failed");
             nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);
             panel.pomodoroMode.OnSubmit(data);Check(focus.Options.mode==FocusTimerMode.Pomodoro,"Re-enabled mode listener missing");
         }
@@ -189,10 +359,10 @@ public static class FocusLayoutVerification
             if(step==32)Check(Vector2.Distance(juicy.DrawScale,Vector2.one)<.015f && Mathf.Abs(juicy.DrawOffset)<.1f,"Feedback did not settle");
         }
         if(step==33){
-            // Render the exact icon-menu reference used by the authored mode cards.
-            var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_Buttons/Btn_MenuButton_Rectangle01-Group.prefab");
-            var reference=UnityEngine.Object.Instantiate(source.transform.Find("Btn_MenuButton_Rectangle01_Light").gameObject,panel.transform);reference.name="ReferenceOnly";
-            var rect=(RectTransform)reference.transform;rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.anchoredPosition=Vector2.zero;rect.localScale=Vector3.one;
+            // Render the SimpleCasual input reference beside the retained project picker.
+            var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_UI_Etc/InputField_WhiteCustom.prefab");
+            var reference=UnityEngine.Object.Instantiate(source.GetComponentsInChildren<Transform>(true).Single(t => t.name == "InputField_Light_Username").gameObject,panel.transform);reference.name="ReferenceOnly";
+            var rect=(RectTransform)reference.transform;rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.anchoredPosition=Vector2.zero;rect.localScale=Vector3.one * .5f;
         }
         if(step==34)Capture("simplecasual-reference-1920");
         if (step == 35) {
@@ -201,13 +371,14 @@ public static class FocusLayoutVerification
         }
         if (step >= 36 && step <= 43) {
             var mode=panel.countdownMode;
-            var pointer=new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left};
-            if(step==36)mode.OnPointerEnter(pointer);
-            if(step==37)mode.OnPointerDown(pointer);
-            if(step==38){mode.OnPointerUp(pointer);mode.OnPointerClick(pointer);Check(focus.Options.mode==FocusTimerMode.Countdown,"Mode card click did not select countdown");}
-            if(step==39){mode.OnPointerExit(pointer);EventSystem.current.SetSelectedGameObject(null);}
-            if(step==40){for(int i=0;i<12;i++){panel.pomodoroMode.OnPointerClick(pointer);mode.OnPointerClick(pointer);}Check(mode.isOn&&!panel.pomodoroMode.isOn&&!panel.stopwatchMode.isOn,"Rapid input broke exclusive mode selection");}
-            if(step==41){panel.start.onClick.Invoke();panel.pomodoroMode.OnPointerClick(pointer);Check(focus.Options.mode==FocusTimerMode.Countdown&&!mode.interactable,"Locked mode changed");}
+            var pointer=Pointer(mode,new Vector2(.5f,.5f));
+            var target=Hit(mode,pointer);
+            if(step==36)ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerEnterHandler);
+            if(step==37)ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerDownHandler);
+            if(step==38){ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerUpHandler);ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerClickHandler);Check(focus.Options.mode==FocusTimerMode.Countdown,"Mode card click did not select countdown");}
+            if(step==39){ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerExitHandler);EventSystem.current.SetSelectedGameObject(null);}
+            if(step==40){for(int i=0;i<12;i++){Click(panel.pomodoroMode);Click(mode);}Check(mode.isOn&&!panel.pomodoroMode.isOn&&!panel.stopwatchMode.isOn,"Rapid input broke exclusive mode selection");}
+            if(step==41){Click(panel.start);Click(panel.pomodoroMode);Check(focus.Options.mode==FocusTimerMode.Countdown&&!mode.interactable,"Locked mode changed");}
             if(step==42){panel.cancel.onClick.Invoke();nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);}
             if(step==43){
                 Check(mode.isOn&&mode.interactable,"Mode did not survive page reopen");
@@ -235,7 +406,11 @@ public static class FocusLayoutVerification
         if(step==45) {
             Check(panel.rewards.text=="97" && panel.fishReward.text=="39" && panel.ticketReward.text=="1", "Late-game reward preview");
             Check(panel.rewardAllowanceBar.maxValue==360 && panel.rewardAllowanceLabel.text.Contains("360")
-                && panel.allowance.text.Contains("702") && panel.allowance.text.Contains("1404"), "Late-game allowance display");
+                && !panel.allowanceNotice.activeSelf, "Late-game allowance progress without repeated rules");
+            var target=nav.GetComponentsInChildren<RewardLimitHoverTarget>(true).Single(t=>t.kind==RewardLimitKind.Experience);
+            target.tooltip.Show(target);
+            Check(target.tooltip.note.text.Contains("702") && target.tooltip.focusRewards.text.Contains("1404"), "Late-game session/daily caps remain available in the EXP tooltip");
+            target.tooltip.Hide(target);
             Capture("level30-ready-1920");
         }
         if(step==46)Resolution(1280,720);
@@ -272,12 +447,22 @@ public static class FocusLayoutVerification
                 && row.Find("FishNum (1)").GetComponent<TMPro.TMP_Text>().text=="78", "Task row and detail rewards differ");
         }
         if(step==52)Resolution(1920,1080);
-        if (step == 54) {
+        if (step == 54 && !SessionState.GetBool(Flag+".lateOnly",false))
+        {
+            pointerFlow = PointerChecks(panel, nav);
+            step = 55;
+        }
+        if (step == 55 && pointerFlow != null)
+        {
+            if (pointerFlow.MoveNext()) { next=EditorApplication.timeSinceStartup+Convert.ToDouble(pointerFlow.Current); return; }
+            (pointerFlow as IDisposable)?.Dispose(); pointerFlow=null;
+        }
+        if (step >= 54) {
             string scope=SessionState.GetBool(Flag+".lateOnly",false)
                 ? "Late-game checks only. "
                 : "Full Focus flow: duration settings, three modes, fixed time caps, cancel, save retry, search, keyboard/pointer, disable/reopen and feedback reset. ";
             File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\nPASS: "+scope+
-                "Lv.30 Focus preview, amount caps, End Early, task reward preview and overflow checks; captures at 1920x1080 and 1280x720. Visual/motion review is separate.");
+                "Lv.30 Focus preview, amount caps, End Early, task reward preview and overflow checks; captures at 1920x1080 and 1280x720. Full runs also exercise raycast-routed mouse events, modal Continue, controls and unscaled feedback at both sizes; see interactions.txt and motion.csv. Visual review is separate.");
             EditorApplication.isPlaying = false; return;
         }
         step++; next = EditorApplication.timeSinceStartup + (step>=25 && step<=32 ? .15 : 1);

@@ -260,6 +260,7 @@ public static class EquipmentPlayVerification
                 ((RectTransform)dashboard.GetComponentInChildren<EquipmentStatsUI>().totalPower.transform.parent).GetWorldCorners(powerCorners);
                 foreach(var slotButton in dashboard.slots){
                     var slotRect=(RectTransform)slotButton.transform;slotRect.GetWorldCorners(slotCorners);
+                    Check(Mathf.Abs((slotCorners[2].x-slotCorners[0].x)-(slotCorners[2].y-slotCorners[0].y))<.5f,"Dashboard equipment slot must remain square: "+slotButton.name+" "+context);
                     float effectOverflow=Mathf.Min(slotCorners[2].x-slotCorners[0].x,slotCorners[2].y-slotCorners[0].y)*.06f;
                     Check(slotCorners[0].y-effectOverflow>powerCorners[2].y+4,"Power must not overlap equipment frame: "+context);
                 }

@@ -96,7 +96,7 @@ public sealed class AiChatPage : MonoBehaviour
         foreach (var m in session.History.messages) foreach (var d in m.drafts) signature = unchecked(signature * 31 + d.state.GetHashCode());
         if (rendered == signature) return; rendered = signature;
         foreach (Transform child in content) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-        empty.gameObject.SetActive(session.History.messages.Count == 0);
+        empty.gameObject.SetActive(session.History.messages.Count == 0 && !string.IsNullOrWhiteSpace(empty.text));
         foreach (var message in session.History.messages) {
             var row = Instantiate(messageTemplate, content); row.text.font=status.font; row.gameObject.SetActive(true); row.Bind(message);
             foreach (var draft in message.drafts) {

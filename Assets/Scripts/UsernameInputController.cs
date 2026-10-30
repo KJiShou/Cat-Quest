@@ -18,6 +18,7 @@ public class UsernameInputController : MonoBehaviour
 
     private void Start()
     {
+        if (ShowSaveVersionError()) return;
         // Already has username -> skip intro completely
         if (GameDataManager.Instance.HasUsername())
         {
@@ -39,6 +40,7 @@ public class UsernameInputController : MonoBehaviour
 
     public void ConfirmUsername()
     {
+        if (ShowSaveVersionError()) return;
         string username = usernameInput.text.Trim();
 
         if (string.IsNullOrWhiteSpace(username))
@@ -68,5 +70,15 @@ public class UsernameInputController : MonoBehaviour
         skipButton.SetActive(true);
 
         storyController.StartStory();
+    }
+
+    private bool ShowSaveVersionError()
+    {
+        if (!GameDataManager.Instance.IsSaveReadOnly) return false;
+        usernamePanel.SetActive(true);
+        skipButton.SetActive(false);
+        usernameInput.interactable = false;
+        if (errorText) errorText.text = "Update Cat Quest to open this save.";
+        return true;
     }
 }

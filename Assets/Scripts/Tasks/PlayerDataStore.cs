@@ -11,35 +11,56 @@ public interface IPlayerDataStore
 
 public sealed class PlayerDataStore : IPlayerDataStore
 {
+    private const int CurrentVersion = 5;
+    [Serializable] private sealed class SaveHeader { public int version; }
     public PlayerData Data { get; private set; }
     public string Path { get; }
     public string LoadNotice { get; private set; }
+    public string WriteBlockReason { get; private set; }
     public PlayerDataStore(string path)
     {
         Path = path;
-        if (TryRead(path, out var loaded)) Data = loaded;
-        else if (TryRead(path + ".bak", out loaded))
+        bool primaryValid = TryRead(path, out var loaded, out int primaryVersion);
+        bool backupValid = TryRead(path + ".bak", out var backup, out int backupVersion);
+        if (Math.Max(primaryVersion, backupVersion) > CurrentVersion)
         {
-            Data = loaded;
+            BlockNewerSave(Math.Max(primaryVersion, backupVersion));
+            // Do not interpret an unsupported payload or silently roll back to its backup.
+            Data = primaryValid ? loaded : new PlayerData();
+        }
+        else if (primaryValid) Data = loaded;
+        else if (backupValid)
+        {
+            Data = backup;
             LoadNotice = "Your backup has been recovered because the save could not be read.";
         }
         else
         {
             Data = new PlayerData();
+            Data.tutorial = new TutorialProgress { version = 1 };
             if (File.Exists(path)) LoadNotice = "The save and backup could not be read. The original files have been kept.";
         }
         Normalize(Data);
     }
-    private static bool TryRead(string path, out PlayerData data)
+    private void BlockNewerSave(int version)
+    {
+        WriteBlockReason = $"This save or backup was created by a newer version of Cat Quest (save version {version}). Open it with that version or a newer one. Saving is disabled; your files have not been changed.";
+        LoadNotice = WriteBlockReason;
+    }
+    private static bool TryRead(string path, out PlayerData data, out int version)
     {
         data = null;
+        version = 0;
         try
         {
             if (!File.Exists(path)) return false;
             string json = File.ReadAllText(path).Trim();
             if (!json.StartsWith("{") || !json.EndsWith("}")) return false;
+            // Read only the version first: newer field types may not deserialize here.
+            version = JsonUtility.FromJson<SaveHeader>(json)?.version ?? 0;
+            if (version > CurrentVersion) return false;
             data = JsonUtility.FromJson<PlayerData>(json);
-            if (data == null || data.version > 5) return false;
+            if (data == null) return false;
             Normalize(data);
             return true;
         }
@@ -48,16 +69,30 @@ public sealed class PlayerDataStore : IPlayerDataStore
     public bool TrySave(PlayerData candidate, out string error)
     {
         error = null;
+        if (WriteBlockReason != null) { error = WriteBlockReason; return false; }
         string temporary = Path + ".tmp";
         try
         {
+            bool valid = TryRead(Path, out _, out int primaryVersion);
+            TryRead(Path + ".bak", out _, out int backupVersion);
+            int newest = Math.Max(primaryVersion, backupVersion);
+            if (newest > CurrentVersion)
+            {
+                BlockNewerSave(newest); error = WriteBlockReason; return false;
+            }
+            if (candidate.version > CurrentVersion)
+            {
+                error = "Cannot save data from a newer version of Cat Quest."; return false;
+            }
             Normalize(candidate);
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
+            // Preserve the pre-tutorial save once, in addition to the rolling atomic backup.
+            if (valid && candidate.tutorial != null && Data.tutorial == null && !File.Exists(Path + ".before-tutorial.bak"))
+                File.Copy(Path, Path + ".before-tutorial.bak");
             File.WriteAllText(temporary, JsonUtility.ToJson(candidate, true));
             // A corrupt primary must never replace the last valid backup.
             if (File.Exists(Path))
             {
-                bool valid = TryRead(Path, out _);
                 if (!valid) File.Copy(Path, Path + ".corrupt." + Guid.NewGuid().ToString("N"));
                 File.Replace(temporary, Path, valid ? Path + ".bak" : null);
             }
@@ -67,12 +102,20 @@ public sealed class PlayerDataStore : IPlayerDataStore
         }
         catch (Exception e) { error = "Could not save your changes. " + e.Message; return false; }
     }
-    public static T Copy<T>(T value) => JsonUtility.FromJson<T>(JsonUtility.ToJson(value));
+    public static T Copy<T>(T value)
+    {
+        var result = JsonUtility.FromJson<T>(JsonUtility.ToJson(value));
+        // JsonUtility can materialize an empty object for a null nested serializable field.
+        if(value is PlayerData original && result is PlayerData copy && original.tutorial == null) copy.tutorial = null;
+        return result;
+    }
     public static void Normalize(PlayerData data)
     {
-        data.version = 5;
+        data.version = CurrentVersion;
         data.settings = AppSettings.Normalize(data.settings);
         data.account = AccountPreferences.Normalize(data.account);
+        if (data.tutorial != null && data.tutorial.version <= 0) data.tutorial = null;
+        if (data.tutorial != null) data.tutorial.read ??= new List<string>();
         data.masterStage = Math.Max(1,data.masterStage);
         data.battles ??= new List<BattleAttempt>();
         data.bossProgress ??= new List<BossProgress>();

@@ -21,7 +21,7 @@ public sealed class AiSettingsUI : MonoBehaviour
             if (value >= 0 && value < models.Count) client.Preferences(models[value].slug);
         });
         language.onValueChanged.AddListener(value => client.Preferences(client.Connection.Model, new[] { "auto", "en", "zh" }[value]));
-        privacy.text = "Chat sends your messages and relevant tasks requested in the conversation to OpenAI using your ChatGPT plan. Task changes require your confirmation. Chat history is saved locally; only recent messages are included in requests.";
+        privacy.text = "Messages and tasks you ask about are sent to OpenAI using your ChatGPT plan. Task changes need your confirmation. History is saved locally; requests include recent messages.";
     }
     void OnEnable()
     {
@@ -36,7 +36,7 @@ public sealed class AiSettingsUI : MonoBehaviour
         var connection = client.Connection;
         identity.text = connection.Connected ? connection.Account : "Connect your ChatGPT plan";
         status.text = client.Status;
-        modelLabel.text = connection.Connected ? "Model · using your ChatGPT plan" : "Model";
+        modelLabel.text = "Model";
         connect.gameObject.SetActive(!connection.Connected); connect.interactable = client.Ready && !client.Busy;
         disconnect.gameObject.SetActive(connection.Connected); disconnect.interactable = !client.Busy;
         cancel.gameObject.SetActive(client.SigningIn);

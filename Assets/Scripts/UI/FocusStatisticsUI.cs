@@ -1,0 +1,148 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
+
+public sealed class FocusStatisticsUI : MonoBehaviour
+{
+    public GameObject panel;
+    public Button open, close, previous, next, today, allTags;
+    public Button[] periods;
+    public Button about;
+    public TMP_Text range, total, sessionCount, chartTitle, detail, empty, note;
+    public TMP_Text[] xLabels, yLabels;
+    public FocusStatisticsGraph graph;
+    public RectTransform tagContent;
+    public Button tagTemplate;
+    public FocusStatisticsPeriod Period { get; private set; } = FocusStatisticsPeriod.Week;
+    public DateTime Date { get; private set; }
+    public FocusStatistics.Result Data { get; private set; }
+    public string SelectedTag { get; private set; }
+    TaskService service;
+    readonly Dictionary<string,Color> chartColors = new Dictionary<string,Color>();
+    FocusStatistics.Series[] displayedSeries = Array.Empty<FocusStatistics.Series>();
+    readonly List<Button> rows = new List<Button>();
+    UnityEngine.Events.UnityAction[] periodActions;
+    DateTime observedDay;
+    bool showAbout;
+    void Awake()
+    {
+        open.onClick.AddListener(Show); close.onClick.AddListener(Hide);
+        previous.onClick.AddListener(Previous); next.onClick.AddListener(Next); today.onClick.AddListener(Today);
+        allTags.onClick.AddListener(AllTags);
+        if(about)about.onClick.AddListener(ToggleAbout);
+        periodActions = new UnityEngine.Events.UnityAction[periods.Length];
+        for (int i=0;i<periods.Length;i++) { int index=i;periodActions[i]=()=>ChoosePeriod((FocusStatisticsPeriod)index);periods[i].onClick.AddListener(periodActions[i]); }
+        graph.Hovered += Hover;
+    }
+    void OnEnable() { service=GameDataManager.EnsureInstance().Tasks;service.Changed+=RefreshIfOpen; }
+    void OnDisable() { if(service!=null)service.Changed-=RefreshIfOpen;showAbout=false;panel.SetActive(false); }
+    void OnDestroy()
+    {
+        open.onClick.RemoveListener(Show);close.onClick.RemoveListener(Hide);
+        previous.onClick.RemoveListener(Previous);next.onClick.RemoveListener(Next);today.onClick.RemoveListener(Today);allTags.onClick.RemoveListener(AllTags);
+        if(about)about.onClick.RemoveListener(ToggleAbout);
+        if(periodActions!=null)for(int i=0;i<periods.Length;i++)periods[i].onClick.RemoveListener(periodActions[i]);
+        graph.Hovered-=Hover;
+    }
+    void Update()
+    {
+        if(!panel.activeSelf)return;
+        if(Keyboard.current!=null&&Keyboard.current.escapeKey.wasPressedThisFrame)Hide();
+        if(service.LocalNow.Date!=observedDay)Refresh();
+        var selected=EventSystem.current?EventSystem.current.currentSelectedGameObject:null;
+        if(selected&&!selected.transform.IsChildOf(panel.transform))EventSystem.current.SetSelectedGameObject(close.gameObject);
+    }
+    public void Show() { Date=service.LocalNow.Date;SelectedTag=null;showAbout=false;panel.SetActive(true);panel.transform.SetAsLastSibling();Refresh();if(EventSystem.current)EventSystem.current.SetSelectedGameObject(close.gameObject); }
+    public void Hide() { panel.SetActive(false);if(EventSystem.current&&open.gameObject.activeInHierarchy)EventSystem.current.SetSelectedGameObject(open.gameObject); }
+    public void ChoosePeriod(FocusStatisticsPeriod period) { Period=period;Refresh(); }
+    void Previous() { Date=FocusStatistics.Move(Date,Period,-1);Refresh(); }
+    void Next() { if(!next.interactable)return;Date=FocusStatistics.Move(Date,Period,1);Refresh(); }
+    void Today() { Date=service.LocalNow.Date;Refresh(); }
+    void AllTags() { SelectedTag=null;RefreshGraph(); }
+    void ToggleAbout() { showAbout=!showAbout;RefreshNote(); }
+    void RefreshNote()
+    {
+        note.text=showAbout ? "Includes saved Focus and End Early, in local time. Rest and cancelled sessions are excluded." : "";
+        if(Data.legacyMultipleTags)note.text+=(showAbout ? "\n" : "")+"Older multi-tag sessions appear under each tag; total time counts each session once.";
+        note.gameObject.SetActive(showAbout||Data.legacyMultipleTags);
+        if(about)Tint(about,showAbout);
+    }
+    void RefreshIfOpen() { if(panel.activeSelf)Refresh(); }
+    public void Refresh()
+    {
+        observedDay=service.LocalNow.Date;
+        var data=service.Snapshot;
+        BuildColors(data);
+        Data=FocusStatistics.Query(data.focusSessions,data.tags,Date,Period,TimeZoneInfo.Local);
+        range.text=Period==FocusStatisticsPeriod.Year?Data.start.ToString("yyyy"):Period==FocusStatisticsPeriod.Month?Data.start.ToString("MMMM yyyy",CultureInfo.InvariantCulture)
+            :Period==FocusStatisticsPeriod.Day?Data.start.ToString("ddd, dd MMM yyyy",CultureInfo.InvariantCulture):Data.start.ToString("dd MMM",CultureInfo.InvariantCulture)+" - "+Data.end.AddDays(-1).ToString("dd MMM yyyy",CultureInfo.InvariantCulture);
+        total.text=FocusStatistics.Duration(Data.seconds);
+        sessionCount.text=Data.sessions+" session"+(Data.sessions==1?"":"s");
+        next.interactable=Data.end<=FocusStatistics.Start(service.LocalNow,Period);
+        previous.interactable=Data.start.Year>1;
+        for(int i=0;i<periods.Length;i++)Tint(periods[i],i==(int)Period);
+        foreach(var row in rows){row.gameObject.SetActive(false);Destroy(row.gameObject);}rows.Clear();
+        foreach(var tag in Data.tags)
+        {
+            var row=Instantiate(tagTemplate,tagContent);row.name=tag.id;row.gameObject.SetActive(true);
+            var label=row.GetComponentInChildren<TMP_Text>();label.richText=false;label.textWrappingMode=TextWrappingModes.NoWrap;label.overflowMode=TextOverflowModes.Ellipsis;label.text=tag.name+"\n"+FocusStatistics.Duration(tag.seconds);
+            row.transform.Find("Swatch").GetComponent<Image>().color=chartColors[tag.id];
+            string id=tag.id;row.onClick.AddListener(()=>{SelectedTag=id;RefreshGraph();});rows.Add(row);
+        }
+        if(!Data.tags.Any(t=>t.id==SelectedTag))SelectedTag=null;
+        RefreshNote();
+        RefreshGraph();
+    }
+    void RefreshGraph()
+    {
+        var selected=Data.tags.FirstOrDefault(t=>t.id==SelectedTag);
+        var values=selected?.buckets??Data.buckets;
+        displayedSeries=selected==null?Data.tags.ToArray():new[]{selected};
+        graph.SetSeries(displayedSeries.Select(t=>t.buckets).ToArray(),displayedSeries.Select(t=>chartColors[t.id]).ToArray(),values.Length);
+        chartTitle.richText=false;chartTitle.text=selected==null?"":selected.name;
+        empty.gameObject.SetActive(values.All(v=>v<=0));empty.text="No focus sessions in this period.";
+        for(int i=0;i<xLabels.Length;i++)
+        {
+            bool visible=i<values.Length&&(values.Length<=12||i% (Period==FocusStatisticsPeriod.Day?4:5)==0||i==values.Length-1);
+            xLabels[i].gameObject.SetActive(visible);
+            if(!visible)continue;
+            xLabels[i].text=Data.labels[i];var rect=xLabels[i].rectTransform;rect.anchorMin=rect.anchorMax=new Vector2((i+.5f)/values.Length,0);rect.anchoredPosition=new Vector2(0,-22);
+        }
+        for(int i=0;i<yLabels.Length;i++)yLabels[i].text=(graph.Maximum/3600*i/4).ToString("0.##",CultureInfo.InvariantCulture)+"h";
+        foreach(var row in rows)Tint(row,row.name==SelectedTag);Tint(allTags,SelectedTag==null);Hover(-1,-1);
+    }
+    void Hover(int index,int segment)
+    {
+        if(index<0 || Data==null || index>=Data.buckets.Length){detail.text="";return;}
+        var tag=segment>=0 && segment<displayedSeries.Length?displayedSeries[segment]:null;
+        var selected=Data.tags.FirstOrDefault(t=>t.id==SelectedTag);
+        double seconds=tag!=null?tag.buckets[index]:selected!=null?selected.buckets[index]:Data.buckets[index];
+        detail.richText=false;
+        detail.text=Data.labels[index]+(Period==FocusStatisticsPeriod.Day?":00":"")+" / "+(tag?.name??selected?.name??"Total")+" / "+FocusStatistics.Duration(seconds);
+    }
+    void BuildColors(PlayerData data)
+    {
+        chartColors.Clear();
+        chartColors[FocusStatistics.Untagged]=new Color32(115,139,157,255);
+        // Include the whole catalog/history so changing the date cannot recolor a tag.
+        var ids=data.tags.Select(t=>t.id).Concat(data.focusSessions.SelectMany(s=>s.tagIds??new List<string>()))
+            .Where(id=>!string.IsNullOrEmpty(id)).Distinct().OrderBy(id=>id,StringComparer.Ordinal);
+        foreach(var id in ids)
+        {
+            if(chartColors.ContainsKey(id))continue;
+            var tag=data.tags.FirstOrDefault(t=>t.id==id);
+            Color candidate=Color.Lerp(TagColors.Background(tag?.colorHex??"#5CA6CE"),TaskUIBuilder.Ink,.15f);
+            uint hash=2166136261;foreach(char c in id)hash=unchecked((hash^c)*16777619);
+            for(int attempt=0;attempt<32 && chartColors.Values.Any(c=>Vector3.Distance(new Vector3(c.r,c.g,c.b),new Vector3(candidate.r,candidate.g,candidate.b))<.24f);attempt++)
+                candidate=Color.HSVToRGB((hash%360/360f+attempt*.618034f)%1f,.65f,.83f);
+            chartColors[id]=candidate;
+        }
+    }
+    static void Tint(Button button,bool selected) { if(button.targetGraphic)button.targetGraphic.color=selected?new Color32(182,236,255,255):Color.white; }
+}

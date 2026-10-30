@@ -16,6 +16,7 @@ public static class RewardSystemVerification
     private sealed class Store : IPlayerDataStore
     {
         public PlayerData Data { get; private set; } = new PlayerData();
+        public Store(int experience=0) { Data.experience=experience; }
         public bool fail;
         public bool TrySave(PlayerData data, out string error)
         { error = fail ? "Simulated write failure." : null; if (fail) return false; Data = data; return true; }
@@ -136,7 +137,7 @@ public static class RewardSystemVerification
     private static void VerifyFocus()
     {
         var cumulativeClock = new Clock();
-        var cumulativeStore = new Store();
+        var cumulativeStore = new Store(100);
         var cumulative = new TaskService(cumulativeStore, cumulativeClock);
         Session(cumulative, 750, true);
         Check(cumulative.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) == 12 && !cumulative.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes), "Partial Focus goal progress incorrect.");
@@ -149,22 +150,22 @@ public static class RewardSystemVerification
         Session(cumulative, 600, true);
         Check(cumulative.BeginFocus(out string ignored) && cumulative.CancelFocus(ignored), cumulative.LastError);
         Check(cumulative.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) == 10, "Cancelled session counted toward Focus goal.");
-        var clock = new Clock(); var store = new Store(); var service = new TaskService(store, clock);
+        var clock = new Clock(); var store = new Store(100); var service = new TaskService(store, clock);
         Check(service.BeginFocus(out string cancelled) && service.CancelFocus(cancelled), service.LastError);
-        Check(!service.FinishFocus(cancelled, 1500, false) && service.Snapshot.experience == 0, "Cancelled Focus rewarded.");
+        Check(!service.FinishFocus(cancelled, 1500, false) && service.Snapshot.experience == 100, "Cancelled Focus rewarded.");
         Check(!service.FinishFocus("missing", 1500, false), "Missing Focus rewarded.");
         string shortId = Session(service, 1499, true);
         var shortResult = service.Snapshot.focusSessions.Single(s => s.id == shortId);
-        Check(shortResult.eligibleMinutes == 24 && shortResult.experience == 24 && shortResult.fishCoins == 8 && shortResult.tickets == 0, "Early result did not use complete minutes.");
+        Check(shortResult.eligibleMinutes == 24 && shortResult.experience == 26 && shortResult.fishCoins == 8 && shortResult.tickets == 0, "Early result did not use complete minutes.");
         Check(service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) == 24 && !service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes), "Short Focus unlocked daily goal.");
         string id = Session(service);
-        Check(service.FinishFocus(id, 1500, false) && service.Snapshot.experience == 49 && service.Snapshot.fishCoins == 18 && service.Snapshot.tickets == 1, "Focus reward tiers or idempotency failed.");
-        Check(service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes) && service.Snapshot.experience == 69 && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Independent Focus claim failed.");
+        Check(service.FinishFocus(id, 1500, false) && service.Snapshot.experience == 153 && service.Snapshot.fishCoins == 19 && service.Snapshot.tickets == 1, "Focus reward tiers or idempotency failed.");
+        Check(service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes) && service.Snapshot.experience == 175 && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Independent Focus claim failed.");
         clock.now = clock.now.AddDays(1); service.RefreshDate();
         for (int i = 0; i < 16; i++) Session(service);
-        Check(service.TodayRewards.focusMinutes == 360 && service.TodayRewards.focusTickets == 4 && service.Snapshot.tickets == 5, "Focus daily caps failed.");
+        Check(service.TodayRewards.focusMinutes == 360 && service.TodayRewards.focusTickets == 4 && service.Snapshot.tickets == 6, "Focus daily caps failed.");
         var sessions = service.Snapshot.focusSessions.Where(s => s.rewardDay == TaskService.DateKey(clock.now)).ToArray();
-        Check(sessions[14].experience == 13 && sessions[14].fishCoins == 5 && sessions[14].tickets == 0 && sessions[15].experience == 0, "Focus level scaling failed.");
+        Check(sessions[14].experience == 14 && sessions[14].fishCoins == 5 && sessions[14].tickets == 0 && sessions[15].experience == 0, "Focus level scaling failed.");
         // Explicit level-30 boundary fixture; previous sessions already checked natural level increases.
         store.Data.experience = 13050;
         store.Data.rewardDays.Single(d => d.day == TaskService.DateKey(clock.now)).focusMinutes = 350;
@@ -184,10 +185,10 @@ public static class RewardSystemVerification
     }
     private static void VerifyController()
     {
-        var store = new Store(); var service = new TaskService(store, new Clock()); var controller = new FocusController(service);
+        var store = new Store(100); var service = new TaskService(store, new Clock()); var controller = new FocusController(service);
         Check(controller.Start(), service.LastError);
         for (int i = 0; i < 1500; i++) controller.Advance(1);
-        Check(controller.Phase == FocusPhase.Resting && controller.LastResult.experience == 25, "Normal completion did not save before Rest.");
+        Check(controller.Phase == FocusPhase.Resting && controller.LastResult.experience == 27, "Normal completion did not save before Rest.");
         int paid = service.Snapshot.experience;
         controller.Advance(300);
         Check(controller.Phase == FocusPhase.Finished && service.Snapshot.experience == paid, "Rest grants rewards or never ends.");

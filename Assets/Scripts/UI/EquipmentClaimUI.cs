@@ -18,8 +18,14 @@ public sealed class EquipmentClaimUI : MonoBehaviour
 
     void Awake(){for(int i=0;i<particles.Length;i++)particles[i].Bind(chests[i].rectTransform);}
 
+    public void PlayCollected(int slot){
+        particles[slot].PlayCollected(itemIcons[slot]);
+        SettingsAudio.Instance?.PlayEquipmentClaim();
+    }
+
     public void Show(PlayerData data,int boss,bool unlocked)
     {
+        foreach(var effect in particles)effect.StopCollected();
         Boss=boss;
         var mastery=data.bossProgress.Single(x=>x.bossId==boss);
         progress.SetValueWithoutNotify(Mathf.Min(mastery.wins,15));

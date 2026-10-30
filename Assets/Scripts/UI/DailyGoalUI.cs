@@ -42,7 +42,7 @@ public sealed class DailyGoalUI : MonoBehaviour
         var reward=service.PreviewDailyGoal(goal);
         if(experienceReward) experienceReward.text=reward.experience.ToString();
         if(fishReward) fishReward.text=reward.fishCoins.ToString();
-        progress.text = $"{value} / {target}";
+        progress.text = $"{value} / {target}" + (goal == DailyRewardGoal.Focus25Minutes ? " min" : "");
         progressBar.maxValue = target;
         progressBar.SetValueWithoutNotify(claimed ? target : value);
         claimLabel.text = claimed ? "Claimed" : value >= target ? "Claim" : "In Progress";

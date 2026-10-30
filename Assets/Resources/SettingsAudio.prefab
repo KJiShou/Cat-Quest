@@ -56,6 +56,7 @@ MonoBehaviour:
   buttonClick: {fileID: 8300000, guid: fbbe98da312644a4ba9fb00251035066, type: 3}
   taskComplete: {fileID: 8300000, guid: 570d29ba0b1984346942113e7e2640dc, type: 3}
   levelUp: {fileID: 8300000, guid: a5c54caabfdce3545a2757654551486e, type: 3}
+  equipmentClaim: {fileID: 8300000, guid: 67d3ceefae9319346a336d0bbe941ca5, type: 3}
   catAttack: {fileID: 8300000, guid: 8cd64ecc0317fee4f9e6998b2d4101f2, type: 3}
   bossAttack: {fileID: 8300000, guid: a4fd9ff0af4eba249950b66f9c9acca1, type: 3}
   battleVictory: {fileID: 8300000, guid: 1ecfd54185ca5be4c9bddc9f983ec0b1, type: 3}

@@ -26,6 +26,20 @@ public class TaskSystemUI : MonoBehaviour
     public GameObject inlineTaskTemplate;
     public GameObject confirmDialogTemplate;
     public TMP_InputField QuickAddInput => quickInput;
+    public bool TutorialBlocked => editing || (confirmation != null && confirmation.Root.activeInHierarchy) || (filters && filters.gameObject.activeInHierarchy);
+    public bool TutorialNoticeVisible => resultNotice && resultNotice.gameObject.activeInHierarchy;
+    public RectTransform TutorialTaskTarget(string id)
+    {
+        var row = listContent.Cast<Transform>().FirstOrDefault(t => t.gameObject.activeInHierarchy && t.name == "Task_" + id);
+        return row ? row as RectTransform : null;
+    }
+    public RectTransform TutorialCompletionTarget(string id)
+    {
+        var row = TutorialTaskTarget(id);
+        var tick = row ? row.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "Tick") : null;
+        return tick ? tick.parent as RectTransform : row;
+    }
+    public RectTransform TutorialAddTarget => quickInput ? quickInput.transform as RectTransform : listContent.Cast<Transform>().FirstOrDefault(t => t.gameObject.activeInHierarchy && t.name == "AddTask") as RectTransform;
     public Sprite roundedSprite;
     public Sprite tagTintSprite;
     public TMP_FontAsset font;
@@ -44,6 +58,7 @@ public class TaskSystemUI : MonoBehaviour
     private bool refocusQuick;
     private bool suppressQuickBlur;
     private TaskConfirmDialog confirmation;
+    private TaskResultNotice resultNotice;
     public TaskFilterDialog filterDialogTemplate;
     private TaskFilterDialog filters;
     private float nextClockCheck;
@@ -116,7 +131,7 @@ public class TaskSystemUI : MonoBehaviour
         return true;
     }
     private void OnApplicationFocus(bool focus) { if (focus && Service != null) { Service.RefreshDate(); Refresh(); } }
-    private void OnDestroy() { if (Service != null) Service.Changed -= Refresh; if(filters) Destroy(filters.gameObject); }
+    private void OnDestroy() { if (Service != null) Service.Changed -= Refresh; if(filters) Destroy(filters.gameObject); if(resultNotice) Destroy(resultNotice.gameObject); if(confirmation?.Root) Destroy(confirmation.Root); }
 
     private void BuildDetails()
     {
@@ -149,16 +164,19 @@ public class TaskSystemUI : MonoBehaviour
         filters=Instantiate(filterDialogTemplate,canvas.transform);
         filters.gameObject.SetActive(false);
         confirmation=new TaskConfirmDialog(confirmDialogTemplate,canvas.transform,font);
+        resultNotice=Instantiate(Resources.Load<TaskResultNotice>("TaskResultNotice"),canvas.transform);
+        resultNotice.Dismiss();
     }
     public void Notify(string message,bool error=false)
     {
-        if(error) confirmation.ShowNotice("Notice",message);
+        if(error) { resultNotice.Dismiss(); confirmation.ShowNotice("Notice",message); }
+        else resultNotice.Show(message);
     }
     private void CloseModal() { if(filters) filters.Dismiss(); }
-    private void OnDisable() { CloseModal(); }
-    private void Confirm(string title,string message,Action accepted)
+    private void OnDisable() { CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
+    private void Confirm(string title,string message,Action accepted,string confirmLabel="Confirm")
     {
-        CloseModal(); confirmation.Show(title,message,accepted);
+        CloseModal(); confirmation.Show(title,message,accepted,confirmLabel);
     }
     public void SelectTab(TaskTab tab)
     {
@@ -286,8 +304,8 @@ public class TaskSystemUI : MonoBehaviour
         detailsRoot.gameObject.SetActive(!editing && view!=null);
         if(view==null) return;
         details.Render(view, ScheduleText, Service, BeginEdit, CompleteSelected,
-            id=>Confirm("Delete task?", "Delete this task? Completed history and rewards will be kept.",
-                ()=> { if(!Service.Delete(id)) Notify(Service.LastError,true); else Notify("Task deleted."); }),
+            id=>Confirm("Delete task?", "Completed history and rewards will be kept.",
+                ()=> { if(!Service.Delete(id)) Notify(Service.LastError,true); else Notify("Task deleted."); },"Delete"),
             message=>Notify(message,true));
 
     }
@@ -311,11 +329,18 @@ public class TaskSystemUI : MonoBehaviour
     {
         Action complete=()=>
         {
-            int before=Service.Snapshot.fishCoins;
+            var before=Service.Query(TaskTab.Daily).Concat(Service.Query(TaskTab.Todo)).FirstOrDefault(v=>v.task.id==id);
             if(!Service.Complete(id,true)) Notify(Service.LastError,true);
             else {
+                if(before==null || before.Completed) { Notify("Task already completed. No additional rewards."); return; }
                 SettingsAudio.Instance?.PlayTaskComplete();
-                Notify(Service.Snapshot.fishCoins>before ? "Task completed. Rewards added!" : "Task completed. Previously earned rewards are kept.");
+                if(before.occurrence.rewardGranted) Notify("Task completed again. No additional rewards; previous rewards are kept.");
+                else {
+                    var receipt=Service.Snapshot.history.First(h=>h.taskId==id && h.day==before.occurrence.day);
+                    Notify(receipt.experience==0 && receipt.fishCoins==0
+                        ? "Task completed. Daily task reward limit reached; no additional rewards."
+                        : $"Task completed. +{receipt.experience} EXP, +{receipt.fishCoins} Fish Coins.");
+                }
             }
         };
         if(Service.HasIncompleteSubtasks(id)) Confirm("Complete remaining subtasks?","Some subtasks are unfinished. Confirm to complete them all and collect the task rewards.",complete); else complete();
