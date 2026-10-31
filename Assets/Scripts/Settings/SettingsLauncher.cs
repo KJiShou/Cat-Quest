@@ -13,4 +13,8 @@ public sealed class SettingsLauncher : MonoBehaviour
     {
         if (instance) instance.OpenAIFromChat(opener);
     }
+    public void OpenAccountFromPage(GameObject opener)
+    {
+        if (instance) instance.OpenAccountFromPage(opener);
+    }
 }

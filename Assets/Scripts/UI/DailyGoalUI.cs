@@ -15,9 +15,12 @@ public sealed class DailyGoalUI : MonoBehaviour
     public Sprite inProgressSprite, completedSprite;
     public Sprite inProgressFillSprite, completedFillSprite;
     private TaskService service;
+    private TMP_Text taskHeading;
+    private DailyRewardGoal DisplayGoal => goal == DailyRewardGoal.ThreeQuests ? service.CurrentTaskGoal : goal;
     private void OnEnable()
     {
         service = GameDataManager.EnsureInstance().Tasks;
+        if (goal == DailyRewardGoal.ThreeQuests) taskHeading = transform.Find("Text_Info")?.GetComponent<TMP_Text>();
         service.Changed += Refresh;
         claim.onClick.AddListener(Claim);
         Refresh();
@@ -29,17 +32,19 @@ public sealed class DailyGoalUI : MonoBehaviour
     }
     private void Claim()
     {
-        bool saved = service.ClaimDailyGoal(goal);
+        bool saved = service.ClaimDailyGoal(DisplayGoal);
         feedback.text = saved ? "Reward claimed!" : "Save failed. Retry.";
         if (!saved) Debug.LogWarning(service.LastError);
         Refresh();
     }
     private void Refresh()
     {
-        int target = goal == DailyRewardGoal.ThreeQuests ? 3 : 25;
-        int value = service.DailyGoalProgress(goal);
-        bool claimed = service.DailyGoalClaimed(goal);
-        var reward=service.PreviewDailyGoal(goal);
+        var displayed = DisplayGoal;
+        int target = TaskService.DailyGoalTarget(displayed);
+        int value = service.DailyGoalProgress(displayed);
+        bool claimed = service.DailyGoalClaimed(displayed);
+        var reward=service.PreviewDailyGoal(displayed);
+        if (taskHeading) taskHeading.text = displayed == DailyRewardGoal.FirstQuest ? "Complete 1 task" : "Complete 3 tasks";
         if(experienceReward) experienceReward.text=reward.experience.ToString();
         if(fishReward) fishReward.text=reward.fishCoins.ToString();
         progress.text = $"{value} / {target}" + (goal == DailyRewardGoal.Focus25Minutes ? " min" : "");

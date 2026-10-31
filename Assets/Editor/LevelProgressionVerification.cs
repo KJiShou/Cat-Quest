@@ -23,40 +23,41 @@ public static class LevelProgressionVerification
     public static void Run()
     {
         {
-            var store=new Store();store.Data.experience=99;var service=new TaskService(store,new Clock());int events=0;
-            TaskService.LevelUpReward observed=default;service.LevelUp+=r=>{events++;observed=r;Check(store.Data.experience==279,"Notification before persistence");};
+            var store=new Store();store.Data.experience=224;var service=new TaskService(store,new Clock());int events=0;
+            TaskService.LevelUpReward observed=default;service.LevelUp+=r=>{events++;observed=r;Check(store.Data.experience==323,"Notification before persistence");};
             Check(service.BeginFocus(new FocusSessionOptions{mode=FocusTimerMode.Stopwatch},out var id),service.LastError);
-            store.fail=true;Check(!service.FinishFocus(id,10800,true)&&store.Data.experience==99&&events==0,"Failed write awarded level");
+            store.fail=true;Check(!service.FinishFocus(id,10800,true)&&store.Data.experience==224&&events==0,"Failed write awarded level");
             store.fail=false;Check(service.FinishFocus(id,10800,true),service.LastError);
-            Check(events==1&&observed.fromLevel==1&&observed.toLevel==3&&observed.fishCoins==25&&observed.tickets==0,"Multi-level sum");
-            Check(store.Data.fishCoins==97&&store.Data.tickets==4&&store.Data.focusSessions.Last().fishCoins==72,"Bonus polluted Focus receipt");
-            Check(service.FinishFocus(id,10800,true)&&events==1&&store.Data.fishCoins==97,"Duplicate level payout");
+            Check(events==1&&observed.fromLevel==2&&observed.toLevel==3&&observed.fishCoins==15&&observed.tickets==0,"Level transition bonus");
+            Check(store.Data.fishCoins==54&&store.Data.tickets==3&&store.Data.focusSessions.Last().fishCoins==39,"Bonus polluted Focus receipt");
+            Check(service.FinishFocus(id,10800,true)&&events==1&&store.Data.fishCoins==54,"Duplicate level payout");
             string folder="Library/LevelProgressionVerification/"+Guid.NewGuid().ToString("N");Directory.CreateDirectory(folder);
             var disk=new PlayerDataStore(folder+"/save.json");Check(disk.TrySave(store.Data,out var error),error);
             var loaded=new PlayerDataStore(folder+"/save.json");var restarted=new TaskService(loaded,new Clock());
-            Check(restarted.FinishFocus(id,10800,true)&&loaded.Data.fishCoins==97,"Reload backfilled bonus");
+            Check(restarted.FinishFocus(id,10800,true)&&loaded.Data.fishCoins==54,"Reload backfilled bonus");
         }
         {
-            var store=new Store();store.Data.experience=375;var service=new TaskService(store,new Clock());
+            var store=new Store();store.Data.experience=549;var service=new TaskService(store,new Clock());
             Check(service.BeginFocus(new FocusSessionOptions{mode=FocusTimerMode.Stopwatch},out var id)&&service.FinishFocus(id,10800,true),service.LastError);
-            Check(store.Data.experience==609&&store.Data.fishCoins==118&&store.Data.tickets==5
-                &&service.TodayRewards.focusTickets==4&&store.Data.focusSessions.Last().tickets==4,"Level-five Ticket consumed Focus cap");
+            Check(store.Data.experience==666&&store.Data.fishCoins==71&&store.Data.tickets==4
+                &&service.TodayRewards.focusTickets==3&&store.Data.focusSessions.Last().tickets==3,"Level-five Ticket consumed Focus cap");
         }
         {
             var store=new Store();store.Data.experience=90;var service=new TaskService(store,new Clock());
             Check(service.Upsert(new QuestTask{title="Level boundary"},null,out var id)&&service.Complete(id,true),service.LastError);
-            Check(store.Data.experience==110&&store.Data.fishCoins==20&&service.TodayRewards.taskFishCoins==10,"Task bonus entered daily allowance");
+            Check(store.Data.experience==115&&store.Data.fishCoins==20&&service.TodayRewards.taskFishCoins==10,"Task bonus entered daily allowance");
             var receipt=store.Data.history.Single();Check(service.UndoCompletion(receipt.id)&&service.Complete(id,true)&&store.Data.fishCoins==20,"Undo repaid level");
         }
         foreach(var goal in new[]{DailyRewardGoal.ThreeQuests,DailyRewardGoal.Focus25Minutes}) {
             var store=new Store();store.Data.experience=13050;var service=new TaskService(store,new Clock());
             if(goal==DailyRewardGoal.ThreeQuests)for(int i=0;i<3;i++) {service.Upsert(new QuestTask{title="Goal "+i},null,out var id);service.Complete(id,true);}
             else {service.BeginFocus(out var id);service.FinishFocus(id,1500,false);}
-            var preview=service.PreviewDailyGoal(goal);Check(preview.experience==78&&preview.fishCoins==39,"Daily level multiplier");
+            int expectedXp=goal==DailyRewardGoal.ThreeQuests?78:39, expectedFish=goal==DailyRewardGoal.ThreeQuests?39:19;
+            var preview=service.PreviewDailyGoal(goal);Check(preview.experience==expectedXp&&preview.fishCoins==expectedFish,"Daily level multiplier");
             int xp=store.Data.experience,fish=store.Data.fishCoins;store.fail=true;
             Check(!service.ClaimDailyGoal(goal)&&!service.DailyGoalClaimed(goal)&&store.Data.fishCoins==fish,"Daily failure paid");
-            store.fail=false;Check(service.ClaimDailyGoal(goal)&&service.ClaimDailyGoal(goal)&&store.Data.experience==xp+78&&store.Data.fishCoins==fish+39,"Daily duplicate");
-            store.Data.experience=34300;Check(service.PreviewDailyGoal(goal).experience==78&&service.PreviewDailyGoal(goal).fishCoins==39,"Claimed card repriced");
+            store.fail=false;Check(service.ClaimDailyGoal(goal)&&service.ClaimDailyGoal(goal)&&store.Data.experience==xp+expectedXp&&store.Data.fishCoins==fish+expectedFish,"Daily duplicate");
+            store.Data.experience=34300;Check(service.PreviewDailyGoal(goal).experience==expectedXp&&service.PreviewDailyGoal(goal).fishCoins==expectedFish,"Claimed card repriced");
         }
         {
             var store=new Store();store.Data.experience=13050;store.Data.rewardDays.Add(new RewardDay{day="2026-10-25",questsClaimed=true});

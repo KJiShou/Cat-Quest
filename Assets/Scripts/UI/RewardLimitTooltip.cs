@@ -64,17 +64,20 @@ public sealed class RewardLimitTooltip : MonoBehaviour
         SetBar(taskBar, used, limit);
         taskValue.text = $"{used} / {limit} {currency}";
         int focusLevel = service.FocusRewardLevel;
-        int focusLimit = TaskService.ScaleRewardAmount(experience ? service.FocusDailyMinuteLimit : service.FocusDailyMinuteLimit / 5 * 2, focusLevel);
+        var dailyCurrency = TaskService.FocusCurrencyForMinutes(service.FocusDailyMinuteLimit, focusLevel);
+        int focusLimit = experience ? dailyCurrency.experience : dailyCurrency.fishCoins;
         focusRewards.text = $"Focus · max {focusLimit} {currency}/day";
         // Focus allowance is consumed in minutes, not paid currency. Short sessions and
         // level changes can yield different totals; a full bar must still mean no time remains.
         SetBar(focusBar, day.focusMinutes, service.FocusDailyMinuteLimit);
         focusValue.text = $"{day.focusMinutes} / {service.FocusDailyMinuteLimit} rewarded min";
-        ticketRewards.text = "Focus";
-        SetBar(ticketBar, day.focusTickets, TaskService.FocusTicketCap);
-        ticketValue.text = $"{day.focusTickets} / {TaskService.FocusTicketCap} Tickets";
-        int sessionLimit = TaskService.ScaleRewardAmount(experience ? service.FocusSessionMinuteLimit : service.FocusSessionMinuteLimit / 5 * 2, focusLevel);
-        note.text = tickets ? "1 ticket / 25 Focus min · Resets at midnight" : $"Session: {sessionLimit} {currency} / {service.FocusSessionMinuteLimit} min\nResets at midnight · Bonuses are extra";
+        ticketRewards.text = "Task + Focus";
+        int ticketLimit = TaskService.TaskTicketCap + TaskService.FocusTicketCap;
+        SetBar(ticketBar, day.taskTickets + day.focusTickets, ticketLimit);
+        ticketValue.text = $"{day.taskTickets + day.focusTickets} / {ticketLimit} Tickets";
+        var sessionCurrency = TaskService.FocusCurrencyForMinutes(service.FocusSessionMinuteLimit, focusLevel);
+        int sessionLimit = experience ? sessionCurrency.experience : sessionCurrency.fishCoins;
+        note.text = tickets ? "First Task: 1 · Focus: 3/day\nResets at midnight · Level bonuses extra" : $"Session: {sessionLimit} {currency} / {service.FocusSessionMinuteLimit} min\nResets at midnight · Bonuses are extra";
     }
     static void SetBar(Slider bar, int value, int limit)
     {

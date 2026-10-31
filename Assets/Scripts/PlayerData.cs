@@ -67,6 +67,7 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
     public int fishCoins;
     public int experience;
     public bool revoked;
+    public int tickets; // Exact automatic first-task ticket paid with this receipt.
 }
 
 [Serializable] public class RewardDay
@@ -80,9 +81,14 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
     public bool focusClaimed;
     public int questsExperience, questsFishCoins;
     public int focusGoalExperience, focusGoalFishCoins;
+    // Additive fields: legacy days are marked lazily without repricing old receipts.
+    public bool rewardRulesInitialized, firstTaskSettled;
+    public int taskTickets;
+    public bool firstQuestClaimed;
+    public int firstQuestExperience, firstQuestFishCoins;
 }
 
-public enum DailyRewardGoal { ThreeQuests, Focus25Minutes }
+public enum DailyRewardGoal { ThreeQuests, Focus25Minutes, FirstQuest }
 public enum FocusSessionStatus { Running, Completed, EndedEarly, Cancelled, Invalid }
 public enum FocusTimerMode { Pomodoro, Stopwatch, Countdown }
 [Serializable] public class FocusSession

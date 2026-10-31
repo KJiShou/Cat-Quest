@@ -5,7 +5,7 @@ using UnityEngine.UI;
 // Animate a child visual, leaving the button's hit area stationary.
 [RequireComponent(typeof(Button))]
 public sealed class JuicyButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
-    IPointerDownHandler, IPointerUpHandler, ISelectHandler, IDeselectHandler, ISubmitHandler, IPointerClickHandler
+    IPointerDownHandler, IPointerUpHandler, ISelectHandler, IDeselectHandler, ISubmitHandler
 {
     public RectTransform visual;
     public Image shine;
@@ -62,16 +62,17 @@ public sealed class JuicyButton : MonoBehaviour, IPointerEnterHandler, IPointerE
     }
     public void OnPointerEnter(PointerEventData e){hovered=true;}
     public void OnPointerExit(PointerEventData e){hovered=false;pressed=false;}
-    public void OnPointerDown(PointerEventData e){if(e.button==PointerEventData.InputButton.Left&&button.IsInteractable())pressed=true;}
+    public void OnPointerDown(PointerEventData e)
+    {
+        if(e.button!=PointerEventData.InputButton.Left || !button.IsInteractable())return;
+        pressed=true;
+        // Acknowledge the press immediately; Button still owns activation on release.
+        SettingsAudio.Instance?.PlayButtonClick();
+    }
     public void OnPointerUp(PointerEventData e){if(e.button==PointerEventData.InputButton.Left)pressed=false;}
     public void OnSelect(BaseEventData e){selected=!(e is PointerEventData);}
     public void OnDeselect(BaseEventData e){selected=false;pressed=false;}
     public void OnSubmit(BaseEventData e){if(button.IsInteractable()){submitUntil=Time.unscaledTime+.12f;SettingsAudio.Instance?.PlayButtonClick();}}
-    public void OnPointerClick(PointerEventData e)
-    {
-        if(e.button==PointerEventData.InputButton.Left && button.IsInteractable())
-            SettingsAudio.Instance?.PlayButtonClick();
-    }
     void OnApplicationFocus(bool focus){if(!focus)ResetVisual();}
     void OnDisable(){ResetVisual();}
     void ResetVisual(){hovered=pressed=selected=false;submitUntil=0;scale=Vector2.one;velocity=Vector2.zero;

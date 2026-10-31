@@ -13,11 +13,13 @@ public sealed class StoryDialogueView : MonoBehaviour
         speaker.text = name; body.text = text; body.maxVisibleCharacters = 0;
         if (continueIcon) continueIcon.SetActive(false);
     }
-    public IEnumerator Reveal(float delay, Action complete) => RevealText(body, delay, complete);
-    public static IEnumerator RevealText(TMP_Text label, float delay, Action complete)
+    public IEnumerator Reveal(float delay, Action complete, float voiceDuration = 0) => RevealText(body, delay, complete, voiceDuration);
+    public static IEnumerator RevealText(TMP_Text label, float delay, Action complete, float voiceDuration = 0)
     {
         label.maxVisibleCharacters = 0; label.ForceMeshUpdate();
         int count = label.textInfo.characterCount; float elapsed = 0;
+        // Keep the approved voice pitch; allow the text/character to finish with the line.
+        if (count > 0) delay = Mathf.Max(delay, voiceDuration / count);
         while (label.maxVisibleCharacters < count)
         {
             elapsed += Time.unscaledDeltaTime;

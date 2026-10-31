@@ -61,21 +61,21 @@ public static class RewardSystemVerification
     {
         var store = new Store(); var clock = new Clock(); var service = new TaskService(store, clock);
         Complete(service, TaskDifficulty.Easy); Complete(service); string hard = Complete(service, TaskDifficulty.Hard, true);
-        Check(service.Snapshot.experience == 60 && service.Snapshot.fishCoins == 30, "Difficulty tiers are wrong.");
+        Check(service.Snapshot.experience == 80 && service.Snapshot.fishCoins == 32, "Difficulty tiers are wrong.");
         Check(TaskService.DifficultyName(TaskDifficulty.Normal) == "Medium", "Middle tier label is wrong.");
         Check(service.DailyGoalProgress(DailyRewardGoal.ThreeQuests) == 3 && service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) == 0, "Goals were combined.");
         var receipt = service.Query(TaskTab.History).Single(h => h.task.id == hard).history;
         Check(service.UndoCompletion(receipt.id) && service.DailyGoalProgress(DailyRewardGoal.ThreeQuests) == 2, "Undo did not decrease unclaimed progress.");
         Check(!service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests), "Incomplete goal can be claimed.");
-        Check(service.Complete(hard, true) && service.Complete(hard, true) && service.Snapshot.experience == 60, "Recompletion paid twice.");
+        Check(service.Complete(hard, true) && service.Complete(hard, true) && service.Snapshot.experience == 80, "Recompletion paid twice.");
         store.fail = true;
         Check(!service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests) && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Failed claim changed state.");
         store.fail = false;
         Check(service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests) && service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests), service.LastError);
-        Check(service.Snapshot.experience == 80 && service.Snapshot.fishCoins == 40 && service.TodayRewards.taskExperience == 60, "Claim duplicated or consumed task cap.");
+        Check(service.Snapshot.experience == 100 && service.Snapshot.fishCoins == 52 && service.TodayRewards.taskExperience == 80, "Claim duplicated or consumed task cap.");
         Check(service.UndoCompletion(receipt.id) && service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Undo revoked a paid claim.");
         Complete(service, TaskDifficulty.Hard); Complete(service, TaskDifficulty.Hard); Complete(service, TaskDifficulty.Hard); Complete(service, TaskDifficulty.Hard);
-        Check(service.Snapshot.experience == 152 && service.Snapshot.fishCoins == 86, "Task cap failed.");
+        Check(service.Snapshot.experience == 185 && service.Snapshot.fishCoins == 86, "Task cap failed.");
         Check(service.Snapshot.history.Last().experience == 0 && service.Snapshot.history.Last().fishCoins == 0, "Capped completion was not recorded.");
         clock.now = clock.now.AddDays(1); service.RefreshDate();
         Check(!service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests) && service.DailyGoalProgress(DailyRewardGoal.ThreeQuests) == 0 && service.TodayRewards.taskExperience == 0, "Midnight did not reset goals/caps.");
@@ -85,18 +85,18 @@ public static class RewardSystemVerification
         Complete(partialService, TaskDifficulty.Easy);
         for (int i = 0; i < 3; i++) Complete(partialService, TaskDifficulty.Hard);
         Complete(partialService, TaskDifficulty.Hard);
-        Check(partial.Data.experience == 132 && partial.Data.fishCoins == 76 && partial.Data.history.Last().experience == 32 && partial.Data.history.Last().fishCoins == 16, "Partial reward exceeded remaining task allowance.");
+        Check(partial.Data.experience == 165 && partial.Data.fishCoins == 76 && partial.Data.history.Last().experience == 30 && partial.Data.history.Last().fishCoins == 12, "Partial reward exceeded remaining task allowance.");
         // Currency allowances are independent, including migrated data with different XP/coin ratios.
-        partial.Data.rewardDays[0].taskExperience = 132; partial.Data.rewardDays[0].taskFishCoins = 61;
+        partial.Data.rewardDays[0].taskExperience = 165; partial.Data.rewardDays[0].taskFishCoins = 61;
         Complete(partialService, TaskDifficulty.Hard);
         Check(partial.Data.history.Last().experience == 0 && partial.Data.history.Last().fishCoins == 5, "Independent allowance clamping failed.");
     }
     private static void VerifyLevelTasks()
     {
         int[] experience = { 0, 1800, 13050 };
-        int[,] xp = { {10,20,30}, {19,38,57}, {39,78,117} };
-        int[,] fish = { {5,10,15}, {9,19,28}, {19,39,58} };
-        int[] caps = {120,228,468}, fishCaps = {60,114,234};
+        int[,] xp = { {15,25,40}, {28,47,76}, {58,97,156} };
+        int[,] fish = { {6,10,16}, {11,19,30}, {23,39,62} };
+        int[] caps = {150,285,585}, fishCaps = {60,114,234};
         for(int level=0; level<3; level++) for(int difficulty=0; difficulty<3; difficulty++) {
             var store=new Store(); store.Data.experience=experience[level];
             var service=new TaskService(store,new Clock());
@@ -107,7 +107,7 @@ public static class RewardSystemVerification
             store.fail=true; Check(!service.Complete(id,true) && store.Data.history.Count==0 && store.Data.experience==experience[level],"Failed task write paid");
             store.fail=false; Check(service.Complete(id,true) && service.Complete(id,true),service.LastError);
             Check(store.Data.experience==experience[level]+xp[level,difficulty] && store.Data.fishCoins==fish[level,difficulty]
-                && store.Data.tickets==0 && store.Data.history.Count==1,"Task retry/duplicate/scaling");
+                && store.Data.tickets==1 && store.Data.history.Count==1,"Task retry/duplicate/scaling");
         }
         {
             var store=new Store(); var clock=new Clock(); store.Data.experience=13050;
@@ -118,19 +118,19 @@ public static class RewardSystemVerification
             Check(service.TodayRewards.taskExperience==460 && service.TodayRewards.taskFishCoins==230,"Rebuilt allowance truncated high-level receipts");
             string id=Complete(service,TaskDifficulty.Hard);
             var receipt=store.Data.history.Last();
-            Check(receipt.experience==8 && receipt.fishCoins==4 && service.TodayRewards.taskExperience==468
+            Check(receipt.experience==125 && receipt.fishCoins==4 && service.TodayRewards.taskExperience==585
                 && service.TodayRewards.taskFishCoins==234,"High-level partial cap");
             Complete(service); Check(store.Data.history.Last().experience==0 && store.Data.history.Last().fishCoins==0,"Capped task not recorded");
             int paid=store.Data.experience;
             Check(service.UndoCompletion(receipt.id) && service.Complete(id,true) && store.Data.experience==paid
-                && service.TodayRewards.taskExperience==468,"Undo released allowance or repaid");
+                && service.TodayRewards.taskExperience==585,"Undo released allowance or repaid");
             string folder="Library/TaskLevelVerification/"+Guid.NewGuid().ToString("N"); Directory.CreateDirectory(folder);
             var disk=new PlayerDataStore(folder+"/save.json"); Check(disk.TrySave(store.Data,out var error),error);
             var reloaded=new TaskService(new PlayerDataStore(folder+"/save.json"),clock);
-            Check(reloaded.Complete(id,true) && reloaded.Snapshot.experience==paid && reloaded.TodayRewards.taskExperience==468,"Reload repaid task");
+            Check(reloaded.Complete(id,true) && reloaded.Snapshot.experience==paid && reloaded.TodayRewards.taskExperience==585,"Reload repaid task");
             clock.now=clock.now.AddDays(1); reloaded.RefreshDate();
             Check(reloaded.TodayRewards.taskExperience==0 && reloaded.TodayRewards.taskFishCoins==0,"Task cap did not reset at midnight");
-            Complete(reloaded); Check(reloaded.Snapshot.history.Last().experience==78 && reloaded.Snapshot.history.Last().fishCoins==39,"New day lost scaled rewards");
+            Complete(reloaded); Check(reloaded.Snapshot.history.Last().experience==97 && reloaded.Snapshot.history.Last().fishCoins==39,"New day lost scaled rewards");
         }
     }
 
@@ -156,24 +156,24 @@ public static class RewardSystemVerification
         Check(!service.FinishFocus("missing", 1500, false), "Missing Focus rewarded.");
         string shortId = Session(service, 1499, true);
         var shortResult = service.Snapshot.focusSessions.Single(s => s.id == shortId);
-        Check(shortResult.eligibleMinutes == 24 && shortResult.experience == 26 && shortResult.fishCoins == 8 && shortResult.tickets == 0, "Early result did not use complete minutes.");
+        Check(shortResult.eligibleMinutes == 24 && shortResult.experience == 13 && shortResult.fishCoins == 4 && shortResult.tickets == 0, "Early result did not use complete minutes.");
         Check(service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) == 24 && !service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes), "Short Focus unlocked daily goal.");
         string id = Session(service);
-        Check(service.FinishFocus(id, 1500, false) && service.Snapshot.experience == 153 && service.Snapshot.fishCoins == 19 && service.Snapshot.tickets == 1, "Focus reward tiers or idempotency failed.");
-        Check(service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes) && service.Snapshot.experience == 175 && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Independent Focus claim failed.");
+        Check(service.FinishFocus(id, 1500, false) && service.Snapshot.experience == 126 && service.Snapshot.fishCoins == 9 && service.Snapshot.tickets == 1, "Focus reward tiers or idempotency failed.");
+        Check(service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes) && service.Snapshot.experience == 137 && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Independent Focus claim failed.");
         clock.now = clock.now.AddDays(1); service.RefreshDate();
         for (int i = 0; i < 16; i++) Session(service);
-        Check(service.TodayRewards.focusMinutes == 360 && service.TodayRewards.focusTickets == 4 && service.Snapshot.tickets == 6, "Focus daily caps failed.");
+        Check(service.TodayRewards.focusMinutes == 240 && service.TodayRewards.focusTickets == 3 && service.Snapshot.tickets == 4, "Focus daily caps failed.");
         var sessions = service.Snapshot.focusSessions.Where(s => s.rewardDay == TaskService.DateKey(clock.now)).ToArray();
-        Check(sessions[14].experience == 14 && sessions[14].fishCoins == 5 && sessions[14].tickets == 0 && sessions[15].experience == 0, "Focus level scaling failed.");
+        Check(sessions[9].experience == 9 && sessions[9].fishCoins == 3 && sessions[9].tickets == 0 && sessions[10].experience == 0, "Focus level scaling failed.");
         // Explicit level-30 boundary fixture; previous sessions already checked natural level increases.
         store.Data.experience = 13050;
-        store.Data.rewardDays.Single(d => d.day == TaskService.DateKey(clock.now)).focusMinutes = 350;
+        store.Data.rewardDays.Single(d => d.day == TaskService.DateKey(clock.now)).focusMinutes = 230;
         string partialId = Session(service); string cappedId = Session(service);
         var partial = service.Snapshot.focusSessions.Single(s => s.id == partialId);
-        Check(partial.rewardedMinutes == 10 && partial.experience == 39 && partial.fishCoins == 15
+        Check(partial.rewardedMinutes == 10 && partial.experience == 19 && partial.fishCoins == 7
             && service.Snapshot.focusSessions.Single(s => s.id == cappedId).experience == 0
-            && service.TodayRewards.focusMinutes == 360, "Focus partial allowance failed.");
+            && service.TodayRewards.focusMinutes == 240, "Focus partial allowance failed.");
         Check(service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) == 25 && service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes), "Capped Focus did not satisfy objective.");
         clock.now = new DateTime(2026, 10, 10, 23, 59, 0); service.RefreshDate();
         Check(service.BeginFocus(out string across), service.LastError);
@@ -188,7 +188,7 @@ public static class RewardSystemVerification
         var store = new Store(100); var service = new TaskService(store, new Clock()); var controller = new FocusController(service);
         Check(controller.Start(), service.LastError);
         for (int i = 0; i < 1500; i++) controller.Advance(1);
-        Check(controller.Phase == FocusPhase.Resting && controller.LastResult.experience == 27, "Normal completion did not save before Rest.");
+        Check(controller.Phase == FocusPhase.Resting && controller.LastResult.experience == 13, "Normal completion did not save before Rest.");
         int paid = service.Snapshot.experience;
         controller.Advance(300);
         Check(controller.Phase == FocusPhase.Finished && service.Snapshot.experience == paid, "Rest grants rewards or never ends.");
@@ -199,8 +199,8 @@ public static class RewardSystemVerification
         controller.Advance(100);
         Check(controller.ElapsedSeconds == 61 && !controller.Start(), "Pending result continued timing or allowed another session.");
         store.fail = false;
-        Check(controller.RetrySettlement() && controller.Phase == FocusPhase.Resting && service.Snapshot.experience == paid + 1, "Retry failed.");
-        controller.EndRest(); Check(controller.Phase == FocusPhase.Finished && service.Snapshot.experience == paid + 1, "Early Rest revoked rewards.");
+        Check(controller.RetrySettlement() && controller.Phase == FocusPhase.Resting && service.Snapshot.experience == paid, "Retry failed.");
+        controller.EndRest(); Check(controller.Phase == FocusPhase.Finished && service.Snapshot.experience == paid, "Early Rest revoked rewards.");
         Check(controller.Start() && controller.Cancel() && controller.Phase == FocusPhase.Interrupted, "Cancel did not bypass Rest.");
         Check(controller.Start(), service.LastError); controller.Advance(11);
         Check(controller.Phase == FocusPhase.Interrupted && controller.LastResult.status == FocusSessionStatus.Invalid && controller.LastResult.experience == 0, "Suspension gap paid rewards.");
@@ -216,7 +216,7 @@ public static class RewardSystemVerification
         var disk = new PlayerDataStore(path); var service = new TaskService(disk, new Clock());
         Check(disk.Data.version == 5 && disk.Data.username == "Legacy" && disk.Data.tickets == 7 && disk.Data.experience == 110, "Migration changed previous rewards.");
         Complete(service, TaskDifficulty.Hard);
-        Check(service.Snapshot.experience == 132 && service.Snapshot.fishCoins == 66, "Legacy paid rewards did not consume allowance.");
+        Check(service.Snapshot.experience == 154 && service.Snapshot.fishCoins == 66, "Legacy paid rewards did not consume allowance.");
         Session(service); Check(service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes), service.LastError);
         var reloaded = new TaskService(new PlayerDataStore(path), new Clock());
         Check(reloaded.DailyGoalClaimed(DailyRewardGoal.Focus25Minutes) && reloaded.Snapshot.tickets == 8, "Claim or Focus receipt lost on reload.");

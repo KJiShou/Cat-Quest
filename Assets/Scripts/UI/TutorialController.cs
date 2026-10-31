@@ -28,6 +28,7 @@ public sealed class TutorialController : MonoBehaviour
     public RectTransform pointer;
     LeaderboardPanelUI leaderboard;
     RectTransform privacyTarget;
+    EquipmentPageUI equipmentPage;
     Button observedButton;
     string queuedAction;
     bool advancingFromTarget, ownsAccount;
@@ -57,6 +58,7 @@ public sealed class TutorialController : MonoBehaviour
         if (!service.InitializeTutorial()) { enabled = false; return; }
         progress = service.Tutorial; snapshot = service.Snapshot; service.Changed += DataChanged;
         leaderboard = navigation.GetComponentInParent<Canvas>().GetComponentInChildren<LeaderboardPanelUI>(true);
+        equipmentPage = navigation.pages[(int)MainMenuPage.CatHome].GetComponentInChildren<EquipmentPageUI>(true);
         privacyTarget = settings.accountPage.GetComponentsInChildren<RectTransform>(true).FirstOrDefault(r => r.name == "Privacy");
         typingShield.onClick.AddListener(CompleteTyping);
         next.onClick.AddListener(Continue); skip.onClick.AddListener(Skip);
@@ -115,7 +117,7 @@ public sealed class TutorialController : MonoBehaviour
         { Read("focus"); Hide(); Show("focus-running", "Your training has started. Switching pages or apps will keep the timer running. Time to focus!", null, "Got it"); noticeUntil = Time.unscaledTime + 6; return; }
         if(Busy()) { Hide(); return; }
         if(helpPanel.activeSelf) return;
-        if(manualTopic != null) { if(!panel.activeSelf) { if(manualIndex == 1) ShowFocus(); else if(manualIndex == 3) ShowBoss(); else if(manualIndex == 4) ShowLeaderboard(); else OpenTopic(manualIndex); } return; }
+        if(manualTopic != null) { if(!panel.activeSelf) { if(manualTopic == "equipment") ShowEquipment(); else if(manualIndex == 1) ShowFocus(); else if(manualIndex == 3) ShowBoss(); else if(manualIndex == 4) ShowLeaderboard(); else OpenTopic(manualIndex); } return; }
         if(shown == "focus-running") return;
         if(focus.Phase is FocusPhase.Focusing or FocusPhase.Saving or FocusPhase.Resting) { Hide(); return; }
         if(shown is "locked" or "error") return;
@@ -143,8 +145,8 @@ public sealed class TutorialController : MonoBehaviour
         if(navigation.CurrentPage == MainMenuPage.Boss && !ReadAlready("boss")) { ShowBoss(); return; }
         if(navigation.CurrentPage == MainMenuPage.Leaderboard && !ReadAlready("leaderboard")) { ShowLeaderboard(); return; }
         bool claimed = data.rewardDays.Any(d => d.questsClaimed || d.focusClaimed);
-        if(!ReadAlready("equipment") && claimed) { Show("equipment", "Your first Daily Reward has opened equipment management. Collect equipment through Boss mastery, then equip it in Cat Home. An empty inventory is normal at first.", null, "Got it"); return; }
-        if(!ReadAlready("daily") && navigation.CurrentPage == MainMenuPage.Dashboard && ((service.DailyGoalProgress(DailyRewardGoal.ThreeQuests) >= 3 && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests)) || (service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) >= 25 && !service.DailyGoalClaimed(DailyRewardGoal.Focus25Minutes))))
+        if(!ReadAlready("equipment") && claimed) { ShowEquipment(); return; }
+        if(!ReadAlready("daily") && navigation.CurrentPage == MainMenuPage.Dashboard && ((service.DailyGoalProgress(service.CurrentTaskGoal) >= TaskService.DailyGoalTarget(service.CurrentTaskGoal) && !service.DailyGoalClaimed(service.CurrentTaskGoal)) || (service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) >= 25 && !service.DailyGoalClaimed(DailyRewardGoal.Focus25Minutes))))
         { Show("daily", "A Daily Reward is ready. Use Claim on the completed goal to collect it. Your first claim also opens equipment management.", null, "Got it"); return; }
         Hide();
     }
@@ -210,6 +212,32 @@ public sealed class TutorialController : MonoBehaviour
                 text = "You are ready. Click Start Focus in the highlighted area to begin. Switching pages or apps will keep it running. Skip this guide if you are not ready to start."; break;
         }
         Show("focus-step-" + step, text, anchor, "Continue");
+    }
+    void ShowEquipment()
+    {
+        if(!service.EquipmentUnlocked) { Show("equipment-locked", "Claim a completed Daily Reward goal on the Dashboard to unlock equipment management. Equipment comes from Boss mastery, not from opening this guide. Keep completing real tasks and Focus sessions to grow your cat.", null, "Continue"); return; }
+        if(navigation.CurrentPage != MainMenuPage.CatHome) {
+            Show("equipment-open", "Equipment management is open! Cat Home is where you review, equip and upgrade your gear. Press Continue to visit it. I will explain each part without spending your Fish Coins or changing your equipment.", navigation.buttons[(int)MainMenuPage.CatHome].transform as RectTransform, "Continue"); return;
+        }
+        int step = Mathf.Clamp(progress.equipmentStep, 0, 6);
+        RectTransform anchor; string text;
+        switch(step) {
+            case 0: anchor = equipmentPage.TutorialBackpack;
+                text = "This Backpack holds equipment you have collected. An empty Backpack is normal at first. Each normal Boss has its own mastery: wins 5, 10 and 15 each let you claim one unowned piece from that Boss's set in the stage selector."; break;
+            case 1: anchor = equipmentPage.TutorialSlots;
+                text = "Your cat has three equipment slots. A Weapon improves ATK, Body Armour improves DEF, and a Head Accessory improves attack speed. You can wear one item in each slot. Empty slots mean you have not equipped an item there yet."; break;
+            case 2: anchor = equipmentPage.TutorialFilters;
+                text = "Use the Backpack categories to view all equipment or only Head, Weapon or Body items. A category can be empty even when you own other gear. Return to All to see everything you have collected."; break;
+            case 3: anchor = equipmentPage.TutorialBackpack;
+                text = "After this guide, select an owned item to inspect its stats and set information. Equip puts it in its matching slot, replacing the item worn there. Unequip returns it to the Backpack; it does not delete the item."; break;
+            case 4: anchor = equipmentPage.TutorialBackpack;
+                text = "An item's details show its current effect, next-level effect and upgrade cost in Fish Coins. Upgrading improves that item, but its level cannot exceed your Cat Level. Earn EXP from real work to raise that limit, and check the cost before confirming."; break;
+            case 5: anchor = equipmentPage.TutorialAutoSelect;
+                text = "Auto Select compares combinations of your owned gear and equips the one with the highest calculated Power. It does not buy or upgrade anything. Use it after the guide for a quick loadout, or choose your own items individually."; break;
+            default: anchor = equipmentPage.TutorialSlots;
+                text = "Equipped pieces from the same Boss set contribute to its set bonuses. Review the set information when choosing gear. You are ready to explore! If your Backpack is empty, keep growing your cat and claim earned Boss mastery rewards when available."; break;
+        }
+        Show("equipment-step-" + step, text, anchor, "Continue");
     }
     void ShowBoss()
     {
@@ -277,6 +305,19 @@ public sealed class TutorialController : MonoBehaviour
     {
         if(typing != null) { CompleteTyping(); return; }
         if(RequiresTargetClick() && !advancingFromTarget) return;
+        if(shown == "help-rewards") {
+            if(!Save(p => p.equipmentStep = 0)) return;
+            manualTopic = "equipment"; Hide(); ShowEquipment(); return;
+        }
+        if(shown == "equipment-open") {
+            if(navigation.ShowPage(MainMenuPage.CatHome)) ShowEquipment();
+            return;
+        }
+        if(shown != null && shown.StartsWith("equipment-step-")) {
+            if(progress.equipmentStep < 6) { if(!Save(p => p.equipmentStep++)) return; Hide(); ShowEquipment(); }
+            else { if(!Save(p => { if(!p.read.Contains("equipment")) p.read.Add("equipment"); })) return; manualTopic = null; Hide(); }
+            return;
+        }
         if(shown != null && shown.StartsWith("focus-step-"))
         {
             if(progress.focusStep < 6) { if(!Save(p => p.focusStep++)) return; Hide(); ShowFocus(); }
@@ -332,14 +373,16 @@ public sealed class TutorialController : MonoBehaviour
         Position(welcome);
         var animator = mentor.CharacterAnimator;
         if(animator) { animator.updateMode = AnimatorUpdateMode.UnscaledTime; animator.Play("sensei-talk", 0, 0); }
-        typing = StartCoroutine(dialogue.Reveal(.025f, () => { typing = null; dialogue.Complete(); Idle(); RefreshInput(); }));
+        float voiceDuration = SettingsAudio.EnsureInstance()?.PlayDialogue(this, text, false) ?? 0;
+        typing = StartCoroutine(dialogue.Reveal(.025f, () => { typing = null; SettingsAudio.Instance?.StopDialogue(this); dialogue.Complete(); Idle(); RefreshInput(); }, voiceDuration));
         RefreshInput();
     }
     void Position(bool welcome)
     {
         var root = (RectTransform)transform;
         float width = Mathf.Min(welcome ? 940 : 660, root.rect.width - 32);
-        card.sizeDelta = new Vector2(width, welcome ? 250 : 225);
+        bool equipmentGuide = shown != null && shown.StartsWith("equipment-");
+        card.sizeDelta = new Vector2(width, equipmentGuide ? 260 : welcome ? 250 : 225);
         bool top = false;
         bool targetInteractive = RequiresTargetClick() || shown == "task-page-4" || (shown == "task-page-6" && progress.taskStep != 3) || (shown != null && (shown == "focus-step-1" || shown == "focus-step-2" || shown == "focus-step-3" || shown == "focus-step-6"));
         if(spotlight) spotlight.Show(target, targetInteractive && (!IsTyping || shown == "task-page-6"), next, skip);
@@ -399,6 +442,6 @@ public sealed class TutorialController : MonoBehaviour
     }
     public void CompleteTyping() { if(!IsTyping)return; StopTalking();dialogue.Complete();Position(shown == "task-0"); }
     void Idle() { var animator = mentor ? mentor.CharacterAnimator : null; if(animator && animator.isActiveAndEnabled && animator.gameObject.activeInHierarchy && !animator.GetCurrentAnimatorStateInfo(0).IsName("sensei-idle")) animator.Play("sensei-idle", 0, 0); }
-    void StopTalking() { if(typing != null) StopCoroutine(typing); typing = null; Idle(); }
+    void StopTalking() { SettingsAudio.Instance?.StopDialogue(this); if(typing != null) StopCoroutine(typing); typing = null; Idle(); }
     void Hide() { Observe(null); queuedAction=null; if(typingShield)typingShield.gameObject.SetActive(false); if(pointer)pointer.gameObject.SetActive(false); if(ownsAccount && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsAccount=false; } if(leaderboard)leaderboard.TutorialOwnsInput=false; if(ownsStagePicker && bossPage) { bossPage.stagePicker.SetActive(false); ownsStagePicker=false; } if(spotlight) spotlight.Dismiss(); if(typing != null || (panel && panel.activeSelf)) StopTalking(); shown = null; target = null; if(panel) panel.SetActive(false); if(highlight) highlight.gameObject.SetActive(false); }
 }

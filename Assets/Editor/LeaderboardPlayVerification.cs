@@ -137,6 +137,10 @@ public static class LeaderboardPlayVerification
             SessionState.SetBool(Flag + ".enteredPlay", false);
             SessionState.SetBool(Flag, true);
             WriteResult("RUNNING");
+            File.WriteAllText(folder + "/save.json", JsonUtility.ToJson(new PlayerData {
+                experience = 2025,
+                tutorial = new TutorialProgress { version = 1, dismissed = true, taskStep = 4, announcedLevel = 99 }
+            }));
             Environment.SetEnvironmentVariable(StoreVariable, Path.GetFullPath(folder + "/save.json"));
             EditorSceneManager.playModeStartScene = AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");
             Check(EditorSceneManager.playModeStartScene, "CharacterHome scene missing.");
@@ -348,6 +352,19 @@ public static class LeaderboardPlayVerification
                     Layout(panel);
                     Capture(context);yield return .2;
                 }
+                foreach(var actionButton in new[]{panel.refresh,panel.accountButton})
+                {
+                    var hitBounds=Bounds((RectTransform)actionButton.transform);var actionPointer=Pointer(actionButton);
+                    var feedback=actionButton.GetComponent<JuicyButton>();Check(feedback,"Missing shared action feedback");
+                    ExecuteEvents.Execute(actionButton.gameObject,actionPointer,ExecuteEvents.pointerEnterHandler);yield return .2;Capture(actionButton.name+"-hover-"+suffix);yield return .1;
+                    Check(feedback.DrawScale.y>1,"Action hover missing");Stable(hitBounds,actionButton);
+                    ExecuteEvents.Execute(actionButton.gameObject,actionPointer,ExecuteEvents.pointerDownHandler);yield return .2;Capture(actionButton.name+"-press-"+suffix);yield return .1;
+                    Check(feedback.DrawScale.y<1,"Action press missing");
+                    ExecuteEvents.Execute(actionButton.gameObject,actionPointer,ExecuteEvents.pointerUpHandler);ExecuteEvents.Execute(actionButton.gameObject,actionPointer,ExecuteEvents.pointerExitHandler);EventSystem.current.SetSelectedGameObject(null);yield return .7;
+                    Reset(feedback,"Action feedback failed to settle");Stable(hitBounds,actionButton);
+                    actionButton.interactable=false;ExecuteEvents.Execute(actionButton.gameObject,actionPointer,ExecuteEvents.pointerDownHandler);yield return .2;
+                    Reset(feedback,"Disabled action animated");Capture(actionButton.name+"-disabled-"+suffix);yield return .1;actionButton.interactable=true;
+                }
                 var buttonToTest=panel.categories[0];var before=Bounds((RectTransform)buttonToTest.transform);var pointer=Pointer(buttonToTest);
                 ExecuteEvents.Execute(buttonToTest.gameObject,pointer,ExecuteEvents.pointerEnterHandler);yield return .2;Capture("hover-"+suffix);yield return .1;Stable(before,buttonToTest);
                 ExecuteEvents.Execute(buttonToTest.gameObject,pointer,ExecuteEvents.pointerDownHandler);yield return .1;Capture("press-"+suffix);yield return .1;
@@ -365,7 +382,17 @@ public static class LeaderboardPlayVerification
                     expander.isOn=expanded;yield return .6;Layout(panel);Capture("layout-"+suffix+(expanded?"-expanded":"-collapsed"));yield return .2;
                 }
                 source.mode="normal";Click(panel.refresh);nav.ShowPage(MainMenuPage.Tasks);yield return .3;Check(!panel.Loading,"Closed page still loading");nav.ShowPage(MainMenuPage.Leaderboard);yield return .4;
-                Click(panel.accountButton);yield return .3;var settings=UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();Check(settings && settings.CurrentView=="Account","Account action missing");settings.Close();yield return .2;
+                Click(panel.accountButton);yield return .3;var settings=UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();Check(settings && settings.CurrentView=="Account","Account action missing");
+                Click(settings.accountBack);yield return .2;
+                Check(!settings.gameObject.activeSelf && panel.isActiveAndEnabled && EventSystem.current.currentSelectedGameObject==panel.accountButton.gameObject,"Account Back must return to Leaderboard and its opener");
+                Click(panel.accountButton);yield return .2;
+                typeof(SettingsPanelUI).GetMethod("Back",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(settings,null);yield return .2;
+                Check(!settings.gameObject.activeSelf && panel.isActiveAndEnabled,"Account Escape/backdrop route must return to Leaderboard");
+                Click(panel.accountButton);yield return .2;settings.Close();yield return .2;
+                Check(EventSystem.current.currentSelectedGameObject==panel.accountButton.gameObject,"Account close lost opener focus");
+                settings.Open(panel.accountButton.gameObject);settings.OpenAccount();yield return .2;
+                Click(settings.accountBack);yield return .2;
+                Check(settings.gameObject.activeSelf && settings.CurrentView=="Settings","Settings-origin Account must still return to Settings");settings.Close();yield return .2;
                 checks.Add("PASS "+suffix+": four categories, rank 138 outside top 50, own top row, states, rapid switch, close/reopen, Account modal, stable hover/press/reset");
             }
         }

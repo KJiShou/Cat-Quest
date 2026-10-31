@@ -68,8 +68,11 @@ public sealed class AppCursor : MonoBehaviour
         var target = hits.Count > 0 ? hits[0].gameObject : null;
         hits.Clear();
         var handler = target ? ExecuteEvents.GetEventHandler<IPointerClickHandler>(target) : null;
-        var button = handler ? handler.GetComponent<Button>() : null;
-        return button && button.isActiveAndEnabled && button.IsInteractable();
+        var control = handler ? handler.GetComponent<Selectable>() : null;
+        if (!control || !control.isActiveAndEnabled || !control.IsInteractable()) return false;
+        if (control is TMPro.TMP_InputField text) return !text.readOnly;
+        if (control is InputField legacyText) return !legacyText.readOnly;
+        return control is Button || control is Toggle || control is Dropdown || control is TMPro.TMP_Dropdown;
     }
 
     void OnApplicationFocus(bool hasFocus)

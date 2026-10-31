@@ -40,6 +40,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     [NonSerialized] bool initialized, subscribed;
     bool refreshing, nameDirty;
     bool closeAiToOpener;
+    bool closeAccountToOpener;
     LeaderboardKind selectedRanking;
     GameObject lastSelection;
     readonly List<SettingsTagRow> rows = new List<SettingsTagRow>();
@@ -118,7 +119,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     }
     public void Open(GameObject opener)
     {
-        Initialize(); returnFocus = opener; closeAiToOpener = false;
+        Initialize(); returnFocus = opener; closeAiToOpener = false; closeAccountToOpener = false;
         gameObject.SetActive(true); transform.SetAsLastSibling();
         RefreshSettings(); Show(settingsPage, "Settings", notifications.gameObject);
     }
@@ -198,6 +199,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     void BackToSettings()
     {
         if (CurrentView == "AI" && closeAiToOpener) { Close(); return; }
+        if (CurrentView == "Account" && closeAccountToOpener) { Close(); return; }
         if (CurrentView == "Account") account.CancelSignIn();
         RefreshSettings(); Show(settingsPage, "Settings", CurrentView == "Account" ? accountButton.gameObject :
             CurrentView == "AI" && aiButton ? aiButton.gameObject : tagsButton.gameObject);
@@ -347,6 +349,12 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public void OpenAccount()
     {
         nameDirty = false; RefreshAccount(); Show(accountPage, "Account", playerName.gameObject);
+    }
+    public void OpenAccountFromPage(GameObject opener)
+    {
+        Open(opener);
+        closeAccountToOpener = true;
+        OpenAccount();
     }
     public void OpenAI()
     {

@@ -4,10 +4,12 @@ using System.Linq;
 
 public sealed partial class TaskService
 {
-    public const int TaskExperienceCap = 120, TaskFishCap = 60, FocusMinuteCap = 360, FocusTicketCap = 4;
+    public const int TaskExperienceCap = 150, TaskFishCap = 60, FocusMinuteCap = 240, FocusTicketCap = 3;
+    public const int TaskTicketCap = 1;
     public const int FocusSessionMinuteCap = 180;
     public const int FocusDurationSeconds = 25 * 60, RestDurationSeconds = 5 * 60;
     public static readonly RewardAmounts GoalReward = new RewardAmounts(20, 10);
+    public static readonly RewardAmounts SmallGoalReward = new RewardAmounts(10, 5);
     public event Action<LevelUpReward> LevelUp;
 
     public readonly struct LevelUpReward
@@ -31,20 +33,32 @@ public sealed partial class TaskService
     private static RewardDay GetRewardDay(PlayerData data, string day)
     {
         var result = data.rewardDays.FirstOrDefault(d => d.day == day);
-        if (result != null) return result;
         // Legacy receipts already paid; reopening a task never releases its allowance.
-        var receipts = data.history.Where(h => h.rewardedLocalDay == day).ToArray();
-        result = new RewardDay { day = day,
-            taskExperience = (int)Math.Min(int.MaxValue, receipts.Sum(h => (long)h.experience)),
-            taskFishCoins = (int)Math.Min(int.MaxValue, receipts.Sum(h => (long)h.fishCoins)) };
-        data.rewardDays.Add(result);
+        if (result == null) {
+            var receipts = data.history.Where(h => h.rewardedLocalDay == day).ToArray();
+            result = new RewardDay { day = day,
+                taskExperience = (int)Math.Min(int.MaxValue, receipts.Sum(h => (long)h.experience)),
+                taskFishCoins = (int)Math.Min(int.MaxValue, receipts.Sum(h => (long)h.fishCoins)),
+                taskTickets = receipts.Sum(h => h.tickets) };
+            data.rewardDays.Add(result);
+        }
+        if (!result.rewardRulesInitialized) {
+            // An already-used legacy day cannot retroactively acquire a first-task bonus.
+            // Run only on a copy/read snapshot or inside an atomic Commit; never on load.
+            bool hadTask = result.taskExperience > 0 || result.taskFishCoins > 0 || result.questsClaimed
+                || data.history.Any(h => h.rewardedLocalDay == day);
+            result.firstTaskSettled |= hadTask;
+            result.firstQuestClaimed |= hadTask;
+            result.rewardRulesInitialized = true;
+        }
         return result;
     }
     private static RewardAmounts TaskAllowance(TaskDifficulty difficulty, RewardDay day, int level)
     {
         var amount = BaseReward(difficulty);
         return new RewardAmounts(Math.Max(0, Math.Min(ScaleRewardAmount(amount.experience, level), ScaleRewardAmount(TaskExperienceCap, level) - day.taskExperience)),
-            Math.Max(0, Math.Min(ScaleRewardAmount(amount.fishCoins, level), ScaleRewardAmount(TaskFishCap, level) - day.taskFishCoins)));
+            Math.Max(0, Math.Min(ScaleRewardAmount(amount.fishCoins, level), ScaleRewardAmount(TaskFishCap, level) - day.taskFishCoins)),
+            day.firstTaskSettled ? 0 : TaskTicketCap);
     }
     private static void AddRewards(PlayerData data, RewardAmounts amount)
     {
@@ -55,18 +69,18 @@ public sealed partial class TaskService
     public RewardDay TodayRewards => GetRewardDay(Snapshot, Today);
     public RewardAmounts PreviewReward(TaskView view)
     {
-        if (view.IsHistory) return new RewardAmounts(view.history.experience, view.history.fishCoins);
+        if (view.IsHistory) return new RewardAmounts(view.history.experience, view.history.fishCoins, view.history.tickets);
         if (view.occurrence.rewardGranted)
         {
             var receipt = store.Data.history.FirstOrDefault(h => h.taskId == view.task.id && h.day == view.occurrence.day);
-            return receipt == null ? new RewardAmounts(0, 0) : new RewardAmounts(receipt.experience, receipt.fishCoins);
+            return receipt == null ? new RewardAmounts(0, 0) : new RewardAmounts(receipt.experience, receipt.fishCoins, receipt.tickets);
         }
         return TaskAllowance(view.task.difficulty, TodayRewards, RewardLevel);
     }
     private int GoalProgress(PlayerData data, DailyRewardGoal goal)
     {
-        if (goal == DailyRewardGoal.ThreeQuests)
-            return Math.Min(3, data.history.Where(h => !h.revoked && h.completedLocalDay == Today)
+        if (goal == DailyRewardGoal.ThreeQuests || goal == DailyRewardGoal.FirstQuest)
+            return Math.Min(DailyGoalTarget(goal), data.history.Where(h => !h.revoked && h.completedLocalDay == Today)
                 .Select(h => h.taskId + ":" + h.day).Distinct().Count());
         double seconds = data.focusSessions.Where(s => s.rewardDay == Today &&
             (s.status == FocusSessionStatus.Completed || s.status == FocusSessionStatus.EndedEarly))
@@ -74,24 +88,30 @@ public sealed partial class TaskService
         return (int)Math.Min(25, Math.Floor(seconds / 60));
     }
     public int DailyGoalProgress(DailyRewardGoal goal) => GoalProgress(store.Data, goal);
+    public static int DailyGoalTarget(DailyRewardGoal goal) => goal == DailyRewardGoal.ThreeQuests ? 3 : goal == DailyRewardGoal.FirstQuest ? 1 : 25;
+    public DailyRewardGoal CurrentTaskGoal => DailyGoalClaimed(DailyRewardGoal.FirstQuest) ? DailyRewardGoal.ThreeQuests : DailyRewardGoal.FirstQuest;
     public bool DailyGoalClaimed(DailyRewardGoal goal)
     {
         var day = TodayRewards;
-        return goal == DailyRewardGoal.ThreeQuests ? day.questsClaimed : day.focusClaimed;
+        return goal == DailyRewardGoal.ThreeQuests ? day.questsClaimed : goal == DailyRewardGoal.FirstQuest ? day.firstQuestClaimed : day.focusClaimed;
     }
     public bool ClaimDailyGoal(DailyRewardGoal goal)
     {
         if (!Enum.IsDefined(typeof(DailyRewardGoal), goal)) { LastError = "Unknown daily goal."; return false; }
         if (DailyGoalClaimed(goal)) { LastError = null; return true; }
         return Commit(data => {
-            if (GoalProgress(data, goal) < (goal == DailyRewardGoal.ThreeQuests ? 3 : 25))
+            if (GoalProgress(data, goal) < DailyGoalTarget(goal))
                 throw new ArgumentException("Complete this goal before claiming its reward.");
             var day = GetRewardDay(data, Today);
             CatLevel(data.experience,out int level,out _,out _);
-            var reward=new RewardAmounts(ScaleRewardAmount(GoalReward.experience,level),ScaleRewardAmount(GoalReward.fishCoins,level));
+            var basis = goal == DailyRewardGoal.ThreeQuests ? GoalReward : SmallGoalReward;
+            var reward=new RewardAmounts(ScaleRewardAmount(basis.experience,level),ScaleRewardAmount(basis.fishCoins,level));
             AddRewards(data, reward);
+            data.equipmentUnlocked = true;
             if (goal == DailyRewardGoal.ThreeQuests) {
                 day.questsClaimed=true; day.questsExperience=reward.experience; day.questsFishCoins=reward.fishCoins;
+            } else if (goal == DailyRewardGoal.FirstQuest) {
+                day.firstQuestClaimed=true; day.firstQuestExperience=reward.experience; day.firstQuestFishCoins=reward.fishCoins;
             } else {
                 day.focusClaimed=true; day.focusGoalExperience=reward.experience; day.focusGoalFishCoins=reward.fishCoins;
             }
@@ -101,11 +121,14 @@ public sealed partial class TaskService
     {
         var day=TodayRewards;
         bool quests=goal==DailyRewardGoal.ThreeQuests;
-        if(quests?day.questsClaimed:day.focusClaimed) {
+        if (goal == DailyRewardGoal.FirstQuest && day.firstQuestClaimed)
+            return new RewardAmounts(day.firstQuestExperience, day.firstQuestFishCoins);
+        if(goal != DailyRewardGoal.FirstQuest && (quests?day.questsClaimed:day.focusClaimed)) {
             int xp=quests?day.questsExperience:day.focusGoalExperience;
             return xp>0 ? new RewardAmounts(xp,quests?day.questsFishCoins:day.focusGoalFishCoins) : GoalReward;
         }
-        return new RewardAmounts(ScaleRewardAmount(GoalReward.experience,RewardLevel),ScaleRewardAmount(GoalReward.fishCoins,RewardLevel));
+        var basis = quests ? GoalReward : SmallGoalReward;
+        return new RewardAmounts(ScaleRewardAmount(basis.experience,RewardLevel),ScaleRewardAmount(basis.fishCoins,RewardLevel));
     }
     public bool BeginFocus(out string sessionId)
         => BeginFocus(new FocusSessionOptions(), out sessionId);
@@ -159,12 +182,17 @@ public sealed partial class TaskService
     }
     public int FocusDailyMinuteLimit => FocusMinuteCap;
     public int FocusSessionMinuteLimit => FocusSessionMinuteCap;
+    // Divide after applying the level multiplier: 25 min at Lv.2 pays floor(13.75), not floor(12.5)*1.1.
+    public static RewardAmounts FocusCurrencyForMinutes(int minutes, int level)
+        => new RewardAmounts(checked((int)((long)Math.Max(0, minutes) * (Math.Max(1, level) + 9L) / 20)),
+            ScaleRewardAmount(Math.Max(0, minutes) / 5, level));
     public static RewardAmounts FocusRewardsForSeconds(double elapsedSeconds, int rewardedMinutes, int rewardedTickets, int level)
     {
         if (double.IsNaN(elapsedSeconds) || double.IsInfinity(elapsedSeconds) || elapsedSeconds < 0) return new RewardAmounts();
         int minutes = (int)Math.Floor(Math.Min(elapsedSeconds, FocusSessionMinuteCap * 60d) / 60);
         int eligible = Math.Max(0, Math.Min(minutes, FocusMinuteCap - rewardedMinutes));
-        return new RewardAmounts(ScaleRewardAmount(eligible, level), ScaleRewardAmount(eligible / 5 * 2, level),
+        var currency = FocusCurrencyForMinutes(eligible, level);
+        return new RewardAmounts(currency.experience, currency.fishCoins,
             Math.Max(0, Math.Min(minutes / 25, FocusTicketCap - rewardedTickets)));
     }
     public static int FocusFishForSeconds(double elapsedSeconds, int alreadyRewardedMinutes = 0)

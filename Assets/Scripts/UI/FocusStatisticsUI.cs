@@ -13,8 +13,7 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     public GameObject panel;
     public Button open, close, previous, next, today, allTags;
     public Button[] periods;
-    public Button about;
-    public TMP_Text range, total, sessionCount, chartTitle, detail, empty, note;
+    public TMP_Text range, total, sessionCount, chartTitle, detail, empty;
     public TMP_Text[] xLabels, yLabels;
     public FocusStatisticsGraph graph;
     public RectTransform tagContent;
@@ -29,24 +28,21 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     readonly List<Button> rows = new List<Button>();
     UnityEngine.Events.UnityAction[] periodActions;
     DateTime observedDay;
-    bool showAbout;
     void Awake()
     {
         open.onClick.AddListener(Show); close.onClick.AddListener(Hide);
         previous.onClick.AddListener(Previous); next.onClick.AddListener(Next); today.onClick.AddListener(Today);
         allTags.onClick.AddListener(AllTags);
-        if(about)about.onClick.AddListener(ToggleAbout);
         periodActions = new UnityEngine.Events.UnityAction[periods.Length];
         for (int i=0;i<periods.Length;i++) { int index=i;periodActions[i]=()=>ChoosePeriod((FocusStatisticsPeriod)index);periods[i].onClick.AddListener(periodActions[i]); }
         graph.Hovered += Hover;
     }
     void OnEnable() { service=GameDataManager.EnsureInstance().Tasks;service.Changed+=RefreshIfOpen; }
-    void OnDisable() { if(service!=null)service.Changed-=RefreshIfOpen;showAbout=false;panel.SetActive(false); }
+    void OnDisable() { if(service!=null)service.Changed-=RefreshIfOpen;panel.SetActive(false); }
     void OnDestroy()
     {
         open.onClick.RemoveListener(Show);close.onClick.RemoveListener(Hide);
         previous.onClick.RemoveListener(Previous);next.onClick.RemoveListener(Next);today.onClick.RemoveListener(Today);allTags.onClick.RemoveListener(AllTags);
-        if(about)about.onClick.RemoveListener(ToggleAbout);
         if(periodActions!=null)for(int i=0;i<periods.Length;i++)periods[i].onClick.RemoveListener(periodActions[i]);
         graph.Hovered-=Hover;
     }
@@ -58,21 +54,13 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         var selected=EventSystem.current?EventSystem.current.currentSelectedGameObject:null;
         if(selected&&!selected.transform.IsChildOf(panel.transform))EventSystem.current.SetSelectedGameObject(close.gameObject);
     }
-    public void Show() { Date=service.LocalNow.Date;SelectedTag=null;showAbout=false;panel.SetActive(true);panel.transform.SetAsLastSibling();Refresh();if(EventSystem.current)EventSystem.current.SetSelectedGameObject(close.gameObject); }
+    public void Show() { Date=service.LocalNow.Date;SelectedTag=null;panel.SetActive(true);panel.transform.SetAsLastSibling();Refresh();if(EventSystem.current)EventSystem.current.SetSelectedGameObject(close.gameObject); }
     public void Hide() { panel.SetActive(false);if(EventSystem.current&&open.gameObject.activeInHierarchy)EventSystem.current.SetSelectedGameObject(open.gameObject); }
     public void ChoosePeriod(FocusStatisticsPeriod period) { Period=period;Refresh(); }
     void Previous() { Date=FocusStatistics.Move(Date,Period,-1);Refresh(); }
     void Next() { if(!next.interactable)return;Date=FocusStatistics.Move(Date,Period,1);Refresh(); }
     void Today() { Date=service.LocalNow.Date;Refresh(); }
     void AllTags() { SelectedTag=null;RefreshGraph(); }
-    void ToggleAbout() { showAbout=!showAbout;RefreshNote(); }
-    void RefreshNote()
-    {
-        note.text=showAbout ? "Includes saved Focus and End Early, in local time. Rest and cancelled sessions are excluded." : "";
-        if(Data.legacyMultipleTags)note.text+=(showAbout ? "\n" : "")+"Older multi-tag sessions appear under each tag; total time counts each session once.";
-        note.gameObject.SetActive(showAbout||Data.legacyMultipleTags);
-        if(about)Tint(about,showAbout);
-    }
     void RefreshIfOpen() { if(panel.activeSelf)Refresh(); }
     public void Refresh()
     {
@@ -86,6 +74,7 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         sessionCount.text=Data.sessions+" session"+(Data.sessions==1?"":"s");
         next.interactable=Data.end<=FocusStatistics.Start(service.LocalNow,Period);
         previous.interactable=Data.start.Year>1;
+        Tint(today,Data.start==FocusStatistics.Start(observedDay,Period));
         for(int i=0;i<periods.Length;i++)Tint(periods[i],i==(int)Period);
         foreach(var row in rows){row.gameObject.SetActive(false);Destroy(row.gameObject);}rows.Clear();
         foreach(var tag in Data.tags)
@@ -96,7 +85,6 @@ public sealed class FocusStatisticsUI : MonoBehaviour
             string id=tag.id;row.onClick.AddListener(()=>{SelectedTag=id;RefreshGraph();});rows.Add(row);
         }
         if(!Data.tags.Any(t=>t.id==SelectedTag))SelectedTag=null;
-        RefreshNote();
         RefreshGraph();
     }
     void RefreshGraph()
@@ -144,5 +132,9 @@ public sealed class FocusStatisticsUI : MonoBehaviour
             chartColors[id]=candidate;
         }
     }
-    static void Tint(Button button,bool selected) { if(button.targetGraphic)button.targetGraphic.color=selected?new Color32(182,236,255,255):Color.white; }
+    static void Tint(Button button,bool selected) {
+        if(button.targetGraphic)button.targetGraphic.color=selected?new Color32(68,185,231,255):new Color32(220,237,251,255);
+        var label=button.GetComponentInChildren<TMP_Text>();
+        if(label)label.color=selected?Color.white:TaskUIBuilder.Ink;
+    }
 }

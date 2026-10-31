@@ -337,9 +337,9 @@ public class TaskSystemUI : MonoBehaviour
                 if(before.occurrence.rewardGranted) Notify("Task completed again. No additional rewards; previous rewards are kept.");
                 else {
                     var receipt=Service.Snapshot.history.First(h=>h.taskId==id && h.day==before.occurrence.day);
-                    Notify(receipt.experience==0 && receipt.fishCoins==0
+                    Notify(receipt.experience==0 && receipt.fishCoins==0 && receipt.tickets==0
                         ? "Task completed. Daily task reward limit reached; no additional rewards."
-                        : $"Task completed. +{receipt.experience} EXP, +{receipt.fishCoins} Fish Coins.");
+                        : $"Task completed. +{receipt.experience} EXP, +{receipt.fishCoins} Fish Coins." + (receipt.tickets > 0 ? " +1 Ticket." : ""));
                 }
             }
         };

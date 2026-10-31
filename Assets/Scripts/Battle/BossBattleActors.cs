@@ -85,6 +85,13 @@ public sealed class BossBattleActors : MonoBehaviour
     Vector3 cameraPosition;
     bool cameraOffsetApplied,hitStopped;
     bool combatActive;
+    public const float VictoryDuration=1.8f;
+    const float VictoryHold=.16f;
+    float victoryAge;
+    bool victoryPlaying,deathStarted;
+    Camera victoryCamera;
+    float cameraSize,cameraFov;
+    public bool IsFinishingVictory=>victoryPlaying&&victoryAge<VictoryDuration;
     public bool IsHitStopped=>hitStopped;
     public bool IsShaking=>shakeRemaining>0;
     public bool CatReacting=>catRecoil.Active;
@@ -140,6 +147,7 @@ public sealed class BossBattleActors : MonoBehaviour
     }
     public void ResetPose()
     {
+        exiting=false;
         combatActive=false;ClearReactions();StopSlash();
         if(!Ready)return;
         catPose.Restore();bossPose.Restore();
@@ -156,6 +164,29 @@ public sealed class BossBattleActors : MonoBehaviour
         var dest=home;dest.x=boss.position.x-Mathf.Abs(bossScale.x)*1.25f;
         cat.position=Vector3.Lerp(home,dest,RunProgress);
         return RunProgress>=1;
+    }
+    Vector3 exitFrom,exitTo;
+    bool exiting;
+    Color exitBossTint;
+    float exitProgress;
+    public void StartExit(Camera camera)
+    {
+        exitBossTint=bossRenderers[0].color;exiting=true;
+        combatActive=false;
+        if(!victoryPlaying)ClearReactions();
+        StopSlash();Tint(bossRenderers,exitBossTint);
+        // Restore the cat rig after a defeat without teleporting it back home.
+        var position=cat.position;catPose.Restore();catAnimator.Rebind();cat.position=position;
+        Play(catAnimator,"Run");
+        exitFrom=cat.position;exitTo=exitFrom;exitProgress=0;
+        var point=camera.WorldToViewportPoint(exitFrom);
+        exitTo.x=camera.ViewportToWorldPoint(new Vector3(1.2f,point.y,point.z)).x;
+    }
+    public bool Exit(float delta)
+    {
+        exitProgress=Mathf.Min(1,exitProgress+delta/1.1f);
+        cat.position=Vector3.Lerp(exitFrom,exitTo,exitProgress);
+        return exitProgress>=1;
     }
     float AttackLength(Animator animator)=>animator.runtimeAnimatorController.animationClips.First(c=>c.name.Contains("slash")||c.name.Contains("attack-smash")).length;
     public void StartCombat(CombatStats catStats,CombatStats bossStats,string weaponId=null)
@@ -193,6 +224,7 @@ public sealed class BossBattleActors : MonoBehaviour
     }
     void ClearReactions()
     {
+        ClearVictory();
         ReleaseHitStop(false);RemoveCameraOffset();shakeRemaining=0;
         catRecoil.Clear();bossRecoil.Clear();catFlash=bossFlash=0;
         Tint(catRenderers,Color.white);Tint(bossRenderers,Color.white);
@@ -215,23 +247,68 @@ public sealed class BossBattleActors : MonoBehaviour
         foreach(var renderer in catRenderers)bounds.Encapsulate(renderer.bounds);
         var point=bounds.center;point.x=Mathf.Lerp(bounds.center.x,bossRenderers[0].bounds.center.x,.6f);
         slash.transform.position=point;slash.transform.rotation=Quaternion.identity;
-        slash.transform.localScale=Vector3.one*Mathf.Max(.5f,bounds.size.y*1.4f);
+        slash.transform.localScale=Vector3.one*(Mathf.Max(.5f,bounds.size.y*1.4f)*.65f);
         foreach(var ps in slashParticles){ps.Stop(false,ParticleSystemStopBehavior.StopEmittingAndClear);var main=ps.main;main.simulationSpeed=slashSpeed;ps.Play(false);}
     }
     void StopSlash(){if(slashParticles!=null)foreach(var ps in slashParticles)if(ps)ps.Stop(false,ParticleSystemStopBehavior.StopEmittingAndClear);}
     void ClearSlash(){StopSlash();if(slash)Destroy(slash);slash=null;slashParticles=null;}
     void OnDisable(){combatActive=false;ClearReactions();StopSlash();}
-    void OnApplicationFocus(bool focus){if(!focus)ClearReactions();}
+    void OnApplicationFocus(bool focus){if(!focus){if(victoryPlaying)Finish(BattleOutcome.Victory);else ClearReactions();}}
     void OnDestroy(){ClearSlash();}
     public void Finish(BattleOutcome outcome)
     {
+        exiting=false;
         combatActive=false;ClearReactions();StopSlash();
         Play(catAnimator,outcome==BattleOutcome.Defeat?"Die":"Idle");
         Play(bossAnimator,outcome==BattleOutcome.Victory?"Die":"Idle");
     }
+    // Called only after a committed victory. Freeze the final attack pose, then
+    // let the existing death clip breathe; never change global or simulation time.
+    public void CelebrateVictory()
+    {
+        if(!Ready||!isActiveAndEnabled||victoryPlaying)return;
+        combatActive=false;ClearReactions();StopSlash();
+        victoryPlaying=true;deathStarted=false;victoryAge=0;
+        catAnimator.speed=bossAnimator.speed=0;
+        victoryCamera=stageCamera?stageCamera.GetComponent<Camera>():null;
+        if(victoryCamera){cameraSize=victoryCamera.orthographicSize;cameraFov=victoryCamera.fieldOfView;}
+    }
+    void ClearVictory()
+    {
+        if(!victoryPlaying)return;
+        victoryPlaying=false;
+        if(victoryCamera){victoryCamera.orthographicSize=cameraSize;victoryCamera.fieldOfView=cameraFov;}
+        victoryCamera=null;
+        if(catAnimator)catAnimator.speed=1;
+        if(bossAnimator)bossAnimator.speed=1;
+    }
+    void TickVictory(float delta)
+    {
+        victoryAge=Mathf.Min(VictoryDuration,victoryAge+delta);
+        if(!deathStarted&&victoryAge>=VictoryHold){
+            deathStarted=true;if(!exiting)Play(catAnimator,"Idle");Play(bossAnimator,"Die",.55f);
+        }
+        if(victoryCamera){
+            float zoom=Mathf.SmoothStep(0,1,victoryAge/.4f)*(1-Mathf.SmoothStep(0,1,(victoryAge-1.25f)/.55f));
+            victoryCamera.orthographicSize=cameraSize*(1-.06f*zoom);
+            victoryCamera.fieldOfView=cameraFov*(1-.06f*zoom);
+        }
+        if(stageCamera&&victoryAge<.45f){
+            cameraPosition=stageCamera.localPosition;
+            float strength=1-victoryAge/.45f;
+            stageCamera.localPosition=cameraPosition+new Vector3(Mathf.Sin(victoryAge*65),Mathf.Sin(victoryAge*49)*.45f,0)*(.085f*strength*strength);
+            cameraOffsetApplied=true;
+        }
+        float glow=1-Mathf.SmoothStep(0,1,victoryAge/.5f);
+        var tint=Color.Lerp(Color.white,new Color(1,.78f,.48f),glow);
+        tint.a=1-Mathf.SmoothStep(0,1,(victoryAge-1.15f)/.65f);
+        Tint(bossRenderers,tint);
+        // Hold the faded corpse until dismissal/reset; don't flash back to white.
+    }
     void Update()
     {
         catRecoil.Remove();bossRecoil.Remove();RemoveCameraOffset();
+        if(victoryPlaying)return;
         if(IsHitStopped){
             stoppedTime+=Time.unscaledDeltaTime;
             if(stoppedTime>=HitStopDuration)ReleaseHitStop(true);
@@ -240,10 +317,11 @@ public sealed class BossBattleActors : MonoBehaviour
         if(IsHitStopped)return;
         catFlash=Mathf.Max(0,catFlash-Time.unscaledDeltaTime);bossFlash=Mathf.Max(0,bossFlash-Time.unscaledDeltaTime);
         Tint(catRenderers,catFlash>0?new Color(1,.4f,.4f):Color.white);
-        Tint(bossRenderers,bossFlash>0?new Color(1,.4f,.4f):Color.white);
+        Tint(bossRenderers,exiting?exitBossTint:bossFlash>0?new Color(1,.4f,.4f):Color.white);
     }
     void LateUpdate()
     {
+        if(victoryPlaying){TickVictory(Time.unscaledDeltaTime);return;}
         float delta=IsHitStopped?0:Time.unscaledDeltaTime;
         catRecoil.Apply(delta);bossRecoil.Apply(delta);
         // Shake only the arena camera, never the Canvas, HUD layout or input targets.
@@ -254,7 +332,7 @@ public sealed class BossBattleActors : MonoBehaviour
             cameraOffsetApplied=true;
         }
         Tint(catRenderers,catFlash>0?new Color(1,.4f,.4f):Color.white);
-        Tint(bossRenderers,bossFlash>0?new Color(1,.4f,.4f):Color.white);
+        Tint(bossRenderers,exiting?exitBossTint:bossFlash>0?new Color(1,.4f,.4f):Color.white);
     }
     static void Tint(SpriteRenderer[] renderers,Color color){if(renderers!=null)foreach(var r in renderers)if(r)r.color=color;}
 }

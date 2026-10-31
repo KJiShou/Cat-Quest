@@ -31,14 +31,20 @@ The existing `Canvas.prefab` SHA256 before cleanup was `EA9A29FDC2B742B5D6346692
 
 All interface additions are internal Editor verification boundaries. Runtime APIs, save format, rewards and production UI behaviour are unchanged.
 
+## Legacy generator retirement (2026-10-31)
+
+Removed the five Dashboard/Focus/Companion/Boss Build/Rebuild menu entries, their request handlers and generation-only helpers. Four obsolete scripts and their matching metadata were deleted. Boss stage synchronization and Windows packaging remain in their original files; saved UI assets and runtime behaviour are unchanged.
+
+Current evidence is in `Temp/GeneratorCleanup/`: deleted-script GUID references, pre/post asset hashes and `unity-check.txt`. CharacterHome verification, missing-script scans of five affected prefabs, key Focus/Boss/Companion bindings, combat controllers and bootstrap binding passed. The broader reference scan found existing missing Sprite references in FocusPageStage (`Firefly large.ShapeModule.m_Sprite`) and ForestBossStage (`Background trees_53 (1).m_Sprite`); the asset files are unchanged and these failures were not treated as passes or repaired. The temporary inspection probe was removed after use. Play Mode, native Companion behaviour and Windows packaging were not exercised for this Editor-only removal.
+
 ## Retained tools and follow-up findings
 
 These are scoped review findings, not permission to rewrite existing pages:
 
 | Finding | Required treatment |
 | --- | --- |
-| Legacy whole-page generators delete existing UI children or overwrite a prefab from a fresh root. | Do not use `DashboardRewardSetup`, `FocusPageSetup.ConfigurePage`, `CompanionPageSetup.Build`, `CompanionWindowDesign.Build` or `BossPageSetup.Build` for local UI edits. Patch the explicit component/properties instead. |
-| Some setup files contain ongoing functions. | Retain Boss scene-save synchronization, Windows build support, animation baking and verification. Extract useful responsibilities before retiring mixed tools in future work. |
+| Legacy whole-page generators deleted existing UI children or overwrote a prefab from a fresh root. | Retired on 2026-10-31: Dashboard, Focus, Companion and Boss whole-page generators, their menu/request entrypoints and generation-only helpers. Saved UI assets are preserved; patch explicit components/properties directly. |
+| Some setup files contain ongoing functions. | Retain Boss scene-save synchronization, Windows build support, animation baking and verification. `BossPageSetup` retains stage synchronization; `CompanionPageSetup` retains `Temp/build-focus-windows.request` packaging. Animation baking and verification remain separate and unchanged. |
 | Equipment static UI and dialogs are built in `EquipmentPageUI.Awake()`. | On a future change to that static portion, persist the affected component in an editable project prefab. Dynamic inventory can use reusable templates. This cleanup does not migrate/rebuild the page. |
 | Sharing sprites has not ensured component-level SimpleCasual consistency. | Equipment's generic popup and literal `x` close button differ from the source popup pattern. Compare the exact light Equipment/popup source components when that UI is next changed; do not replace project fonts globally. |
 | Button geometry verification does not establish style or motion quality, and can overlook controls missing feedback. | Require fresh rendered reference comparisons, motion inspection and state coverage for changed buttons/toggles/sliders. Reuse existing feedback owners. |

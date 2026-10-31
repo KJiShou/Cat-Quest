@@ -53,7 +53,7 @@ public sealed partial class TaskService
     public static bool TryDate(string value, out DateTime date) => DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
     public static int Reward(TaskDifficulty difficulty) => BaseReward(difficulty).fishCoins;
     public static RewardAmounts BaseReward(TaskDifficulty difficulty) => difficulty == TaskDifficulty.Easy
-        ? new RewardAmounts(10, 5) : difficulty == TaskDifficulty.Hard ? new RewardAmounts(30, 15) : new RewardAmounts(20, 10);
+        ? new RewardAmounts(15, 6) : difficulty == TaskDifficulty.Hard ? new RewardAmounts(40, 16) : new RewardAmounts(25, 10);
     public static string DifficultyName(TaskDifficulty difficulty) => difficulty == TaskDifficulty.Normal ? "Medium" : difficulty.ToString();
     private string Today => DateKey(clock.LocalNow);
     private static string OccurrenceDay(QuestTask task, string today) => task.daily ? today : "once";
@@ -224,6 +224,8 @@ public sealed partial class TaskService
                 CatLevel(data.experience, out int rewardLevel, out _, out _);
                 var amount = TaskAllowance(current.difficulty, rewardDay, rewardLevel);
                 AddRewards(data, amount);
+                rewardDay.firstTaskSettled = true;
+                rewardDay.taskTickets += amount.tickets;
                 rewardDay.taskExperience += amount.experience;
                 rewardDay.taskFishCoins += amount.fishCoins;
                 occurrence.rewardGranted = true;
@@ -234,7 +236,7 @@ public sealed partial class TaskService
                     snapshot = PlayerDataStore.Copy(current),
                     tagNames = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.name).ToList(),
                     tagColors = data.tags.Where(t => current.tagIds.Contains(t.id)).Select(t => t.colorHex).ToList(),
-                    fishCoins = amount.fishCoins, experience = amount.experience
+                    fishCoins = amount.fishCoins, experience = amount.experience, tickets = amount.tickets
                 });
             }
             else if (receipt != null && receipt.revoked)

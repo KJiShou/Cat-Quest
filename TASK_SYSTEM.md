@@ -22,7 +22,7 @@ MainMenu 的任务 UI 现在由真实任务数据驱动。运行 MainMenu 即可
 
 详情页勾选子任务立即保存。Complete 会在还有未完成子任务时要求确认，然后一起完成并领取奖励。
 任务行左侧勾选框可直接完成任务，沿用未完成子任务确认；该点击不会选择任务行。History 和 Daily 当天已完成任务的勾选框可撤销完成，不弹确认。撤销保留子任务进度和已获奖励，同一次任务重新完成恢复原历史记录、更新时间，不重复发奖。未完成普通任务在安排日期的次日本地午夜起视为逾期，日期在列表和详情显示红色；安排当天不逾期。每日任务以当天为执行日期，当天不逾期，午夜后继续沿用每日重置规则。相同日期的任务按标题排序，不再使用旧时间。
-Easy / Medium / Hard 的 Lv.1 基础奖励分别为 **10 / 20 / 30 EXP 和 5 / 10 / 15 鱼币**；存档内部保留 Normal 的枚举编号，界面统一显示 Medium。普通任务一次，每日任务每个日期一次。任务每日基础上限为 120 EXP 和 60 鱼币；奖励与上限都按结算前等级的 `1 + 0.1 × (等级 − 1)` 倍率提升，分别按剩余额度裁剪；达到上限仍记录任务完成。新存档余额从 0 开始，场景里的示例任务和 500 不导入数据。
+Easy / Medium / Hard 的 Lv.1 基础奖励分别为 **15 / 25 / 40 EXP 和 6 / 10 / 16 鱼币**；存档内部保留 Normal 的枚举编号，界面统一显示 Medium。普通任务一次，每日任务每个日期一次。任务每日基础上限为 150 EXP 和 60 鱼币；奖励与上限都按结算前等级的 `1 + 0.1 × (等级 − 1)` 倍率提升，分别按剩余额度裁剪；达到上限仍记录任务完成。每天首个首次结算的有效任务自动给予 1 张 Ticket，与货币上限独立；撤销或重做不会重复发放。新存档余额从 0 开始，场景里的示例任务和 500 不导入数据。
 
 删除任务先确认；删除每日模板停止后续重复，历史和奖励仍保留。删除标签仅解除当前任务的标签关联，历史快照不变。
 
@@ -63,9 +63,9 @@ Windows 当前项目默认路径为：
 
 Dashboard 默认打开；中间沿用 Ninja Cat 角色和现有预览，标题显示玩家名字，显示真实 LV、等级内 EXP 和进度。等级行复用 `Lobby_Popup_User_Info` 的 LV 数字与绿色经验条。等级从 1 开始，每级需要 `100 + 25 × (当前等级 − 1)` EXP；一次奖励可以连续升级。三个装备槽复用 `Equipment` 的灰色空槽，排列在角色下方，不显示槽位文字；本次不显示虚构 Rank、Power 或已装备物品。
 
-右侧 Daily Mission Rewards 拆成两项，各自进度、Claim 和领取状态：当天完成三个不同任务执行记录，或当天累计有效 Focus 满 25 分钟。提前结束的会话也算，按秒累加，进度显示完整分钟；旧存档按已记录的有效分钟兼容。外观直接复用 `Mission` 的红色飘带、任务条目、带刻度的蓝/绿进度条、绿色 Claim 与灰色 In Progress；已领取显示灰色 Claimed。Daily Task 和普通 Todo 都算，子任务不单独计数。每项基础奖励 20 EXP + 10 鱼币，按领取前等级的 `1 + 0.1 × (等级 − 1)` 倍率分别向下取整（Lv.30 为 78 EXP + 39 鱼币），每天各领一次；领取后显示实际收据金额；不占任务或 Focus 基础奖励额度。撤销完成减少未领取目标进度，已领取奖励保留；重做不会重复发奖。目标在设备本地午夜重置，不结转未领取奖励。
+右侧 Daily Mission Rewards 保留原有两张卡片。Task 卡先显示完成 1 个任务（基础 10 EXP + 5 鱼币），领取后显示完成 3 个不同任务执行记录（额外 20 EXP + 10 鱼币）；Focus 卡为当天累计有效 Focus 满 25 分钟（10 EXP + 5 鱼币）。奖励按领取前等级的 `1 + 0.1 × (等级 − 1)` 倍率分别向下取整，每个阶段每天各领一次；领取后显示实际收据，不占基础奖励额度。首个 Task 的自动 Ticket 不需要点击 Claim。提前结束的 Focus 也计入目标，按秒累加，进度显示完整分钟；旧存档兼容已记录分钟。外观复用现有 `Mission` 组件，沿用 Claim / In Progress / Claimed 状态。Daily Task 和普通 Todo 都算，子任务不单独计数。撤销减少未领取目标进度，已领取奖励保留；重做不会重复发奖。本地午夜重置，不结转未领取奖励。
 
-Focus 页提供番茄钟（专注/休息各 1–60 分钟，默认 25/5）、正计时及倒计时（1–180 分钟）。仅番茄钟在成功结算后进入 Rest；正计时可超过三小时并手动结束。正常结束或主动 End Focus Early 按完整有效分钟结算：每分钟 1 EXP，每完整 5 分钟 2 鱼币，每完整 25 分钟 1 Ticket。完整间隔按单次会话计算，不拼接短会话。每次最多前 180 分钟、三种模式每天共享前 360 分钟可获得 EXP / 鱼币，每天最多 4 张 Ticket。完整 25 分钟仍满足目标，即使基础奖励额度已耗尽。
+Focus 页提供番茄钟（专注/休息各 1–60 分钟，默认 25/5）、正计时及倒计时（1–180 分钟）。仅番茄钟在成功结算后进入 Rest；正计时可超过三小时并手动结束。正常结束或主动 End Focus Early 按完整有效分钟结算：每分钟基础 0.5 EXP，每完整 5 分钟基础 1 鱼币，先乘会话开始时等级倍率再向下取整；每完整 25 分钟 1 Ticket。完整间隔按单次会话计算，不拼接短会话。每次最多前 180 分钟、三种模式每天共享前 240 分钟可获得 EXP / 鱼币，Focus 每天最多 3 张 Ticket（独立于 Task 的 1 张及升级赠票）。完整 25 分钟仍满足目标，即使基础奖励额度已耗尽。
 
 Focus 计时由持久化管理对象维护，切换页面和切换到其他应用继续计时。设备休眠、暂停或超过 10 秒无法验证的播放器更新间隔使当前 Focus 失效；重启不会奖励未完成会话。Cancel 不发奖、不开始 Rest；End Focus Early 保留完整分钟的奖励。保存成功后才进入 Rest，失败会冻结结算并提供 Retry Save，避免重复发奖。Rest 不发奖，可提前结束；结束后提供再次 Focus 或返回 Dashboard。跨午夜 Focus 归入结算日。
 
@@ -97,7 +97,9 @@ only shared when a chat lookup requests it. See `AI_IMPLEMENTATION.md`.
 
 ## Level-scaled task rewards (2026-10-25)
 
-Task completion uses the Cat Level immediately before settlement, with multiplier `1 + 0.1 * (level - 1)`. Easy/Medium/Hard base rewards remain 10/20/30 EXP and 5/10/15 Fish; multiply each base amount and floor separately. The daily base caps of 120 EXP / 60 Fish use the same multiplier at completion. At Lv.30, Medium grants 78 EXP / 39 Fish and the daily caps are 468 EXP / 234 Fish. Previews use the same service calculation; historical receipts retain the amounts actually paid. A level-up can increase the remaining allowance for subsequent completions. Cap usage is actual paid currency, including revoked receipts: undo/recompletion cannot release allowance or repay rewards. Capped completions are still recorded, and failed writes are retryable. Daily Goal base bonuses of 20 EXP / 10 Fish use the same level multiplier at claim time and do not consume task or Focus caps. Claimed cards retain actual paid amounts; legacy claimed cards retain the original base amount. Tasks still grant no Tickets.
+Updated 2026-10-31: Task completion uses the Cat Level immediately before settlement, with multiplier `1 + 0.1 * (level - 1)`. Easy/Medium/Hard bases are 15/25/40 EXP and 6/10/16 Fish; multiply and floor separately. Daily bases are 150 EXP / 60 Fish. At Lv.30, Medium pays 97 EXP / 39 Fish; caps are 585 EXP / 234 Fish. Previews share settlement calculations. Paid currency, including revoked receipts, consumes allowance. Undo/recompletion cannot release allowance or repay rewards. First-time settlement of the first task each day pays one automatic Ticket. Goal bonuses follow the two-stage Task and Focus rules above, outside base caps.
+
+Save compatibility: additive fields only; version remains 5. Existing balances, historical receipts and already-paid daily totals are retained even above the new caps. An already-used legacy task day does not retroactively receive the new first-task Ticket or first-task goal bonus; the next local day is eligible. Existing claimed Focus goals retain their old receipt amounts. Loading alone does not rewrite the save; ordinary successful mutations retain atomic save/backup behavior. `Temp/verify-reward-balance.request` runs isolated-save regression checks followed by LevelProgression and the Equipment → Battle → Focus → Rewards → Tasks/CharacterHome chain; result: `Temp/verify-reward-balance.result`.
 
 ## Level-up celebration and gifts (2026-10-25)
 
@@ -107,7 +109,7 @@ Every newly reached level L awards 5 × L Fish; reaching a multiple of five also
 
 ### Header reward-limit hover
 
-Hover Fish for Fish limits only, Boss Ticket for Tickets only, and the avatar for EXP limits only. Fish and EXP each show Task and Focus allowance sliders; Tickets shows only the Focus ticket slider. Task bars use paid rewards / level-scaled daily caps. Focus bars use rewarded minutes / daily minute allowance, with the selected currency's nominal daily maximum at the active session reward level above the bar; this prevents short-session rounding or level changes from making an exhausted allowance look available. Tickets uses paid Focus Tickets / daily ticket cap. Daily Goal and level-up bonuses are extra. The read-only view uses `TaskService.TodayRewards` and existing service limits, updates on service changes, and dismisses on pointer exit/press, page change, disable or focus loss.
+Hover Fish for Fish limits only, Boss Ticket for Tickets only, and the avatar for EXP limits only. Fish and EXP show Task and Focus allowance sliders. Tickets shows combined paid Task + Focus Tickets / 4, with the separate 1 + 3 source limits stated below. Task bars use paid rewards / level-scaled daily caps. Focus bars use rewarded minutes / daily minute allowance, with the currency's nominal daily maximum calculated by the shared reward formula at the active session reward level. Daily Goal and level-up bonuses are extra. The read-only view uses `TaskService.TodayRewards`, updates on service changes, and dismisses on pointer exit/press, page change, disable or focus loss.
 
 `Assets/Prefabs/RewardLimitTooltip.prefab` retains the existing EquipmentItemDetail popup background, shadow and TopFrame (SimpleCasual Light/Equipment_Popup_Detail), with the existing header font. Its authored sliders reuse the header UserInfo/Slider_Green, originating from SimpleCasual Prefabs_Component_Sliders/SliderGroup_UserInfo_Light. Sliders are noninteractive, have no navigation or callbacks, and do not intercept raycasts. The CanvasGroup does not block input and the LayoutElement ignores the main container layout. All three header targets are serialized in Canvas.prefab; the original avatar and currency geometry remain intact. No page generation is required.
 

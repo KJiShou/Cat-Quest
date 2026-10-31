@@ -119,6 +119,8 @@ public static class TaskFeedbackVerification
         }
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         Check(GameDataManager.Instance.SavePath.Contains("TaskFeedbackVerification"),"Must use an isolated save.");
+        // This flow tests task dialogs; the new-save tutorial owns a separate focus trap.
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
         Check(nav.ShowPage(MainMenuPage.Tasks),"Tasks page unavailable");yield return 1;
         var owner=nav.taskSystem;
         var dialog=(TaskConfirmDialog)typeof(TaskSystemUI).GetField("confirmation",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(owner);
@@ -173,11 +175,11 @@ public static class TaskFeedbackVerification
             Check(events.currentSelectedGameObject==owner.QuickAddInput.gameObject,"Success feedback stole quick-add focus.");
             string id=owner.Service.Snapshot.tasks.Single().id;owner.CancelQuickAdd();
             owner.CompleteSelected(id);yield return .2;
-            Check(notice.message.text.Contains("+20 EXP, +10 Fish Coins"),"Receipt rewards not displayed.");
+            Check(notice.message.text.Contains("+25 EXP, +10 Fish Coins") && notice.message.text.Contains("+1 Ticket"),"Receipt rewards not displayed.");
             owner.CompleteSelected(id);Check(notice.message.text.Contains("already completed"),"Duplicate completion not distinguished.");
             string receipt=owner.Service.Snapshot.history.Single().id;Check(owner.Service.UndoCompletion(receipt),"Undo failed");
             owner.CompleteSelected(id);Check(notice.message.text.Contains("previous rewards are kept"),"Recompletion not distinguished.");
-            var saved=owner.Service.Snapshot;Check(saved.history.Count==1&&saved.fishCoins==10&&saved.experience==20,"Feedback changed reward settlement.");
+            var saved=owner.Service.Snapshot;Check(saved.history.Count==1&&saved.fishCoins==10&&saved.experience==25&&saved.tickets==1,"Feedback changed reward settlement.");
 
             // Seed only this runner's isolated store at the existing cap; no production rules change.
             var day=GameDataManager.Instance.PlayerData.rewardDays.Single();day.taskExperience=owner.Service.TaskExperienceLimit;day.taskFishCoins=owner.Service.TaskFishLimit;
@@ -186,13 +188,15 @@ public static class TaskFeedbackVerification
             owner.CompleteSelected(capped);Check(notice.message.text.Contains("Daily task reward limit reached"),"Cap message is misleading.");
             Check(owner.Service.Snapshot.history.Count==2&&owner.Service.Snapshot.fishCoins==10,"Capped completion missing or rewarded.");
             var disk=new PlayerDataStore(GameDataManager.Instance.SavePath);
-            Check(disk.Data.history.Count==2&&disk.Data.experience==20,"Result not persisted.");
+            Check(disk.Data.history.Count==2&&disk.Data.experience==25&&disk.Data.tickets==1,"Result not persisted.");
             owner.CompleteSelected("missing-task");Check(dialog.Root.activeSelf&&!notice.gameObject.activeSelf,"Failure displayed a success notice.");dialog.Dismiss();
-            Check(!notice.fade.blocksRaycasts&&!notice.fade.interactable&&notice.GetComponentsInChildren<Graphic>().All(g=>!g.raycastTarget),"Success notice blocks input.");
-            owner.Notify("Task saved.");yield return 4.4;Check(!notice.gameObject.activeSelf,"Notice did not expire.");
+            Check(notice.fade.blocksRaycasts&&notice.GetComponent<Graphic>().raycastTarget,"Notice cannot be dismissed by clicking.");
+            owner.Notify("Task saved.");yield return 4.4;Check(notice.gameObject.activeSelf,"Notice expired before player dismissed it.");
+            ExecuteEvents.Execute(notice.gameObject,new PointerEventData(events){button=PointerEventData.InputButton.Left},ExecuteEvents.pointerClickHandler);
+            Check(!notice.gameObject.activeSelf,"Notice did not dismiss on click.");
             owner.Notify("Task saved.");notice.SendMessage("OnApplicationFocus",false);Check(!notice.gameObject.activeSelf,"Notice persisted on focus loss.");
             owner.Notify("Task deleted.");nav.ShowPage(MainMenuPage.Dashboard);Check(!notice.gameObject.activeSelf,"Page closure left stale notice.");nav.ShowPage(MainMenuPage.Tasks);yield return .2;
-            File.WriteAllText(Folder+"/checks.txt","PASS: virtual-keyboard Tab/Shift+Tab/Escape; background focus confinement; EventSystem repeated submit exactly once; notice OK focus; page disable/re-enable; quick-add focus retention; receipt/duplicate/recompletion/cap/error messages; persistence/reload; nonblocking/timeout/focus-loss notice.\n");
+            File.WriteAllText(Folder+"/checks.txt","PASS: virtual-keyboard Tab/Shift+Tab/Escape; background focus confinement; EventSystem repeated submit exactly once; notice OK focus; page disable/re-enable; quick-add focus retention; receipt/duplicate/recompletion/cap/error messages; persistence/reload; persistent/click-dismiss/focus-loss notice.\n");
         }
         foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)}){
             Resolution(size.x,size.y);yield return 1;

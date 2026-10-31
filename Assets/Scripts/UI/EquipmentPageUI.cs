@@ -22,6 +22,10 @@ public sealed class EquipmentPageUI : MonoBehaviour
     EquipmentHoverTarget hoverSource;
     string selected;int expectedLevel;Action confirmAction;
     public bool Ready=>service!=null;public string SelectedItem=>selected;
+    public RectTransform TutorialSlots => gear;
+    public RectTransform TutorialBackpack => backpack;
+    public RectTransform TutorialFilters => filters[0].transform.parent as RectTransform;
+    public RectTransform TutorialAutoSelect => inventory.autoSelect.transform as RectTransform;
     static Color Pale=>new Color32(239,248,255,255);
     void Awake()
     {
@@ -164,7 +168,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
         if(!itemDetail.upgrade.interactable)return;
         itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().Dismiss();
         bool success=service.UpgradeEquipment(selected,expectedLevel,Guid.NewGuid().ToString("N"));
-        if(success){Result(true);itemDetail.status.text="Upgraded.";}
+        if(success){Result(true);itemDetail.status.text="Upgraded.";itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().PlaySuccess();}
         else {string error=service.LastError;OpenItem(selected);itemDetail.status.text=error;}
     }
     void ConfirmClaim(){string id=selected;Ask("Claim "+EquipmentRules.Find(id).Name+"?\nUses 1 mastery reward. Starts at Lv. 1.",()=>Result(service.ClaimEquipment(id)));}

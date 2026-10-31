@@ -1,0 +1,847 @@
+{
+  "engineVersion": "1.4.0",
+  "engineSha256": "561ba6230858fd4ff45cb78ee7a70f949ee6e0e768634ebfd4d25e62f3da3871",
+  "settings": {
+    "player": {
+      "voice": "fern",
+      "pitch": 310,
+      "speed": 1.4,
+      "expression": 0.42,
+      "throat": 1.03,
+      "breath": 0.08,
+      "brightness": 0.4,
+      "hiss": 0.65
+    },
+    "mentor": {
+      "voice": "lowell",
+      "pitch": 205,
+      "speed": 1.12,
+      "expression": 0.33,
+      "throat": 0.96,
+      "breath": 0.1,
+      "brightness": 0.36,
+      "hiss": 0.6
+    }
+  },
+  "lines": [
+    {
+      "role": "player",
+      "text": "Ugh...",
+      "spoken": "Ugh...",
+      "clip": "DialogueAudio/player-a0098825e885f033c7f0",
+      "duration": 0.425,
+      "peak": 0.49405646324157715,
+      "sha256": "4ae8a54a1b5596272764236635351f84f61493ae8fbb6dacb288939803b73ae3"
+    },
+    {
+      "role": "player",
+      "text": "What am I supposed to do today?",
+      "spoken": "What am I supposed to do today?",
+      "clip": "DialogueAudio/player-efd8b12f6cb33a94d418",
+      "duration": 1.7725,
+      "peak": 0.624413788318634,
+      "sha256": "d25450fe618c2fa30815e2de8bf0a2be554068a84e2a252f20c78f31fff12119"
+    },
+    {
+      "role": "player",
+      "text": "I need to finish this...",
+      "spoken": "I need to finish this...",
+      "clip": "DialogueAudio/player-1da6fa70c60b28e2e410",
+      "duration": 1.3425,
+      "peak": 0.5217168927192688,
+      "sha256": "fc61dfc017eaecebe74a1e1e5c94f4e71db4b4fb4959e397cfce58795d9e63a5"
+    },
+    {
+      "role": "player",
+      "text": "And I still have that to deal with...",
+      "spoken": "And I still have that to deal with...",
+      "clip": "DialogueAudio/player-d9c411c2e8a1c1e8211b",
+      "duration": 2.03,
+      "peak": 0.6212611198425293,
+      "sha256": "55d3bf9d3c84fd70661ea2ba9a9c93b449ee5f77375b224597b3a8a2de9be96d"
+    },
+    {
+      "role": "player",
+      "text": "Oh... and I almost forgot about that one.",
+      "spoken": "Oh... and I almost forgot about that one.",
+      "clip": "DialogueAudio/player-41d962b0630aa907e325",
+      "duration": 2.35125,
+      "peak": 0.6249334812164307,
+      "sha256": "826181288c54bc21e6ec5d6f5287495328f97b679bc439a80645320507e79abe"
+    },
+    {
+      "role": "player",
+      "text": "There's too much.",
+      "spoken": "There's too much.",
+      "clip": "DialogueAudio/player-628c7af8788b73fb0269",
+      "duration": 1.10375,
+      "peak": 0.5696976184844971,
+      "sha256": "b5531a17bb23daad6e39913e5e134916af12f98c9843747bbd4b9f33c2137b61"
+    },
+    {
+      "role": "player",
+      "text": "I don't even know where to start.",
+      "spoken": "I don't even know where to start.",
+      "clip": "DialogueAudio/player-59aeed43620568365f6c",
+      "duration": 1.89125,
+      "peak": 0.6410613059997559,
+      "sha256": "d6116f8ae3089424cd19950601fffe422249c03b9f8ebde84f0915f462151077"
+    },
+    {
+      "role": "player",
+      "text": "Maybe staring at all of this isn't helping.",
+      "spoken": "Maybe staring at all of this isn't helping.",
+      "clip": "DialogueAudio/player-d65fbf4dfc7091244d58",
+      "duration": 2.5125,
+      "peak": 0.6225972175598145,
+      "sha256": "ebeb4172db97bd253e45bad7bc06750f532c31d107a888e9547b8ffb4bf7b88c"
+    },
+    {
+      "role": "player",
+      "text": "I'll go for a walk.",
+      "spoken": "I'll go for a walk.",
+      "clip": "DialogueAudio/player-752c106b116c7ef50ec2",
+      "duration": 1.12125,
+      "peak": 0.5938099026679993,
+      "sha256": "9a808e30dc7d5b1816a8324800fa37cd24c178f2df994a9707c58028db2894f8"
+    },
+    {
+      "role": "player",
+      "text": "Maybe some fresh air will clear my head.",
+      "spoken": "Maybe some fresh air will clear my head.",
+      "clip": "DialogueAudio/player-abb7196df3ceca4fd0a5",
+      "duration": 2.19625,
+      "peak": 0.6257691383361816,
+      "sha256": "05f3065968fbc09774d500213957283715806ca3633b5d604aba20b4176983bf"
+    },
+    {
+      "role": "player",
+      "text": "Master Loke?",
+      "spoken": "Master Loke?",
+      "clip": "DialogueAudio/player-1b3fa6c389a09fa523f3",
+      "duration": 0.8625,
+      "peak": 0.6380786895751953,
+      "sha256": "4b9d7feae237bd31747c514cf069e9f6e5d18695ddc8cad3417dac819f40586e"
+    },
+    {
+      "role": "mentor",
+      "text": "Good morning, {playerName}.",
+      "spoken": "Good morning, apprentice.",
+      "clip": "DialogueAudio/mentor-23782f131b996cf95de4",
+      "duration": 2.004395833333333,
+      "peak": 0.6252679824829102,
+      "sha256": "2ffe590bc847534bd5f6fe416adada2ef6002472444a64937fb6b933278cbd55"
+    },
+    {
+      "role": "mentor",
+      "text": "You look troubled.",
+      "spoken": "You look troubled.",
+      "clip": "DialogueAudio/mentor-a8ddca11940272998eb3",
+      "duration": 1.36175,
+      "peak": 0.5985872149467468,
+      "sha256": "7a152bab33c8204335488a67b5dc4d548257f8b0543f1c644160c8d1ff30ac0d"
+    },
+    {
+      "role": "player",
+      "text": "Is it that obvious?",
+      "spoken": "Is it that obvious?",
+      "clip": "DialogueAudio/player-50f137b48a16bf5564e8",
+      "duration": 1.21375,
+      "peak": 0.5741415023803711,
+      "sha256": "4d0f902a2b64951a1114f35c38843edea69877e3609552a2bf4a7d19fa357f0e"
+    },
+    {
+      "role": "mentor",
+      "text": "Very.",
+      "spoken": "Very.",
+      "clip": "DialogueAudio/mentor-c2e79b161b3f65b46d83",
+      "duration": 0.6043958333333334,
+      "peak": 0.5937298536300659,
+      "sha256": "db92ff8a6cc15fc4fc664bf1fa4278dab89fbeb498115da28a9a8404a8739a2b"
+    },
+    {
+      "role": "mentor",
+      "text": "What's on your mind?",
+      "spoken": "What's on your mind?",
+      "clip": "DialogueAudio/mentor-209f0ba828d7a4313ced",
+      "duration": 1.4955833333333333,
+      "peak": 0.6057997941970825,
+      "sha256": "70587a3ec55e35b1ea7ce128fa81d3c4339781de8d06881a72e3fc63f6509fa3"
+    },
+    {
+      "role": "player",
+      "text": "I have so many things I need to do.",
+      "spoken": "I have so many things I need to do.",
+      "clip": "DialogueAudio/player-33ab1c6414098cbcc2fb",
+      "duration": 1.89375,
+      "peak": 0.6397647857666016,
+      "sha256": "988caeff58b325d4c55b5a1460daf84f42999e40f5aef6f385b007b2b3a6af61"
+    },
+    {
+      "role": "player",
+      "text": "Things I should finish...",
+      "spoken": "Things I should finish...",
+      "clip": "DialogueAudio/player-d2836c26952addea067c",
+      "duration": 1.45625,
+      "peak": 0.5695397257804871,
+      "sha256": "4e4f4c96850f3dc91b0957da401e020c94142a3316fe8ce0ae205225de54bad1"
+    },
+    {
+      "role": "player",
+      "text": "Things I shouldn't forget...",
+      "spoken": "Things I shouldn't forget...",
+      "clip": "DialogueAudio/player-bb49acda87748cb31639",
+      "duration": 1.6375,
+      "peak": 0.5510773062705994,
+      "sha256": "01239d54203b31f7eaf4513375b5f68e6ac2ee5f28b489b78b5881dec5023e4d"
+    },
+    {
+      "role": "player",
+      "text": "And every time I try to start...",
+      "spoken": "And every time I try to start...",
+      "clip": "DialogueAudio/player-1410ca5a3d4cba2b4ff2",
+      "duration": 1.76625,
+      "peak": 0.6279276609420776,
+      "sha256": "4a3336e484709db35b81aa0bcc0c4174f390d90bb4723efdc40d97bf8574e152"
+    },
+    {
+      "role": "player",
+      "text": "I just end up thinking about everything at once.",
+      "spoken": "I just end up thinking about everything at once.",
+      "clip": "DialogueAudio/player-ab6065aa8a65027fa4a7",
+      "duration": 2.73625,
+      "peak": 0.618493914604187,
+      "sha256": "3a7c5f5f4aed9761528cb0dd3a287b301122f40570c99cb88101e3296d6b1322"
+    },
+    {
+      "role": "mentor",
+      "text": "I see.",
+      "spoken": "I see.",
+      "clip": "DialogueAudio/mentor-d1fe08aeca3088a714e4",
+      "duration": 0.5941041666666667,
+      "peak": 0.40068721771240234,
+      "sha256": "fa3d56fb7b7bcde3270bbf34aa1e5b71b85e8dbb1abb3eceb9e398e49443d702"
+    },
+    {
+      "role": "mentor",
+      "text": "So your problem isn't that you have nothing to do.",
+      "spoken": "So your problem isn't that you have nothing to do.",
+      "clip": "DialogueAudio/mentor-a33b0c9831595488922d",
+      "duration": 3.3705833333333333,
+      "peak": 0.6315930485725403,
+      "sha256": "f8ec034761bc79b53269219538e8a4a79980e2c735115e169320ee55382d11c7"
+    },
+    {
+      "role": "mentor",
+      "text": "Your problem is that everything is fighting for your attention at the same time.",
+      "spoken": "Your problem is that everything is fighting for your attention at the same time.",
+      "clip": "DialogueAudio/mentor-2c3c0555435b870a1bb0",
+      "duration": 5.430875,
+      "peak": 0.626500129699707,
+      "sha256": "a154dc26044313035190c263baa598bf24d9c9cb19f761b5d2a6d3a7208e6e99"
+    },
+    {
+      "role": "player",
+      "text": "...Yeah.",
+      "spoken": "...Yeah.",
+      "clip": "DialogueAudio/player-1199585c53275f78d2db",
+      "duration": 0.675,
+      "peak": 0.5462701916694641,
+      "sha256": "b147d31dbe9101dd707ce4890a0e61777769adb4dcb233e690fb25f9b10932c3"
+    },
+    {
+      "role": "player",
+      "text": "That's exactly it.",
+      "spoken": "That's exactly it.",
+      "clip": "DialogueAudio/player-9f75bd02d77bfbf2b267",
+      "duration": 1.27625,
+      "peak": 0.6039600968360901,
+      "sha256": "abf596841f08a48b5b96b4d7ae0e520b72d4c3513b284cced0b2182d61a0a743"
+    },
+    {
+      "role": "mentor",
+      "text": "{playerName}, when your mind is crowded...",
+      "spoken": "apprentice, when your mind is crowded...",
+      "clip": "DialogueAudio/mentor-f9f3985316f99ff12a27",
+      "duration": 2.775,
+      "peak": 0.6165111660957336,
+      "sha256": "f8124dd409745b3728fcb4c1c67eeade9a7cbbc12773670ac78c2f62ee1db34c"
+    },
+    {
+      "role": "mentor",
+      "text": "...don't try to carry everything in your head.",
+      "spoken": "...don't try to carry everything in your head.",
+      "clip": "DialogueAudio/mentor-bef5f01cfc2301afb627",
+      "duration": 3.230875,
+      "peak": 0.6092067956924438,
+      "sha256": "ee5e3b8b7ed3d90af6cfb6807bf316b6a6539c335b42ee2f0de37b4de1dce125"
+    },
+    {
+      "role": "mentor",
+      "text": "Put it somewhere you can see it.",
+      "spoken": "Put it somewhere you can see it.",
+      "clip": "DialogueAudio/mentor-dea2d74803489ea888fe",
+      "duration": 2.2161666666666666,
+      "peak": 0.6324620246887207,
+      "sha256": "b15ff7213adec80d41b2ef143c383ce99ef720ebdd925a6b2ef6a96b3b0460f5"
+    },
+    {
+      "role": "mentor",
+      "text": "Write down what you need to do.",
+      "spoken": "Write down what you need to do.",
+      "clip": "DialogueAudio/mentor-79fbac11a1c63a213a5c",
+      "duration": 2.08675,
+      "peak": 0.6401476263999939,
+      "sha256": "bec7605becf2485cc7c1c85e23fea56d5e406bb6b86166ec930aa6f7eec2fdd9"
+    },
+    {
+      "role": "mentor",
+      "text": "One task at a time.",
+      "spoken": "One task at a time.",
+      "clip": "DialogueAudio/mentor-3292bc16b0f54a69b406",
+      "duration": 1.4470416666666666,
+      "peak": 0.6081112027168274,
+      "sha256": "ecab8074d2ff13791d82668857b85544eae268f716cd5cd2810151b213863f04"
+    },
+    {
+      "role": "player",
+      "text": "\"Just... write everything down?",
+      "spoken": "\"Just... write everything down?",
+      "clip": "DialogueAudio/player-8280246fbefd19771272",
+      "duration": 1.88375,
+      "peak": 0.5765426158905029,
+      "sha256": "6b9605d3d296a6dff08a895a0336db41b0670f3a5fff3a63dbae853ab3ff0c67"
+    },
+    {
+      "role": "mentor",
+      "text": "Exactly.",
+      "spoken": "Exactly.",
+      "clip": "DialogueAudio/mentor-959e4bdbe20e817e2c00",
+      "duration": 0.8793958333333334,
+      "peak": 0.6138774156570435,
+      "sha256": "4d000032ab8bc0f7616211f7b07c90c8195fc78deb1eb1100ebf97f02dd36b09"
+    },
+    {
+      "role": "mentor",
+      "text": "You don't need to solve everything right now.",
+      "spoken": "You don't need to solve everything right now.",
+      "clip": "DialogueAudio/mentor-e009f0c97d3188d90160",
+      "duration": 3.0838125,
+      "peak": 0.6227265000343323,
+      "sha256": "19dbdf0320b66a629479f8feda4c64d8b67e4cc68d6f3207d48133a6fd469cbb"
+    },
+    {
+      "role": "mentor",
+      "text": "First, understand what needs to be done.",
+      "spoken": "First, understand what needs to be done.",
+      "clip": "DialogueAudio/mentor-36c1a28558251a609a0e",
+      "duration": 2.9146875,
+      "peak": 0.64201819896698,
+      "sha256": "5eab159fbba6edb5172feba3f28793af4ce847daccc90f5052a6720e73b6c248"
+    },
+    {
+      "role": "mentor",
+      "text": "Then choose where to begin.",
+      "spoken": "Then choose where to begin.",
+      "clip": "DialogueAudio/mentor-2ca51350946907446f80",
+      "duration": 1.9485208333333333,
+      "peak": 0.5921441912651062,
+      "sha256": "d8007b670aca963389d6079495c55d7acd6466f0d46af88a29875207b06023d1"
+    },
+    {
+      "role": "player",
+      "text": "So instead of worrying about everything...",
+      "spoken": "So instead of worrying about everything...",
+      "clip": "DialogueAudio/player-95bb0156c4ebb07c5589",
+      "duration": 2.3025,
+      "peak": 0.6186320781707764,
+      "sha256": "bfb6b801ae628b4031d77a88e6b5b4ab8242501b08b49dab298a5bf3d1f93818"
+    },
+    {
+      "role": "player",
+      "text": "I should turn them into smaller tasks?",
+      "spoken": "I should turn them into smaller tasks?",
+      "clip": "DialogueAudio/player-aad66c0eff5c2d389485",
+      "duration": 2.245,
+      "peak": 0.6297403573989868,
+      "sha256": "c0a25774a51ce5371a57442ec2e2a0893b5785ea7465ae660008328f22684fd6"
+    },
+    {
+      "role": "mentor",
+      "text": "Now you're learning.",
+      "spoken": "Now you're learning.",
+      "clip": "DialogueAudio/mentor-f0d3fd2b31c637834741",
+      "duration": 1.4676458333333333,
+      "peak": 0.6284855604171753,
+      "sha256": "04ffa929566bb6f5467490bbd5f1574bf6705482a7904046df4c452f5094c62b"
+    },
+    {
+      "role": "mentor",
+      "text": "Start with just one thing.",
+      "spoken": "Start with just one thing.",
+      "clip": "DialogueAudio/mentor-028154a27da96d41fb4b",
+      "duration": 2.010291666666667,
+      "peak": 0.6109364628791809,
+      "sha256": "142020942c762ef51cd2178306a840d0592eb596affc4ad3d6377629a5d52d60"
+    },
+    {
+      "role": "mentor",
+      "text": "Write down something you need to finish today.",
+      "spoken": "Write down something you need to finish today.",
+      "clip": "DialogueAudio/mentor-3822664fd58be0e77a5d",
+      "duration": 3.155875,
+      "peak": 0.6339578032493591,
+      "sha256": "ab2c3be29c132021ce168e978d0242c7147913ebb473b7990b6b7e0a6bbbe36f"
+    },
+    {
+      "role": "mentor",
+      "text": "Once you know what comes first, the rest will feel easier.",
+      "spoken": "Once you know what comes first, the rest will feel easier.",
+      "clip": "DialogueAudio/mentor-f702d944be810913be98",
+      "duration": 3.9838125,
+      "peak": 0.6467282176017761,
+      "sha256": "41238e5eb15befb07e0b22668bf639409d247b3cb8396e691099026370bd579f"
+    },
+    {
+      "role": "player",
+      "text": "Alright.",
+      "spoken": "Alright.",
+      "clip": "DialogueAudio/player-3c6ce7b7091dcf938fe1",
+      "duration": 0.685,
+      "peak": 0.6089958548545837,
+      "sha256": "1994be9dd0e279ecc7fe23f895e5492146769840b70e5f2a8076aa03451aa7ef"
+    },
+    {
+      "role": "player",
+      "text": "I'll start with one tasks.",
+      "spoken": "I'll start with one tasks.",
+      "clip": "DialogueAudio/player-f47063ad473210159e6c",
+      "duration": 1.63875,
+      "peak": 0.5966566801071167,
+      "sha256": "9fcb0e2edf6edbdf03fe7322c41a4f307699642ab5415291a922eeaf1877b796"
+    },
+    {
+      "role": "mentor",
+      "text": "Your training has started. Switching pages or apps will keep the timer running. Time to focus!",
+      "spoken": "Your training has started. Switching pages or apps will keep the timer running. Time to focus!",
+      "clip": "DialogueAudio/mentor-1c809de22cd7605c281d",
+      "duration": 6.798520833333333,
+      "peak": 0.6097681522369385,
+      "sha256": "d901e42b02054ffb78f614548fa8ca265e9199d0355f74ab0ea3da1b97be73de"
+    },
+    {
+      "role": "mentor",
+      "text": "Welcome, {playerName}. Let us grow stronger, one real task at a time. I will help you write your first task.",
+      "spoken": "Welcome, apprentice. Let us grow stronger, one real task at a time. I will help you write your first task.",
+      "clip": "DialogueAudio/mentor-4a5c716507c286625554",
+      "duration": 7.4896875,
+      "peak": 0.6480651497840881,
+      "sha256": "0b1ac1a7b63b924cd619a20f7585c4691afe8be148cdcbcc93f9b3ff2dc57168"
+    },
+    {
+      "role": "mentor",
+      "text": "Open Tasks to write down something you want to do.",
+      "spoken": "Open Tasks to write down something you want to do.",
+      "clip": "DialogueAudio/mentor-34156556316838b30584",
+      "duration": 3.4088125,
+      "peak": 0.6286457777023315,
+      "sha256": "0a3e0775814474aef926813e8efc5e47287df40f5ce948b1d4d9fe27799c3ca7"
+    },
+    {
+      "role": "mentor",
+      "text": "Task complete and recorded. Today's task reward allowance is used up. Your work still counts.",
+      "spoken": "Task complete and recorded. Today's task reward allowance is used up. Your work still counts.",
+      "clip": "DialogueAudio/mentor-2efd2baef12580aa967d",
+      "duration": 6.6779375,
+      "peak": 0.6375117897987366,
+      "sha256": "ef3e148e6755cf36e5108ff4a7d4d8dc9d38074bca40905e3c1013e1039a61b2"
+    },
+    {
+      "role": "mentor",
+      "text": "Well done. This task earned {receipt.experience} EXP and {receipt.fishCoins} Fish Coins. EXP grows your cat. Fish Coins can upgrade equipment.",
+      "spoken": "Well done. This task earned 10 EXP and 10 Fish Coins. EXP grows your cat. Fish Coins can upgrade equipment.",
+      "clip": "DialogueAudio/mentor-ac2f9c3e20d1403d861a",
+      "duration": 7.679395833333333,
+      "peak": 0.6494771242141724,
+      "sha256": "60dc68831cd2c21557dfb4157c49ff88be06babda28eccdde11ccd8254118045"
+    },
+    {
+      "role": "mentor",
+      "text": "Your progress has opened Focus, Boss battles and the Leaderboard! Let us begin with Focus.",
+      "spoken": "Your progress has opened Focus, Boss battles and the Leaderboard! Let us begin with Focus.",
+      "clip": "DialogueAudio/mentor-130a8218b5d46ded5f39",
+      "duration": 6.276458333333333,
+      "peak": 0.6556490659713745,
+      "sha256": "7cd06d60d6f3b33a64bf3d3ff5f5c2a7323af4ee1559ec45c1ec2b5f5c06c207"
+    },
+    {
+      "role": "mentor",
+      "text": "You have reached Lv.5! Boss battles and the Leaderboard are now open. Explore either when you are ready.",
+      "spoken": "You have reached Lv.5! Boss battles and the Leaderboard are now open. Explore either when you are ready.",
+      "clip": "DialogueAudio/mentor-f30a36550cd00feedca2",
+      "duration": 7.2279375,
+      "peak": 0.6243571043014526,
+      "sha256": "2ed770e5c4aea274a86c912df05d0de6d594eca9960b11e85ca565e84482772a"
+    },
+    {
+      "role": "mentor",
+      "text": "You have reached Lv.2! Focus is now open. I can show you how to start a training session.",
+      "spoken": "You have reached Lv.2! Focus is now open. I can show you how to start a training session.",
+      "clip": "DialogueAudio/mentor-6e6462a9792b91abd8ab",
+      "duration": 6.338229166666666,
+      "peak": 0.7259587645530701,
+      "sha256": "491b29d3bfd5eccc1c559df32ce34eb8614d4c99d0cb4bb44dc0eac2eed929a8"
+    },
+    {
+      "role": "mentor",
+      "text": "Your first Daily Reward has opened equipment management. Collect equipment through Boss mastery, then equip it in Cat Home. An empty inventory is normal at first.",
+      "spoken": "Your first Daily Reward has opened equipment management. Collect equipment through Boss mastery, then equip it in Cat Home. An empty inventory is normal at first.",
+      "clip": "DialogueAudio/mentor-c562d3325af634d52d7a",
+      "duration": 11.329395833333333,
+      "peak": 0.6406446099281311,
+      "sha256": "59dca9981dffee3e3e86faca60ebee3d25e363538f8eaa7033a41dbd969b9490"
+    },
+    {
+      "role": "mentor",
+      "text": "A Daily Reward is ready. Use Claim on the completed goal to collect it. Your first claim also opens equipment management.",
+      "spoken": "A Daily Reward is ready. Use Claim on the completed goal to collect it. Your first claim also opens equipment management.",
+      "clip": "DialogueAudio/mentor-aafd3ef4b604352c672f",
+      "duration": 8.379395833333334,
+      "peak": 0.6498908400535583,
+      "sha256": "bff3dca35b980f898daac76e563993421f6bcb59a3b7d208a2cee3a124a9d9da"
+    },
+    {
+      "role": "mentor",
+      "text": "Today brings together the tasks scheduled for today. Click Today to see the tasks scheduled for today.",
+      "spoken": "Today brings together the tasks scheduled for today. Click Today to see the tasks scheduled for today.",
+      "clip": "DialogueAudio/mentor-0ef0722d1bf6352f652f",
+      "duration": 7.207333333333334,
+      "peak": 0.6268815994262695,
+      "sha256": "b1e409fbf493f6824129badd34f06b0b0e2da27b6d780cf4dbf504d968b05e02"
+    },
+    {
+      "role": "mentor",
+      "text": "Daily Tasks repeat. Complete each day's task only after doing the work. An unfinished daily occurrence becomes Missed at the daily reset. It does not earn completion rewards. Click Daily Tasks to open the list.",
+      "spoken": "Daily Tasks repeat. Complete each day's task only after doing the work. An unfinished daily occurrence becomes Missed at the daily reset. It does not earn completion rewards. Click Daily Tasks to open the list.",
+      "clip": "DialogueAudio/mentor-55b19871040385008622",
+      "duration": 14.754395833333334,
+      "peak": 0.6482606530189514,
+      "sha256": "b97dc87db216f20c4167de04131a7496c718dbc0a4bd17554b8b91cb9fce1daa"
+    },
+    {
+      "role": "mentor",
+      "text": "Todo is for one-off work. An overdue Todo stays active until you complete or delete it, so unfinished work does not disappear at midnight. Click Todo to open it.",
+      "spoken": "Todo is for one-off work. An overdue Todo stays active until you complete or delete it, so unfinished work does not disappear at midnight. Click Todo to open it.",
+      "clip": "DialogueAudio/mentor-93554ce7f8e4c404c3e2",
+      "duration": 10.838229166666666,
+      "peak": 0.6422719955444336,
+      "sha256": "f1d98c52c86151dea262021ddec393f2823f29e29ce83666e6f5929811da8929"
+    },
+    {
+      "role": "mentor",
+      "text": "Tags help organize related tasks, such as study or exercise. You can also use these tags to label your Focus sessions once Focus opens at Lv.2. Click Tags to open the list.",
+      "spoken": "Tags help organize related tasks, such as study or exercise. You can also use these tags to label your Focus sessions once Focus opens at Lv.2. Click Tags to open the list.",
+      "clip": "DialogueAudio/mentor-2f629ed898466a2ae85f",
+      "duration": 11.985291666666667,
+      "peak": 0.6571027636528015,
+      "sha256": "09345af3ca2b5523f02372f6f23cc1fe67c11703b44a37fe06bcdf768fbb9aa4"
+    },
+    {
+      "role": "mentor",
+      "text": "Use Search to find a task by name. The filter button beside it can narrow the list further. If a task is missing from your view, check the tab, search and filters.",
+      "spoken": "Use Search to find a task by name. The filter button beside it can narrow the list further. If a task is missing from your view, check the tab, search and filters.",
+      "clip": "DialogueAudio/mentor-92fd9b383bb073c48f25",
+      "duration": 11.26175,
+      "peak": 0.6444791555404663,
+      "sha256": "3c037edb9a99b893e08f944337d25f304fffaed41157d86b5f61f5f7af3c146b"
+    },
+    {
+      "role": "mentor",
+      "text": "The + button creates a real task. Choose something small you actually want to do. Click the highlighted + button to open the task name field. This does not save or complete any work.",
+      "spoken": "The + button creates a real task. Choose something small you actually want to do. Click the highlighted + button to open the task name field. This does not save or complete any work.",
+      "clip": "DialogueAudio/mentor-8e4439c8f8f40cdf64b3",
+      "duration": 12.445583333333333,
+      "peak": 0.6482965350151062,
+      "sha256": "52cbd79315af77a39fe1ab6f79be0de42334824ce89a5a166e8c17a0e3f18ae4"
+    },
+    {
+      "role": "mentor",
+      "text": "Your task has been saved. No completion rewards have been granted. Press Continue when you are ready to learn how to mark work complete.",
+      "spoken": "Your task has been saved. No completion rewards have been granted. Press Continue when you are ready to learn how to mark work complete.",
+      "clip": "DialogueAudio/mentor-4b66a8a5f97da739e1b2",
+      "duration": 9.155875,
+      "peak": 0.6546606421470642,
+      "sha256": "50fdebfc14a63b48c7ab80a4005686d21859922a5f62f008c2786dab4cfbb6d7"
+    },
+    {
+      "role": "mentor",
+      "text": "Write your real task in this field, then press Enter to save it. Continue becomes available after the save succeeds. You can always Skip the guide.",
+      "spoken": "Write your real task in this field, then press Enter to save it. Continue becomes available after the save succeeds. You can always Skip the guide.",
+      "clip": "DialogueAudio/mentor-4046733461330aa66d39",
+      "duration": 10.135291666666667,
+      "peak": 0.6382951736450195,
+      "sha256": "d0fdb4ac09e68ddfebea2050950df74f6b6a1e2690b3c8cdd143b0b39ce9adcb"
+    },
+    {
+      "role": "mentor",
+      "text": "This checkbox marks the task complete. Use it only after you have actually done the work. The tutorial will not tick it for you. Real completion earns rewards within the daily allowance.",
+      "spoken": "This checkbox marks the task complete. Use it only after you have actually done the work. The tutorial will not tick it for you. Real completion earns rewards within the daily allowance.",
+      "clip": "DialogueAudio/mentor-af003e5fffe7faefe4cf",
+      "duration": 12.892645833333333,
+      "peak": 0.6264641284942627,
+      "sha256": "40bb5575de6c8440847774015643c6024dbba1f8b3cbaee8984235a30b53e914"
+    },
+    {
+      "role": "mentor",
+      "text": "Your saved task is outside this view or was removed. Find it using its tab, Search or filters after the guide. Only mark a task complete after doing the work.",
+      "spoken": "Your saved task is outside this view or was removed. Find it using its tab, Search or filters after the guide. Only mark a task complete after doing the work.",
+      "clip": "DialogueAudio/mentor-24480a666a6cd8cb6cc5",
+      "duration": 10.732333333333333,
+      "peak": 0.6460490226745605,
+      "sha256": "d7d1f919aa280753c46e3f07bdfe97c3eae15135cb2c1454f6f08be8134fa19d"
+    },
+    {
+      "role": "mentor",
+      "text": "History keeps your completed work. Even when the reward allowance is used up, valid completion is still recorded. Click History to see the record. Focus opens at Lv.2.",
+      "spoken": "History keeps your completed work. Even when the reward allowance is used up, valid completion is still recorded. Click History to see the record. Focus opens at Lv.2.",
+      "clip": "DialogueAudio/mentor-d18fc09810cfea29b561",
+      "duration": 11.847041666666666,
+      "peak": 0.6344528198242188,
+      "sha256": "022b55569ca18a25f6fa466e0231509240a68c2b2a804b4ecf33247b726e8ad7"
+    },
+    {
+      "role": "mentor",
+      "text": "Focus unlocks at Lv.2. Complete real tasks to grow your cat. Once open, I will walk you through the timer, one step at a time.",
+      "spoken": "Focus unlocks at Lv.2. Complete real tasks to grow your cat. Once open, I will walk you through the timer, one step at a time.",
+      "clip": "DialogueAudio/mentor-0450518325ba17749990",
+      "duration": 8.967645833333334,
+      "peak": 0.6387040615081787,
+      "sha256": "64c15e91437b868c933fa58f7349927206371de86107e92d79ad92a72ab638f1"
+    },
+    {
+      "role": "mentor",
+      "text": "Pomodoro helps you work on one thing at a time, with a planned break afterward. The default is 25 minutes of focus followed by 5 minutes of Rest. Press Continue when you are ready.",
+      "spoken": "Pomodoro helps you work on one thing at a time, with a planned break afterward. The default is 25 minutes of focus followed by 5 minutes of Rest. Press Continue when you are ready.",
+      "clip": "DialogueAudio/mentor-6d41b1e5b39fc4056190",
+      "duration": 11.8529375,
+      "peak": 0.6517677903175354,
+      "sha256": "108147aca9b0c440fa727a836074cb722045db11df0d08f0373a8ab0883b5131"
+    },
+    {
+      "role": "mentor",
+      "text": "Choose the timer that suits your work. Pomodoro pairs focus with a break. Countdown works toward a set duration. Stopwatch counts up. You can choose a mode here, then press Continue.",
+      "spoken": "Choose the timer that suits your work. Pomodoro pairs focus with a break. Countdown works toward a set duration. Stopwatch counts up. You can choose a mode here, then press Continue.",
+      "clip": "DialogueAudio/mentor-6c89894b3e96d82b04b5",
+      "duration": 12.726458333333333,
+      "peak": 0.6281431317329407,
+      "sha256": "9efde3ecab33e9b97075608dc3c393ec1b83c040d2942dde89a88fd0734ef903"
+    },
+    {
+      "role": "mentor",
+      "text": "Set how long you want to focus. Use the time controls to choose a realistic work period, then press Continue.",
+      "spoken": "Set how long you want to focus. Use the time controls to choose a realistic work period, then press Continue.",
+      "clip": "DialogueAudio/mentor-94a4d00387d8dae2acd9",
+      "duration": 7.442645833333334,
+      "peak": 0.6445525884628296,
+      "sha256": "e3dcf5f17673199ce3aeab1b8ecf8e10bfab860fc8ab13fb9685c8d97840b14f"
+    },
+    {
+      "role": "mentor",
+      "text": "Stopwatch counts up, so it does not need a target duration. Press Continue to see what comes next.",
+      "spoken": "Stopwatch counts up, so it does not need a target duration. Press Continue to see what comes next.",
+      "clip": "DialogueAudio/mentor-feb583dcdc2f31933b65",
+      "duration": 6.8676458333333334,
+      "peak": 0.6389681696891785,
+      "sha256": "d9e4680269f62bf08572f9c04fe479beb0e208fa69a535402dd0019f3f176c5b"
+    },
+    {
+      "role": "mentor",
+      "text": "Set your Rest time here. In Pomodoro, Rest starts after your completed Focus session is saved. Rest gives no EXP, Fish Coins or Tickets.",
+      "spoken": "Set your Rest time here. In Pomodoro, Rest starts after your completed Focus session is saved. Rest gives no EXP, Fish Coins or Tickets.",
+      "clip": "DialogueAudio/mentor-9930a20b69006e704d8a",
+      "duration": 9.555875,
+      "peak": 0.6332314610481262,
+      "sha256": "1c94a3d44d4ee8f219979fdfa833a71e62fd06d3954e915a6894ec337d38316d"
+    },
+    {
+      "role": "mentor",
+      "text": "This mode does not use the Pomodoro break settings. Rest itself gives no EXP, Fish Coins or Tickets.",
+      "spoken": "This mode does not use the Pomodoro break settings. Rest itself gives no EXP, Fish Coins or Tickets.",
+      "clip": "DialogueAudio/mentor-fc59191e68a2ee6405bd",
+      "duration": 7.010291666666666,
+      "peak": 0.6701827645301819,
+      "sha256": "bea330d6f9bfd27ac618efecaa623a3673c7fc7b3473e509da597b9ad468f310"
+    },
+    {
+      "role": "mentor",
+      "text": "Use tags to label what you are working on and review your Focus time later. Tags are optional. Focus never marks a task complete for you. Press Continue when you are ready.",
+      "spoken": "Use tags to label what you are working on and review your Focus time later. Tags are optional. Focus never marks a task complete for you. Press Continue when you are ready.",
+      "clip": "DialogueAudio/mentor-086c4fd12d921d18b757",
+      "duration": 11.504395833333334,
+      "peak": 0.6316445469856262,
+      "sha256": "3b44531c23d616fcbee8b434f44b47db6dec45166a8f73f17bff2f779f76e859"
+    },
+    {
+      "role": "mentor",
+      "text": "Pomodoro asks you to finish the planned session. Cancel gives no rewards. Other modes offer End Early, which saves rewards for time earned under the existing limits. Cancelled or interrupted sessions give no rewards.",
+      "spoken": "Pomodoro asks you to finish the planned session. Cancel gives no rewards. Other modes offer End Early, which saves rewards for time earned under the existing limits. Cancelled or interrupted sessions give no rewards.",
+      "clip": "DialogueAudio/mentor-f57f1c895069212488a4",
+      "duration": 14.707333333333333,
+      "peak": 0.6467494964599609,
+      "sha256": "71c4607e4a0924a27440c6c67de055e4e3157582766daa7cd584f3d22d57f8e4"
+    },
+    {
+      "role": "mentor",
+      "text": "You are ready. Click Start Focus in the highlighted area to begin. Switching pages or apps will keep it running. Skip this guide if you are not ready to start.",
+      "spoken": "You are ready. Click Start Focus in the highlighted area to begin. Switching pages or apps will keep it running. Skip this guide if you are not ready to start.",
+      "clip": "DialogueAudio/mentor-913b6427bbd93e3414f0",
+      "duration": 10.998520833333334,
+      "peak": 0.6437621712684631,
+      "sha256": "69c492190fe972d9fa06cd5fa85628578447bd86bb2c7702d8d1f16aa3bb4144"
+    },
+    {
+      "role": "mentor",
+      "text": "Boss battles unlock at Lv.5. Focus can earn tickets. Confirming entry spends one ticket. Later bosses also require previous victories and higher levels.",
+      "spoken": "Boss battles unlock at Lv.5. Focus can earn tickets. Confirming entry spends one ticket. Later bosses also require previous victories and higher levels.",
+      "clip": "DialogueAudio/mentor-643f93a1456448c3186f",
+      "duration": 11.1396875,
+      "peak": 0.6492434144020081,
+      "sha256": "1d285b26cd540e71641b2ec8f122e1ba58389fb885baac6b3524362f6962723c"
+    },
+    {
+      "role": "mentor",
+      "text": "This is your selected Boss. Battles put your cat's earned progress to use. You choose when to challenge. This guide will not start a battle for you.",
+      "spoken": "This is your selected Boss. Battles put your cat's earned progress to use. You choose when to challenge. This guide will not start a battle for you.",
+      "clip": "DialogueAudio/mentor-394583e7e905b27d5ec3",
+      "duration": 10.238229166666667,
+      "peak": 0.6366068720817566,
+      "sha256": "8e6866b8d04065bfe24f48bc2e1c4983fc9d274f2b44749fc40c5cb478f115f3"
+    },
+    {
+      "role": "mentor",
+      "text": "Your cat's level and equipped gear affect its battle stats. Watch its health during combat. Weapon, Body and Head equipment improve ATK, DEF and attack speed respectively.",
+      "spoken": "Your cat's level and equipped gear affect its battle stats. Watch its health during combat. Weapon, Body and Head equipment improve ATK, DEF and attack speed respectively.",
+      "clip": "DialogueAudio/mentor-324ae1e6763ab1c0dd88",
+      "duration": 12.176458333333333,
+      "peak": 0.648918092250824,
+      "sha256": "05594892dde111eabdbd9f71a751046198f931e57f0e9e9e44b852c653b08e55"
+    },
+    {
+      "role": "mentor",
+      "text": "Use the stage selector to review the bosses and your progress. Click the highlighted stage selector to look inside. Opening the selector does not spend a Ticket.",
+      "spoken": "Use the stage selector to review the bosses and your progress. Click the highlighted stage selector to look inside. Opening the selector does not spend a Ticket.",
+      "clip": "DialogueAudio/mentor-d030ed39e1daa675ce15",
+      "duration": 11.1029375,
+      "peak": 0.6484683752059937,
+      "sha256": "c291561d33f804aacdb263f68d431792ba9e6dea445109fc9ed3ff5cc4fffaef"
+    },
+    {
+      "role": "mentor",
+      "text": "Later bosses have extra requirements. Boss 2 needs a Boss 1 victory and Lv.10. Boss 3 needs a Boss 2 victory and Lv.20. Skipping this guide does not bypass these conditions.",
+      "spoken": "Later bosses have extra requirements. Boss 2 needs a Boss 1 victory and Lv.10. Boss 3 needs a Boss 2 victory and Lv.20. Skipping this guide does not bypass these conditions.",
+      "clip": "DialogueAudio/mentor-b816d63b0c2f109ab0ff",
+      "duration": 12.3088125,
+      "peak": 0.648239016532898,
+      "sha256": "0c082d2ae106fce2b541a3e1c8342da6578f4fa47c986b314ee3915bf0f4468b"
+    },
+    {
+      "role": "mentor",
+      "text": "Each normal boss has its own mastery. Wins 5, 10 and 15 each allow one unowned piece from that boss's three-piece equipment set. Claim earned rewards here when they are available.",
+      "spoken": "Each normal boss has its own mastery. Wins 5, 10 and 15 each allow one unowned piece from that boss's three-piece equipment set. Claim earned rewards here when they are available.",
+      "clip": "DialogueAudio/mentor-42951b17d123b151654e",
+      "duration": 11.829395833333333,
+      "peak": 0.6324825882911682,
+      "sha256": "a863771eb927e3a8a02d6ac9492cb3f2cbec45b81e10dc3ef9e6953c8f74efa4"
+    },
+    {
+      "role": "mentor",
+      "text": "Your first Boss 3 victory opens Master Stage. It cycles through stronger bosses, and only victory advances the stage. Master Stage does not grant normal-boss mastery equipment.",
+      "spoken": "Your first Boss 3 victory opens Master Stage. It cycles through stronger bosses, and only victory advances the stage. Master Stage does not grant normal-boss mastery equipment.",
+      "clip": "DialogueAudio/mentor-62a10b0b413b010f2e3f",
+      "duration": 12.319104166666667,
+      "peak": 0.6635791659355164,
+      "sha256": "8fb99fd7d9a9c5ab801c3bf20e365dab509df519a65dc8d29a50d5d627e22743"
+    },
+    {
+      "role": "mentor",
+      "text": "Click Challenge to review entry. Only your confirmation spends one Boss Ticket. A valid defeat still uses it. Focus can earn Tickets under its limits. The guide never confirms for you. Skip if you are not ready.",
+      "spoken": "Click Challenge to review entry. Only your confirmation spends one Boss Ticket. A valid defeat still uses it. Focus can earn Tickets under its limits. The guide never confirms for you. Skip if you are not ready.",
+      "clip": "DialogueAudio/mentor-bbd6e83d734148517396",
+      "duration": 14.844104166666666,
+      "peak": 0.6452800631523132,
+      "sha256": "ec0c2f7ac4d480e22457ef39819068ac47f7c5a39e84b0ffd53d71b5847a970d"
+    },
+    {
+      "role": "mentor",
+      "text": "The Leaderboard opens at Lv.5. Display names and sharing are optional. The guide never turns on uploads.",
+      "spoken": "The Leaderboard opens at Lv.5. Display names and sharing are optional. The guide never turns on uploads.",
+      "clip": "DialogueAudio/mentor-63040559c31fc043ecf1",
+      "duration": 7.4588125,
+      "peak": 0.6431430578231812,
+      "sha256": "2ca9efc91d6cee5786a3aa94939eabc2a1b092af7b9ec39d150fc8e6909fec57"
+    },
+    {
+      "role": "mentor",
+      "text": "This is your leaderboard display name. Choose the public name you want other players to see, then use the existing Save button when you decide to change it. This guide will not edit or save your name.",
+      "spoken": "This is your leaderboard display name. Choose the public name you want other players to see, then use the existing Save button when you decide to change it. This guide will not edit or save your name.",
+      "clip": "DialogueAudio/mentor-221be310493b8769e31a",
+      "duration": 13.194104166666667,
+      "peak": 0.6496683359146118,
+      "sha256": "9b92d0c3ff5a97afc19f0c1ae1c740e2a973bacb00f923770aeaeea950f1f331"
+    },
+    {
+      "role": "mentor",
+      "text": "This switch controls optional statistics uploads. You decide whether to share. The guide will leave its current setting unchanged and will not sign you in. Press Continue to learn what can be shared.",
+      "spoken": "This switch controls optional statistics uploads. You decide whether to share. The guide will leave its current setting unchanged and will not sign you in. Press Continue to learn what can be shared.",
+      "clip": "DialogueAudio/mentor-23c504a108c41e92e081",
+      "duration": 13.792645833333333,
+      "peak": 0.6397765874862671,
+      "sha256": "dc883d097aae0e4cf971843c4d66a24854da1cae15859f3de208c3a53d2f5f26"
+    },
+    {
+      "role": "mentor",
+      "text": "Only your chosen display name and approved game totals are shared. Private tasks, schedules, tags and detailed history stay on this computer. Continue closes this explanation without changing your privacy choices.",
+      "spoken": "Only your chosen display name and approved game totals are shared. Private tasks, schedules, tags and detailed history stay on this computer. Continue closes this explanation without changing your privacy choices.",
+      "clip": "DialogueAudio/mentor-de0bd94153f433e2d00b",
+      "duration": 14.895583333333333,
+      "peak": 0.641157329082489,
+      "sha256": "62fb32263812b1f413a59a30d27b07c9f671a5dd55c2c6d57218c8431e8ad1b5"
+    },
+    {
+      "role": "mentor",
+      "text": "Complete real tasks to earn EXP and Fish Coins within daily allowances. Completed work is recorded even at the cap. Claim completed Daily Reward goals separately. The first claim opens equipment management.",
+      "spoken": "Complete real tasks to earn EXP and Fish Coins within daily allowances. Completed work is recorded even at the cap. Claim completed Daily Reward goals separately. The first claim opens equipment management.",
+      "clip": "DialogueAudio/mentor-1986e2335d2272d75735",
+      "duration": 14.376458333333334,
+      "peak": 0.6493827104568481,
+      "sha256": "5c05ab20152a1e142266e923b4c1601716d87268d66005821fdabd9b6951b864"
+    },
+    {
+      "role": "mentor",
+      "text": "Unlocks at Lv.2. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
+      "spoken": "Unlocks at Lv.2. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
+      "clip": "DialogueAudio/mentor-02c67f06f6dfd7691b90",
+      "duration": 6.6941041666666665,
+      "peak": 0.6354296207427979,
+      "sha256": "f0cebb58dd7c438f8fd55c04e28b627f2d538923d1c049886d0780553c4aee9a"
+    },
+    {
+      "role": "mentor",
+      "text": "Unlocks at Lv.5. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
+      "spoken": "Unlocks at Lv.5. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
+      "clip": "DialogueAudio/mentor-3c5da45c544ca94d9095",
+      "duration": 6.695583333333333,
+      "peak": 0.6416071653366089,
+      "sha256": "ac0b58eec5d63fc065a665d30b2b5d090bb15765c5414eb77ec04fd51e9fc825"
+    },
+    {
+      "role": "mentor",
+      "text": "{error} Your tasks are safe. Try again.",
+      "spoken": "Unable to save. Your tasks are safe. Try again.",
+      "clip": "DialogueAudio/mentor-e4bf244ea0243e8e0447",
+      "duration": 3.6073333333333335,
+      "peak": 0.6327375769615173,
+      "sha256": "c874420bc7fdd3a08fd3a538d2e870609d9ede16ad5fce8a75f28aa971017ec3"
+    }
+  ]
+}

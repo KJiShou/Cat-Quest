@@ -1,0 +1,27 @@
+Cat Quest - Audio Credits
+Approved selection: 2026-10-31
+
+Fanfare jingles by Xanderwood
+https://xanderwood.itch.io/20-fanfare-jingles
+FANFARE 11: level up; FANFARE 5: battle victory. Free personal/commercial use with author credit and link.
+
+Music by PghNerd (Four One Two Talk)
+https://pghnerd.itch.io/cozy-frequency-vol-1-free-lofi-music-pack
+Porch Light (Full), Rain on the Window (Lite), Lantern Walk (Lite).
+Free for use in games; do not redistribute audio on its own. Author discloses AI-assisted sounds.
+
+Battle Theme I (loop) by HydroGene
+https://hydrogene.itch.io/high-quality-16-bit-music
+CC0.
+
+Cozy UI Sounds and Cozy Jingles by Spaceyyy
+https://aquumgifts.itch.io/cozy-ui-sounds
+https://aquumgifts.itch.io/cozy-jingles
+Free personal/commercial projects; do not redistribute as standalone assets.
+Focus reminder: edited with a 2.5 kHz low-pass filter. Other selected cues: fixed audition gain.
+
+Interface Sounds, Music Jingles, RPG Audio and Impact Sounds by Kenney
+https://kenney.nl/assets
+CC0; individual source links and per-file provenance in project AUDIO_MANIFEST.json.
+
+All clips use the gain-adjusted audition version approved by the user. Original licenses are included in this folder.

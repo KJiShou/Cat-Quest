@@ -136,8 +136,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     void OpenAccount()
     {
         var launcher = GetComponentInParent<Canvas>().rootCanvas.GetComponentInChildren<SettingsLauncher>(true);
-        launcher.Open();
-        launcher.GetComponentInParent<Canvas>().rootCanvas.GetComponentInChildren<SettingsPanelUI>(true).OpenAccount();
+        launcher.OpenAccountFromPage(accountButton.gameObject);
     }
     void Update()
     {

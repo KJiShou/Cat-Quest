@@ -20,7 +20,7 @@ public sealed partial class TaskService
             int required=bossId==1?1:bossId==2?10:20;
             if(level<required) return "Requires Lv. "+required+".";
         }
-        return d.tickets<1 ? "Earn a ticket through Focus." : null;
+        return d.tickets<1 ? "Complete a task or use Focus to earn a ticket." : null;
     }
     public bool BeginBattle(int bossId,int masterStage,out BattleAttempt attempt)
     {

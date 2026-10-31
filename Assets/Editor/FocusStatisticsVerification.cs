@@ -122,16 +122,12 @@ public static class FocusStatisticsVerification
             Resolution(width,width==1920?1080:720);yield return .5;
             Capture("focus-entry-"+width);yield return .1;
             Click(ui.open);yield return .3;Check(ui.panel.activeSelf,"Statistics not open");
-            Check(ui.about&&!ui.note.gameObject.activeSelf&&ui.detail.text=="", "Normal statistics has unnecessary explanatory copy");
-            Click(ui.about);yield return .2;Check(ui.note.gameObject.activeSelf&&ui.note.text.Contains("End Early")&&!ui.note.isTextOverflowing,"Statistics definition must remain accessible and fit");
-            Capture("about-data-"+width);yield return .1;
-            ui.about.OnSubmit(new BaseEventData(EventSystem.current));yield return .2;
-            Check(!ui.note.gameObject.activeSelf,"Keyboard submit did not close statistics definition");
+            Check(!ui.panel.transform.Find("Card/AboutData") && !ui.panel.transform.Find("Card/Note"), "Removed explanation UI still exists");
             foreach(FocusStatisticsPeriod period in Enum.GetValues(typeof(FocusStatisticsPeriod)))
             {
                 Click(ui.periods[(int)period]);yield return .2;
                 Check(ui.Period==period&&ui.Data.seconds>0&&!ui.next.interactable,"Period / future navigation");
-                Check(!ui.range.isTextOverflowing&&!ui.total.isTextOverflowing&&!ui.note.isTextOverflowing,"Statistics text clipped");
+                Check(!ui.range.isTextOverflowing&&!ui.total.isTextOverflowing,"Statistics text clipped");
                 Check(ui.graph.SeriesCount==ui.Data.tags.Count&&ui.graph.SeriesCount==3,"All tags not shown together by default");
                 var legend=ui.tagContent.GetComponentsInChildren<Button>().Select(b=>(Color32)b.transform.Find("Swatch").GetComponent<Image>().color).ToArray();
                 Check(legend.Distinct().Count()==3,"Same-colour tags were not distinguished");
@@ -154,7 +150,21 @@ public static class FocusStatisticsVerification
             var row=ui.tagContent.GetComponentsInChildren<Button>().First();Click(row);yield return .2;
             Check(ui.SelectedTag==row.name&&ui.chartTitle.text==ui.Data.tags.Single(t=>t.id==row.name).name,"Tag filter not applied");
             ui.graph.OnPointerMove(Pointer(ui.graph.transform));Check(ui.detail.text.Contains(" / "),"Graph hover missing");Capture("tag-filter-"+width);yield return .1;
-            Click(ui.previous);yield return .1;Check(ui.next.interactable,"Previous period cannot advance");Click(ui.today);yield return .1;
+            var currentTodayColor=ui.today.targetGraphic.color;
+            Click(ui.previous);yield return .1;
+            Check(ui.next.interactable,"Previous period cannot advance");
+            Check(ui.today.targetGraphic.color!=currentTodayColor,"Today must change to its inactive colour outside the current period");
+            Capture("today-away-"+width);yield return .1;
+            var todayFeedback=ui.today.GetComponent<JuicyButton>();var todayPointer=Pointer(ui.today.transform);
+            var todayRect=(RectTransform)ui.today.transform;var todayPosition=todayRect.anchoredPosition;
+            todayFeedback.OnPointerEnter(todayPointer);yield return .2;Capture("today-hover-"+width);yield return .1;
+            Check(todayFeedback.DrawScale.y>1,"Today hover missing");
+            todayFeedback.OnPointerDown(todayPointer);yield return .2;Capture("today-press-"+width);yield return .1;
+            Check(todayFeedback.DrawScale.y<1,"Today press missing");
+            todayFeedback.OnPointerUp(todayPointer);todayFeedback.OnPointerExit(todayPointer);EventSystem.current.SetSelectedGameObject(null);yield return .7;
+            Check(todayRect.anchoredPosition==todayPosition && Vector2.Distance(todayFeedback.DrawScale,Vector2.one)<.02f,"Today feedback did not settle");
+            ui.today.OnSubmit(new BaseEventData(EventSystem.current));yield return .1;
+            Check(ui.Date==manager.Tasks.LocalNow.Date && ui.today.targetGraphic.color==currentTodayColor,"Today must restore the date and selected colour");
             ui.allTags.OnSubmit(new BaseEventData(EventSystem.current));Check(ui.SelectedTag==null&&ui.graph.SeriesCount==3,"Keyboard All focus did not restore all series");
             Click(ui.close);yield return .1;Check(!ui.panel.activeSelf,"Back did not close");
             var juicy=ui.open.GetComponent<JuicyButton>();Check(juicy,"Missing shared feedback");var pointer=Pointer(ui.open.transform);var rect=(RectTransform)ui.open.transform;var pos=rect.anchoredPosition;
@@ -167,9 +177,8 @@ public static class FocusStatisticsVerification
         }
         var legacy=manager.PlayerData.focusSessions.First();legacy.tagIds.Add("reading");legacy.tagNames.Add("Reading");manager.SaveData();
         Click(ui.open);yield return .2;
-        Check(ui.Data.legacyMultipleTags&&ui.note.gameObject.activeSelf&&ui.note.text.Contains("counts each session once"),"Legacy multi-tag warning must remain visible");
-        Click(ui.about);yield return .2;Check(ui.note.text.Contains("End Early")&&!ui.note.isTextOverflowing,"Legacy and ordinary definitions fit together");Capture("legacy-about-1280");yield return .1;
-        Click(ui.about);Check(ui.note.gameObject.activeSelf&&!ui.note.text.Contains("End Early"),"Legacy warning survives closing the ordinary definition");Click(ui.close);
+        Check(ui.Data.legacyMultipleTags && !ui.panel.transform.Find("Card/Note"),"Legacy receipts should remain supported without the removed explanation");
+        Capture("legacy-1280");yield return .1;Click(ui.close);
         manager.PlayerData.focusSessions.Clear();manager.SaveData();Click(ui.open);yield return .2;Check(ui.Data.seconds==0&&ui.empty.gameObject.activeSelf,"Empty state missing");Capture("empty-1280");yield return .1;
         var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_Buttons/Btn_MenuButton_Rectangle01-Group.prefab");
         var reference=UnityEngine.Object.Instantiate(source.transform.Find("Btn_MenuButton_Rectangle01_Light").gameObject,ui.panel.transform);

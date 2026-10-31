@@ -13,6 +13,7 @@ public sealed class TutorialProgress
     public int taskPageStep;
     public int bossStep;
     public int leaderboardStep;
+    public int equipmentStep;
     public string taskId;
     public int announcedLevel = 1;
     public List<string> read = new List<string>();

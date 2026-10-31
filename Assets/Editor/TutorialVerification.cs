@@ -75,13 +75,14 @@ public static class TutorialVerification
         string folder="Library/TutorialVerification/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+"-"+mode;Directory.CreateDirectory(folder);
         SessionState.SetString(Flag+".folder",folder);SessionState.SetBool(Flag+".before",before);
         SessionState.SetBool(Flag+".intro",intro);SessionState.SetBool(Flag+".introBefore",mode=="intro-before");
+        SessionState.SetBool(Flag+".equipment",mode=="equipment");
         var store=Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");SessionState.SetBool(Flag+".hadStore",store!=null);SessionState.SetString(Flag+".store",store??"");
         SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(EditorSceneManager.playModeStartScene));
         SessionState.SetInt(Flag+".size",(int)SizeProperty.GetValue(View));SessionState.SetInt(Flag+".count",Count(Group(),"GetCustomCount"));SessionState.SetBool(Flag+".paused",EditorApplication.isPaused);
         SessionState.SetString(Flag+".deadline",DateTime.UtcNow.AddSeconds(300).Ticks.ToString());SessionState.SetBool(Flag,true);
         try{
             File.WriteAllText(folder+"/result.txt",DateTime.UtcNow.ToString("O")+" RUNNING");
-            if(!before&&!intro)TutorialRulesVerification.Run();
+            if(!before&&!intro&&mode!="equipment")TutorialRulesVerification.Run();
             Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(folder+"/save.json"));
 
             EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(intro?"Assets/Scenes/IntroStory.unity":"Assets/Scenes/CharacterHome.unity");
@@ -163,6 +164,56 @@ public static class TutorialVerification
         var manager=GameDataManager.Instance;var service=manager.Tasks;
         Check(manager.SavePath.Contains("TutorialVerification"),"Unsafe save path");
         yield return 2;
+        if(SessionState.GetBool(Flag+".equipment",false)) {
+            tutorial.Skip();
+            manager.PlayerData.equipmentUnlocked=true; manager.SaveData();
+            tutorial.SendMessage("OnApplicationFocus",true);
+            tutorial.OpenTopic(2); yield return .5;
+            FinishSpeech(tutorial); tutorial.Continue(); yield return .5;
+            Check(tutorial.CurrentTopic=="equipment-open", "Missing equipment navigation explanation");
+            FinishSpeech(tutorial); tutorial.Continue(); yield return .5;
+            Check(nav.CurrentPage==MainMenuPage.CatHome,"Equipment guide did not navigate to Cat Home");
+            FinishSpeech(tutorial);
+            Resolution(1920,1080); yield return .5;
+            foreach(var image in tutorial.highlight.GetComponentsInChildren<Image>()) image.type=Image.Type.Simple;
+            yield return .2; Capture("equipment-highlight-before-simple"); yield return .3;
+            foreach(var image in tutorial.highlight.GetComponentsInChildren<Image>()) image.type=Image.Type.Sliced;
+            int coins=service.Snapshot.fishCoins, count=service.Snapshot.equipment.Count;
+            for(int equipmentStep=0;equipmentStep<7;equipmentStep++) {
+                Check(tutorial.CurrentTopic=="equipment-step-"+equipmentStep,"Equipment step missing: "+equipmentStep);
+                FinishSpeech(tutorial);
+                Check(tutorial.CurrentTarget && tutorial.highlight.gameObject.activeInHierarchy,"Equipment target missing");
+                Check(tutorial.highlight.GetComponentsInChildren<Image>().All(i=>i.type==Image.Type.Sliced),"Highlight is not sliced");
+                Check(Hit(tutorial.CurrentTarget)==tutorial.spotlight.gameObject,"Explanation allows equipment mutation");
+                foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)}) {
+                    Resolution(size.x,size.y); yield return .5;
+                    tutorial.dialogue.body.ForceMeshUpdate();
+                    Check(!tutorial.dialogue.body.isTextOverflowing,"Equipment text overflow at step "+equipmentStep);
+                    Visible(tutorial.card); Capture("equipment-"+equipmentStep+"-"+size.x); yield return .3;
+                    if(equipmentStep==2) {
+                        var side=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
+                        var expand=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(side);
+                        bool previous=expand.isOn; expand.isOn=!previous; yield return .4;
+                        Visible(tutorial.card); Capture("equipment-expanded-"+size.x); yield return .3; expand.isOn=previous; yield return .3;
+                    }
+                }
+                if(equipmentStep==2) {
+                    Check(new PlayerDataStore(manager.SavePath).Data.tutorial.equipmentStep==2,"Equipment progress did not survive reload");
+                    tutorial.SendMessage("OnApplicationFocus",false); yield return .2;
+                    Check(!tutorial.panel.activeSelf&&!tutorial.spotlight.gameObject.activeSelf,"Equipment guide did not release input");
+                    tutorial.SendMessage("OnApplicationFocus",true); yield return .5;
+                    Check(tutorial.CurrentTopic=="equipment-step-2","Equipment guide did not resume"); FinishSpeech(tutorial);
+                }
+                tutorial.Continue(); yield return .4;
+            }
+            Check(service.Tutorial.read.Contains("equipment")&&!tutorial.panel.activeSelf,"Equipment guide did not finish");
+            Check(service.Snapshot.fishCoins==coins&&service.Snapshot.equipment.Count==count,"Equipment guide changed inventory/currency");
+            tutorial.OpenTopic(2); yield return .4; FinishSpeech(tutorial); tutorial.Continue(); yield return .4;
+            Check(tutorial.CurrentTopic=="equipment-step-0","Help did not restart equipment guide");
+            tutorial.Skip(); Check(!tutorial.spotlight.gameObject.activeSelf,"Skip did not release spotlight");
+            File.WriteAllText(Folder+"/checks.txt","PASS: seven equipment steps, navigation, read-only targets, text bounds at 1920x1080/1280x720/1024x768/2560x1080, sidebar states, saved progress reload, focus loss/resume, completion, Help replay, Skip, unchanged currency/inventory, sliced highlights.");
+            yield break;
+        }
         if(Before) {
             Resolution(1920,1080);yield return .5;Capture("before-welcome");yield return .3;
             tutorial.Skip(); manager.PlayerData.experience=100;manager.SaveData();

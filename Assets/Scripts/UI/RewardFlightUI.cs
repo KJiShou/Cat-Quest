@@ -37,12 +37,13 @@ public sealed class RewardFlightUI : MonoBehaviour
     float pointerTime = -10;
     bool initialized;
     RectTransform rewardOrigin, fishRewardOrigin;
+    float rewardDelay;
     public int ActiveCount { get; private set; }
     public bool IsAnimating => ActiveCount > 0 || pulse[0] > 0 || pulse[1] > 0 || pulse[2] > 0;
 
     // Scoped by the caller around settlement; only committed balance changes fly.
-    public void SetRewardOrigin(RectTransform origin, RectTransform fishOrigin = null)
-    { rewardOrigin = origin; fishRewardOrigin = fishOrigin; }
+    public void SetRewardOrigin(RectTransform origin, RectTransform fishOrigin = null, float delay = 0)
+    { rewardOrigin = origin; fishRewardOrigin = fishOrigin; rewardDelay = Mathf.Max(0,delay); }
 
     void Start()
     {
@@ -136,7 +137,7 @@ public sealed class RewardFlightUI : MonoBehaviour
                 foreach (var f in flights) if (!f.active) { free = f; break; }
                 if (free == null) { displayed[kind] += amount; RecordArrival(kind, amount); continue; }
                 free.active = true; free.kind = kind; free.amount = amount; free.age = 0;
-                free.delay = i * .055f + kind * .09f;
+                free.delay = rewardDelay + i * .055f + kind * .09f;
                 free.origin = flightOrigin;
                 float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2);
                 free.scatter = free.origin + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * UnityEngine.Random.Range(45f, 105f);

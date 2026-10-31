@@ -288,7 +288,7 @@ public sealed class FocusPanelUI : MonoBehaviour
         }
         else if (rewards) rewards.text = (rewardTitle ? "" : heading + "\n\n") + $"EXP  +{experience}\n\nFish  +{fish}\n\nTickets  +{grantedTickets}";
         if (rewardAllowanceBar) { rewardAllowanceBar.maxValue = dailyLimit; rewardAllowanceBar.SetValueWithoutNotify(day.focusMinutes); }
-        if (ticketAllowanceBar) ticketAllowanceBar.SetValueWithoutNotify(day.focusTickets);
+        if (ticketAllowanceBar) { ticketAllowanceBar.maxValue = TaskService.FocusTicketCap; ticketAllowanceBar.SetValueWithoutNotify(day.focusTickets); }
         if (rewardAllowanceLabel) rewardAllowanceLabel.text = $"Reward time today   {day.focusMinutes} / {dailyLimit} min";
         if (ticketAllowanceLabel) ticketAllowanceLabel.text = $"Boss Tickets today   {day.focusTickets} / {TaskService.FocusTicketCap}";
         if (allowance) allowance.text = (day.focusMinutes >= dailyLimit ? "Daily EXP / Fish limit reached. Timer still available."

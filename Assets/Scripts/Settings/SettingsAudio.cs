@@ -23,6 +23,9 @@ public sealed class SettingsAudio : MonoBehaviour
     TaskService service;
     FocusPhase focusPhase;
     bool battling;
+    AudioSource dialogueSource;
+    Object dialogueOwner;
+    AudioClip dialogueClip;
     public static SettingsAudio Instance { get; private set; }
     public static SettingsAudio EnsureInstance()
     {
@@ -57,6 +60,7 @@ public sealed class SettingsAudio : MonoBehaviour
         if (fallbackListener) fallbackListener.enabled = false;
         if (musicSource) musicSource.Stop();
         if (soundSource) soundSource.Stop();
+        StopDialogue();
     }
     void OnSceneLoaded(Scene scene, LoadSceneMode mode) => RefreshListener();
     void RefreshListener()
@@ -75,7 +79,38 @@ public sealed class SettingsAudio : MonoBehaviour
         if (settings == null) return;
         if (soundSource) soundSource.volume = Mathf.Clamp01(settings.soundVolume);
         if (musicSource) musicSource.volume = Mathf.Clamp01(settings.musicVolume);
+        if (dialogueSource) dialogueSource.volume = Mathf.Clamp01(settings.soundVolume);
     }
+    public float PlayDialogue(Object owner, string text, bool player)
+    {
+        StopDialogue();
+        if (!isActiveAndEnabled || !owner) return 0;
+        var line = DialogueAudioLibrary.Find(text, player);
+        if (line == null) return 0; // New/changed text remains usable without a clip.
+        dialogueClip = Resources.Load<AudioClip>(line.clip);
+        if (!dialogueClip) return 0;
+        if (!dialogueSource)
+        {
+            dialogueSource = gameObject.AddComponent<AudioSource>();
+            dialogueSource.playOnAwake = false;
+            dialogueSource.loop = false;
+            dialogueSource.spatialBlend = 0;
+        }
+        dialogueOwner = owner;
+        dialogueSource.volume = soundSource ? soundSource.volume : 0;
+        dialogueSource.clip = dialogueClip;
+        dialogueSource.Play();
+        return dialogueClip.length;
+    }
+    public void StopDialogue(Object owner = null)
+    {
+        // A destroyed Unity owner is not an unscoped stop request.
+        if (!ReferenceEquals(owner, null) && !ReferenceEquals(dialogueOwner, owner)) return;
+        if (dialogueSource) { dialogueSource.Stop(); dialogueSource.clip = null; }
+        dialogueOwner = null;
+        if (dialogueClip) { Resources.UnloadAsset(dialogueClip); dialogueClip = null; }
+    }
+    void OnApplicationFocus(bool focused) { if (!focused) StopDialogue(); }
     public void PlaySound(AudioClip clip)
     {
         if (isActiveAndEnabled && soundSource && soundSource.isActiveAndEnabled && clip)

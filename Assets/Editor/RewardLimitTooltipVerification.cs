@@ -77,7 +77,10 @@ public static class RewardLimitTooltipVerification
         SessionState.SetInt(Flag+".size",(int)SizeProperty.GetValue(View));SessionState.SetInt(Flag+".count",Count(SizeGroup(),"GetCustomCount"));
         SessionState.SetBool(Flag+".paused",EditorApplication.isPaused);
         SessionState.SetString(Flag+".deadline",DateTime.UtcNow.AddSeconds(180).Ticks.ToString());
-        Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", Path.GetFullPath(folder+"/save.json"));
+        string savePath=Path.GetFullPath(folder+"/save.json");
+        // Quiet fixture: a tutorial overlay would invalidate real pointer/raycast checks.
+        File.WriteAllText(savePath,JsonUtility.ToJson(new PlayerData{username="Verification",tutorial=new TutorialProgress{version=1,dismissed=true}}));
+        Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", savePath);
         EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");
         SessionState.SetBool(Flag, true); Resolution(1920, 1080); EditorApplication.isPaused=false; EditorApplication.isPlaying = true;
     }
@@ -108,7 +111,7 @@ public static class RewardLimitTooltipVerification
             if(step==1){Bounds(tip);Content(tip,RewardLimitKind.Fish);Capture("fish-empty-1920");}
             if(step==2){
                 var service=manager.Tasks;
-                manager.PlayerData.rewardDays.Add(new RewardDay{day=service.TodayRewards.day,taskExperience=60,taskFishCoins=30,focusMinutes=180,focusTickets=2});
+                manager.PlayerData.rewardDays.Add(new RewardDay{day=service.TodayRewards.day,taskExperience=75,taskFishCoins=30,focusMinutes=120,focusTickets=2});
                 fish.OnPointerEnter(pointer);
                 Check(tip.taskBar.normalizedValue==.5f&&tip.focusBar.normalizedValue==.5f,"Partial allowance bars incorrect");
             }
@@ -116,7 +119,7 @@ public static class RewardLimitTooltipVerification
             if(step==4){ticket.OnPointerEnter(pointer);fish.OnPointerExit(pointer);Check(tip.gameObject.activeSelf,"Stale exit hid other target");}
             if(step==5){Bounds(tip);Content(tip,RewardLimitKind.Tickets);Capture("ticket-1920");Check(tip.ticketBar.value==2&&tip.ticketBar.maxValue==4,"Ticket allowance incorrect");}
             if(step==6)avatar.OnPointerEnter(pointer);
-            if(step==7){Bounds(tip);Content(tip,RewardLimitKind.Experience);Capture("avatar-exp-1920");Check(tip.taskValue.text=="60 / 120 EXP","EXP allowance incorrect");}
+            if(step==7){Bounds(tip);Content(tip,RewardLimitKind.Experience);Capture("avatar-exp-1920");Check(tip.taskValue.text=="75 / 150 EXP","EXP allowance incorrect");}
             if(step==8){
                 avatar.OnPointerExit(pointer);Check(!tip.gameObject.activeSelf,"Exit did not hide");
                 for(int i=0;i<10;i++){fish.OnPointerEnter(pointer);ticket.OnPointerEnter(pointer);avatar.OnPointerEnter(pointer);avatar.OnPointerExit(pointer);}
@@ -138,10 +141,10 @@ public static class RewardLimitTooltipVerification
             if(step==15){Bounds(tip);Content(tip,RewardLimitKind.Experience);Capture("avatar-exp-1280");}
             if(step==16){
                 var day=manager.PlayerData.rewardDays.Single(d=>d.day==manager.Tasks.TodayRewards.day);
-                day.taskExperience=120;day.taskFishCoins=60;day.focusMinutes=360;day.focusTickets=4;
-                Check(manager.Tasks.BeginFocus(out var id),"Could not trigger committed refresh");
+                day.taskExperience=150;day.taskFishCoins=60;day.focusMinutes=240;day.focusTickets=3;day.taskTickets=1;
+                Check(manager.Tasks.SaveTag(null,"Allowance refresh",out var id),"Could not trigger committed refresh");
                 Check(tip.taskBar.normalizedValue==1&&tip.focusBar.normalizedValue==1,"Live refresh did not fill capped bars");
-                Check(manager.Tasks.CancelFocus(id),"Could not cancel verification session");
+                Check(manager.Tasks.DeleteTag(id),"Could not remove verification tag");
             }
             if(step==17){Bounds(tip);Capture("avatar-capped-1280");ticket.OnPointerEnter(pointer);Check(tip.ticketBar.normalizedValue==1,"Ticket cap not full");}
             if(step==18){Bounds(tip);Capture("ticket-capped-1280");}
@@ -152,9 +155,50 @@ public static class RewardLimitTooltipVerification
                 var rect=(RectTransform)reference.transform;rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.anchoredPosition=Vector2.zero;rect.localScale=Vector3.one;
             }
             if(step==20)Capture("simplecasual-slider-reference-1280");
-            if(step==21){Finish("PASS: Fish-only, Ticket-only, avatar EXP-only content; Task/Focus slider empty/partial/cap and committed refresh; noninteractive sliders; pointer exit/press, stale exit, rapid switching, selection/deselection, disable/re-enable, focus loss/page change; no hover save mutation; raycasts/bounds/text; all three at 1920x1080 and 1280x720.");return;}
+            if(step>=21&&step<45) GoalFlow(nav,manager,(step-21)%12,(step-21)/12==0?1920:1280);
+            if(step==45){Finish("PASS: reward tooltip empty/partial/cap; Task1+Focus3 tickets; hover/keyboard/focus loss/raycasts; two-stage Task goal idle/ready/claim/claimed and duplicate protection; first-task automatic ticket; Focus Lv.30 preview 48 EXP/19 Fish, 240-minute and 3-ticket limits; authored UI captures at 1920x1080 and 1280x720. No scene/prefab writes.");return;}
         }
         step++;next=EditorApplication.timeSinceStartup+1;
+    }
+    static void GoalFlow(MainMenuNavigation nav,GameDataManager manager,int phase,int width) {
+        var service=manager.Tasks;
+        if(phase==0){
+            var reference=nav.transform.Find("ReferenceOnly");if(reference)UnityEngine.Object.Destroy(reference.gameObject);
+            Resolution(width,width==1920?1080:720);nav.ShowPage(MainMenuPage.Dashboard);
+            manager.PlayerData.experience=13050;manager.PlayerData.tickets=0;
+            manager.PlayerData.history.Clear();manager.PlayerData.tasks.Clear();manager.PlayerData.occurrences.Clear();manager.PlayerData.focusSessions.Clear();manager.PlayerData.rewardDays.Clear();manager.SaveData();
+            var flight=UnityEngine.Object.FindFirstObjectByType<RewardFlightUI>();if(flight){flight.enabled=false;flight.enabled=true;}
+            Check(service.SaveTag(null,"Goal flow "+width,out _),service.LastError);
+        }
+        var goal=nav.pages[(int)MainMenuPage.Dashboard].GetComponentsInChildren<DailyGoalUI>(true).Single(g=>g.goal==DailyRewardGoal.ThreeQuests);
+        if(phase==1){Check(goal.progress.text=="0 / 1"&&goal.experienceReward.text=="39"&&!goal.claim.interactable,"First goal idle preview");GoalBounds(goal);Capture("goal-first-idle-"+width);}
+        if(phase==2){Check(service.Upsert(new QuestTask{title="First work"},null,out var id)&&service.Complete(id,true),service.LastError);Check(service.TodayRewards.taskTickets==1&&service.Snapshot.tickets==1,"Automatic ticket missing");}
+        if(phase==3){Check(goal.claim.interactable&&goal.progress.text=="1 / 1","First goal readiness");GoalBounds(goal);Capture("goal-first-ready-"+width);}
+        if(phase==4){ClickGoal(goal.claim);Check(service.DailyGoalClaimed(DailyRewardGoal.FirstQuest)&&!service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests),"First button claimed wrong tier");Capture("goal-first-press-"+width);}
+        if(phase==5){Check(goal.progress.text=="1 / 3"&&goal.experienceReward.text=="78"&&!goal.claim.interactable,"Second tier did not refresh");GoalBounds(goal);Capture("goal-third-progress-"+width);}
+        if(phase==6)for(int i=0;i<2;i++)Check(service.Upsert(new QuestTask{title="More work "+i},null,out var id)&&service.Complete(id,true),service.LastError);
+        if(phase==7){Check(goal.progress.text=="3 / 3"&&goal.claim.interactable,"Third goal readiness");GoalBounds(goal);Capture("goal-third-ready-"+width);}
+        if(phase==8){
+            ClickGoal(goal.claim);int xp=service.Snapshot.experience;goal.claim.onClick.Invoke();goal.claim.onClick.Invoke();
+            Check(service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests)&&service.Snapshot.experience==13458&&xp==13458&&service.Snapshot.tickets==1,"Third goal/duplicate paid wrong amount");
+        }
+        if(phase==9){Check(goal.inProgressLabel.text=="Claimed"&&!goal.claim.interactable,"Claimed button state");GoalBounds(goal);Capture("goal-both-claimed-"+width);}
+        if(phase==10){
+            nav.ShowPage(MainMenuPage.Focus);var panel=nav.pages[(int)MainMenuPage.Focus].GetComponent<FocusPanelUI>();
+            Check(FocusRunner.EnsureInstance().Controller.Configure(new FocusSessionOptions()),"Focus options");
+            Check(panel.rewards.text=="48"&&panel.fishReward.text=="19"&&panel.ticketReward.text=="1"&&panel.rewardAllowanceBar.maxValue==240&&panel.ticketAllowanceBar.maxValue==3,"Focus authored display shows stale rules");
+        }
+        if(phase==11)Capture("focus-new-allowances-"+width);
+    }
+    static void GoalBounds(DailyGoalUI goal){Canvas.ForceUpdateCanvases();foreach(var t in goal.GetComponentsInChildren<TMPro.TMP_Text>()){t.ForceMeshUpdate();Check(!t.isTextOverflowing,"Goal text clipped: "+t.text);}}
+    static void ClickGoal(Button button){
+        Check(button.interactable&&button.gameObject.activeInHierarchy,"Claim unavailable");Canvas.ForceUpdateCanvases();
+        var pointer=new PointerEventData(EventSystem.current){position=RectTransformUtility.WorldToScreenPoint(null,button.transform.position),button=PointerEventData.InputButton.Left};
+        var hits=new System.Collections.Generic.List<RaycastResult>();EventSystem.current.RaycastAll(pointer,hits);
+        Check(hits.Count>0&&ExecuteEvents.GetEventHandler<IPointerClickHandler>(hits[0].gameObject)==button.gameObject,"Claim blocked by overlay");
+        ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerEnterHandler);ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerDownHandler);
+        ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerUpHandler);ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerClickHandler);
+        ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerExitHandler);
     }
     static void Content(RewardLimitTooltip tip,RewardLimitKind kind)
     {

@@ -25,6 +25,8 @@ public class StorySkipUI : MonoBehaviour
 
     private void OpenConfirmation()
     {
+        PlayClick(skipButton);
+        SettingsAudio.Instance?.StopDialogue(storyController);
         confirmationPanel.SetActive(true);
 
         // Pause the story while confirmation is open
@@ -34,6 +36,7 @@ public class StorySkipUI : MonoBehaviour
 
     private void CancelSkip()
     {
+        PlayClick(laterButton);
         confirmationPanel.SetActive(false);
 
         // Continue story
@@ -42,6 +45,7 @@ public class StorySkipUI : MonoBehaviour
 
     private void ConfirmSkip()
     {
+        PlayClick(yesButton);
         confirmationPanel.SetActive(false);
 
         // Restore time before ending story
@@ -64,5 +68,12 @@ public class StorySkipUI : MonoBehaviour
         {
             Time.timeScale = previousTimeScale;
         }
+    }
+
+    private static void PlayClick(Button button)
+    {
+        // Project feedback buttons already own their click sound.
+        if (button && !button.GetComponent<JuicyButton>())
+            SettingsAudio.EnsureInstance()?.PlayButtonClick();
     }
 }

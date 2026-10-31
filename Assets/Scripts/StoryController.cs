@@ -111,6 +111,7 @@ public class StoryController : MonoBehaviour
 
     private void FinishStory()
     {
+        SettingsAudio.Instance?.StopDialogue(this);
         dialoguePanel.SetActive(false);
         continueIcon.SetActive(false);
 
@@ -884,12 +885,15 @@ public class StoryController : MonoBehaviour
 
         dialogueText.text = text;
 
-        yield return StoryDialogueView.RevealText(dialogueText, typingSpeed, CompleteDialogueTyping);
+        float voiceDuration = SettingsAudio.EnsureInstance()?.PlayDialogue(this,
+            currentStep.dialogueText, currentStep.character.DisplayName == "Player") ?? 0;
+        yield return StoryDialogueView.RevealText(dialogueText, typingSpeed, CompleteDialogueTyping, voiceDuration);
     }
 
 
     private void CompleteDialogueTyping()
     {
+        SettingsAudio.Instance?.StopDialogue(this);
         dialogueText.maxVisibleCharacters =
             int.MaxValue;
 
@@ -908,6 +912,8 @@ public class StoryController : MonoBehaviour
 
     private void HandleAdvanceInput()
     {
+        if (currentState != StoryState.None && currentState != StoryState.Finished)
+            SettingsAudio.EnsureInstance()?.PlayButtonClick();
         switch (currentState)
         {
             case StoryState.Movement:
@@ -1004,6 +1010,8 @@ public class StoryController : MonoBehaviour
 
         CompleteDialogueTyping();
     }
+
+    private void OnDisable() { SettingsAudio.Instance?.StopDialogue(this); }
 
 
     // =====================================================

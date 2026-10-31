@@ -1,10 +1,24 @@
 # Cat Quest 音频配置
 
+## Story / Tutorial 角色声音（2026-10-31）
+
+- 用户确认 B（柔和 Fern）用于主角，D（温柔 Lowell）用于 Master Loke；两者均为 Babble Engine 1.4.0 的 Critter Chatter。Tutorial 全部使用 D。
+- 根据 `IntroStory.unity` 的实际 Dialogue steps 和 `TutorialController` 当前台词离线生成 91 个去重的角色/台词 WAV，位于 `Assets/Resources/DialogueAudio`。`catalog.json` 记录原台词、生成文本、参数、时长及 SHA-256。同一台词重复出现时复用文件。
+- 不上传玩家数据、不在游戏运行时联网或合成。`{playerName}` 离线使用 apprentice，动态奖励数字使用占位数字，动态错误使用通用错误短语；显示文字始终保留实际姓名、数值和错误。咿呀声不是逐字真人朗读。
+- `SettingsAudio` 仍是唯一音频管理器；新增独立讲话 AudioSource，使用 Sound 音量。Story 沿用普通 BGM，Tutorial 沿用当前页面/Focus 的 BGM 优先级。Music 的原有设置不变，包括原本为 0 的情况。
+- 保留批准的音高和速度；当语音比原打字时间长时，文字显示放慢至该段语音时长。点击补全文字、换句、跳过、关闭教学、切页、禁用或失去应用焦点会停止当前声音；旧调用者不能停止新调用者的声音。焦点恢复不重播已停止的句子。
+- Story 空白区域/Space 推进播放现有 click；Skip 确认控件在没有 JuicyButton 时补上 click，避免重复。Tutorial 原有 JuicyButton click 保留。
+- 新增/修改台词后显式运行 `python Tools/DialogueAudio/generate.py`；只生成音频和清单，不生成 UI。`python Tools/DialogueAudio/generate.py --check` 仅检查，不修复资产。需要 Node 和 PyYAML。生成保留已有 GUID。
+- 上游引擎原文件和 MIT 许可保存在 `Tools/DialogueAudio`；构建署名位于 `Assets/StreamingAssets/AudioLicenses/babble-engine-LICENSE.txt`。不改变既有 15 个音频及其许可清单。
+- Unity 专项检查入口：`Temp/verify-dialogue-audio.request`，结果写入 `Library/DialogueAudioVerification/<本次时间>/`，使用独立存档。音频检查不能替代实际设备上的混音听感确认。
+
 项目的 Sound Manager 是现有 `SettingsAudio`，由 GameDataManager 自动创建并跨场景保留。不要再放第二个 manager。
 
 ## 已配置的本地素材
 
-已制作并绑定 14 个原创本地合成 WAV：4 首循环 BGM 和 10 个音效，分别位于 `Assets/Audio/Music`、`Assets/Audio/SFX`。每个声音的英文 prompt、中文说明和时长见 `SOUND_PROMPTS.md`，参数与文件校验值见 `AUDIO_MANIFEST.json`。这些是程序合成音频，不是付费 AI 模型生成音频。
+已于 2026-10-31 按用户最终试听确认替换 15 个 WAV：4 首循环 BGM 和 11 个音效。按钮使用第三版 click-bubble-1，其余使用第二轮反馈中确认保留的版本。直接替换现有文件内容，保留 .meta GUID、Resources/SettingsAudio.prefab 绑定和播放逻辑。文件与来源见 AUDIO_MANIFEST.json；随构建分发的署名及许可证位于 Assets/StreamingAssets/AudioLicenses。
+
+素材采用已试听的 44.1 kHz / stereo / PCM16 WAV（逐字节一致），包括试听增益及 Focus 提醒的 2.5 kHz 低通处理；网页播放器的 80% 音量仅为试听播放器设置，未写入素材或玩家设置。前三首 BGM 作者声明 AI-assisted sounds。SOUND_PROMPTS.md 仅记录已被替换的历史合成素材，不是当前素材来源。
 
 BGM 使用 Streaming + PCM 导入，保留循环接缝；音效使用 Decompress On Load + PCM。保留已有音量设置，Music 仍可能为 0。
 
@@ -24,10 +38,11 @@ BGM 使用 Streaming + PCM 导入，保留循环接缝；音效使用 Decompress
 | Focus Music | 安静、低干扰 ambient / lo-fi，可循环 | 专注和保存重试期间 |
 | Rest Music | 放松 BGM，可循环 | Rest 期间 |
 | Battle Music | 活泼战斗 BGM，可循环 | 确认并成功进入 Boss 战斗后 |
-| Button Click | 短而轻的 click / pop | JuicyButton 的鼠标左键点击、键盘提交 |
+| Button Click | 短而轻的 click / pop | JuicyButton 的鼠标左键按下立即播放、键盘提交；松开不重复播放，按钮操作仍在有效松开时执行 |
 | Preview Clip | 短预览音，可复用 click | Settings 音效预览；留空时使用 Button Click |
 | Task Complete | 清脆、温和的成功提示 | Dashboard / Tasks 完成成功后 |
 | Level Up | 短升级旋律 | 已提交的升级事件 |
+| Equipment Claim | 稀有装备获得旋律 | 装备领取 / 升级成功反馈 |
 | Cat Attack | 短刀剑挥击/命中组合 | 实际 Boss 战斗的猫攻击命中 |
 | Boss Attack | 短重击/受伤组合 | 实际 Boss 战斗的 Boss 命中 |
 | Battle Victory | 短胜利旋律 | 胜利结果保存成功后 |
@@ -46,9 +61,29 @@ BGM 使用 Streaming + PCM 导入，保留循环接缝；音效使用 Decompress
 - Focus 页面训练动画保持安静。跳过 Boss 战斗不会连续播放被跳过的命中。
 - End Early 继续沿用原奖励和 Rest 行为，但不冒充正常完成提示；取消/中断没有完成/胜负音效。
 - Windows 系统通知声音仍由 Windows 管理，可能与应用内计时提示同时响起。
-- Toggle/Slider 沿用原交互；本次没有自动增加 hover、slider 连续声、装备、宝箱或错误音效。
+- Toggle/Slider 沿用原交互；本次没有新增 hover 或 slider 连续声。装备领取与升级继续使用既有 Equipment Claim 槽位。
 - 音频不授予奖励、不改变伤害、计时或持久化结果。
 
 ## 当前素材的试听
 
-确认 Music 音量大于 0；试听普通 → Focus → Rest、进入/离开 Boss、跳过战斗、失败保存后重试、切页、关闭重开。检查鼠标/键盘 click、禁用按钮不响、连续攻击响度、两个音量独立且重开保留。已生成并做文件级检查；实际游戏内试听仍需确认，不能以静态检查替代。
+确认 Music 音量大于 0；试听普通 → Focus → Rest、进入/离开 Boss、跳过战斗、失败保存后重试、切页、关闭重开。检查鼠标/键盘 click、禁用按钮不响、连续攻击响度、两个音量独立且重开保留。浏览器试听已由用户确认；实际游戏内混音、循环接缝听感与连续输入仍需 Play Mode 确认，文件级检查不代替实际听感。
+
+## 最终素材对应
+
+| 槽位 | 已确认素材 | 试听版本 |
+| --- | --- | --- |
+| musicClip | Porch Light · Full Loop | 1 |
+| focusMusic | Rain on the Window · Lite Loop | 1 |
+| restMusic | Lantern Walk · Lite Loop | 1 |
+| battleMusic | Battle Theme I · loop | 1 |
+| buttonClick | click-bubble-1 | 3 |
+| previewClip | pluck_002 | 1 |
+| taskComplete | quest-complete-bright | 2 |
+| levelUp | FANFARE 11 | 2 |
+| equipmentClaim | rare-item-bright | 2 |
+| catAttack | knifeSlice | 1 |
+| bossAttack | impactPunch_heavy_000 | 2 |
+| battleVictory | FANFARE 5 | 2 |
+| battleDefeat | game-over-warm | 2 |
+| focusComplete | reminder | 2 |
+| restComplete | confirmation_002 | 1 |

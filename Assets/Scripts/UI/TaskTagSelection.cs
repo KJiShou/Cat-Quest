@@ -58,15 +58,23 @@ public class TaskTagSelection : MonoBehaviour
                 if (!swatch)
                 {
                     swatch = TaskUIBuilder.Rect(toggle.transform, "TagColor");
-                    swatch.anchorMin = swatch.anchorMax = new Vector2(1, .5f);
-                    swatch.anchoredPosition = new Vector2(-18, 0);
-                    swatch.sizeDelta = new Vector2(16, 16);
                     var label = toggle.GetComponentInChildren<TMP_Text>();
-                    if (label) label.rectTransform.offsetMax = new Vector2(-36, label.rectTransform.offsetMax.y);
+                    if (label)
+                    {
+                        // Keep the option's name inside its colored chip, as in the
+                        // selected tags, while the outer toggle owns selection.
+                        swatch.SetSiblingIndex(label.transform.GetSiblingIndex());
+                        label.transform.SetParent(swatch, false);
+                        TaskUIBuilder.LayoutTag(swatch.gameObject, label.text, label.fontSize, 30);
+                        swatch.GetComponent<LayoutElement>().minWidth = 0;
+                        label.overflowMode = TextOverflowModes.Ellipsis;
+                        label.raycastTarget = false;
+                    }
                 }
                 var graphic = swatch.GetComponent<Image>() ?? swatch.gameObject.AddComponent<Image>();
                 graphic.sprite = swatchSprite; graphic.type = Image.Type.Sliced;
-                graphic.color = TagColors.Background(colors[i]); graphic.raycastTarget = false;
+                graphic.raycastTarget = false;
+                TagColors.Apply(swatch.gameObject, colors[i], swatchSprite);
             }
             toggle.group = null;
             toggle.onValueChanged.RemoveAllListeners();

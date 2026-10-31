@@ -16,22 +16,30 @@ public sealed class EquipmentUpgradeFeedback : MonoBehaviour, IPointerEnterHandl
     RenderTexture texture;
     ParticleSystem particles;
     float replayAt;
+    float successUntil;
+    public void PlaySuccess(){
+        Dismiss();successUntil=Time.unscaledTime+1.5f;
+        Refresh();
+        SettingsAudio.EnsureInstance()?.PlayEquipmentClaim();
+    }
     public void SetPreview(string value){Dismiss();preview=value;}
     void Awake(){button=GetComponent<Button>();}
     public void OnPointerEnter(PointerEventData e){hovered=true;Refresh();}
     public void OnPointerExit(PointerEventData e){hovered=false;selected=false;Refresh();}
     public void OnSelect(BaseEventData e){selected=true;Refresh();}
     public void OnDeselect(BaseEventData e){selected=false;Refresh();}
-    public void Dismiss(){hovered=selected=false;Stop();}
+    public void Dismiss(){hovered=selected=false;successUntil=0;Stop();}
     void OnDisable(){Dismiss();}
     void OnApplicationFocus(bool focus){if(!focus)Dismiss();}
     void Update(){
+        if(successUntil>0){if(Time.unscaledTime>=successUntil)Dismiss();return;}
         if(stage&&(!button.IsInteractable()||!Application.isFocused)){Dismiss();return;}
         if(stage&&Time.unscaledTime>=replayAt){particles.Play(true);replayAt=Time.unscaledTime+1.5f;}
     }
     void Refresh(){
         if(!button)button=GetComponent<Button>();
-        if(!(hovered||selected)||!button.IsInteractable()||string.IsNullOrEmpty(preview)){Stop();return;}
+        bool success=successUntil>Time.unscaledTime;
+        if(!success&&(!(hovered||selected)||!button.IsInteractable()||string.IsNullOrEmpty(preview))){Stop();return;}
         caption.text=preview;caption.gameObject.SetActive(true);
         if(stage)return;
         stage=new GameObject("Equipment hover VFX");stage.transform.position=new Vector3(30000+GetInstanceID()%1000*20,30000,0);
