@@ -80,6 +80,12 @@ Tasks 还提供 **List / Calendar** 切换。月历展示已安排的 Todo、**N
 
 ![带有演示任务与彩色标签的任务管理页](docs/images/tasks.png)
 
+### 日历
+
+![Tasks 月历，展示已安排 Todo、Daily 预览及 No Date 入口](docs/images/calendar.png)
+
+在 List 与 Calendar 间切换，查看日期、打开当日列表或新建任务。未来 Daily 是预览，不能提前完成。
+
 ### 专注
 
 ![带有计时控制与猫咪训练场景的专注页](docs/images/focus.png)

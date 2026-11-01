@@ -2,28 +2,25 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-本目录 PNG 是实际 Unity Game View 的文档副本，不是生成插图。画面为 **1920×1080**，使用隔离合成存档，演示名字 **Mochi**、学习和个人任务，以及示例成长装备。
+这些 PNG 是 **2026-11-01（Asia/Kuala_Lumpur）** 在 Unity Game View 中重新拍摄的当前 UI 原始画面，尺寸统一为 **1920×1080**，没有修图。它们替换 10 月 31 日的图片，展示 Tasks 日历、Todo 日期分组、默认任务分类设置，以及更新后的按钮颜色和边框。
 
-拍摄日期：**2026-10-31，Asia/Kuala_Lumpur**。文档改动前源码版本：`8802809ed31e9a967898aba244fabb72947d1192`。
+截图使用名为 **Mochi** 的隔离虚构存档，包含学习／个人演示任务及示例成长／装备。日历中未来的 Daily 为预览。没有使用个人任务、真实玩家存档或已连接账号；Chat 刻意展示未连接状态。
 
-| 发布图 | `Library/ReadmeCapture-20261031/` 中原图 |
+来源为 main 的 `23f6d343` 加截图时的工作区。同期本地 Companion 改动不属于本次截图更新，截图也不包含原生 Companion 窗口。
+
+| 发布图片 | `Library/ReadmeCapture-20261101/` 中的原始截图 |
 | --- | --- |
-| dashboard.png | Dashboard.png |
-| tasks.png | Tasks.png |
-| focus.png | Focus.png |
-| boss.png | Boss.png |
-| equipment.png | CatHome.png |
-| chat.png | Chat.png |
-| settings.png | Settings.png |
+| `dashboard.png` | `Dashboard.png` |
+| `tasks.png` | `Tasks.png` |
+| `calendar.png` | `Calendar.png` |
+| `focus.png` | `Focus.png` |
+| `boss.png` | `Boss.png` |
+| `equipment.png` | `CatHome.png` |
+| `chat.png` | `Chat.png` |
+| `settings.png` | `Settings.png` |
 
-使用已打开的 Unity **6000.3.10f1** 与 `Assets/Scenes/CharacterHome.unity`。只在临时存档设置教学已跳过、任务和装备，没有使用真实玩家存档、历史或在线账号。程序化切页与打开设置只用于文档，不证明指针键盘、动画或原生伙伴行为。
+截图使用已经打开的 Unity **6000.3.10f1** Editor 和 `Assets/Scenes/CharacterHome.unity`，通过程序切换页面和打开 Settings。这些是文档图片，不代表指针／键盘交互、动画、持久化或 Windows Companion 行为已全部通过测试。
 
-原始证据与恢复报告在忽略的 `Library/ReadmeCapture-20261031/`。临时拍摄脚本已删除，恢复正常存档环境、Play 起始场景、Game View 选择及自定义数、暂停时间比例和场景状态，没有保存作者场景预制体。
+原始截图、一次性演示存档及截图／恢复结果保留在忽略目录 `Library/ReadmeCapture-20261101/`。临时截图脚本使用后删除。运行器恢复原存档／AI 环境、Play Mode 起始场景、Game View 选择／自定义尺寸和暂停状态，不保存 authored 场景或 prefab。
 
-最初使用现有 Settings Play 验证器时，新用户教学遮罩阻挡 Button_Setting，流程失败。报告在 `Library/SettingsVerification/20261031-140121-5baea84d19784cca8001341faf5b8f15/`。独立截图不覆盖或将该失败变为通过。
-
-只跟踪精选文档图片，原始截图、测试存档和报告留在忽略目录。截图保留项目与第三方图形权利，见[第三方说明](../../THIRD_PARTY_NOTICES.zh-CN.md)。
-
-## 后续 UI 变化
-
-这些截图早于 Tasks 日历、扩展的 Todo／Dashboard 日期分组、默认任务分类选项及 11 月 1 日紧凑按钮配色／边框调整。它们保留为历史示意，不证明当前 UI 状态。本次验证截图保存在忽略目录 `Library/TaskCalendarVerification/` 和 `Library/ButtonSurfaceVerification/`，不是已发布的 README 图片。
+仅发布精选的八张 PNG。此前验证报告仍是历史记录，本次截图不会改变它们的结果。截图保留项目和第三方美术原有权利，见[第三方声明](../../THIRD_PARTY_NOTICES.zh-CN.md)。

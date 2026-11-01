@@ -80,6 +80,12 @@ These are actual Unity-rendered screens using synthetic demonstration data, not 
 
 ![Task management with demonstration tasks and colored tags](docs/images/tasks.png)
 
+### Calendar
+
+![Tasks month calendar with scheduled Todo items, Daily previews and No Date access](docs/images/calendar.png)
+
+Switch between List and Calendar to review dates, open a day, or add a task. Future Daily entries are previews; they cannot be completed early.
+
 ### Focus
 
 ![Focus page with timer controls and the cat training scene](docs/images/focus.png)
