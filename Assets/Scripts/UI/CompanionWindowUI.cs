@@ -4,10 +4,12 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
 
 public sealed class CompanionWindowUI : MonoBehaviour
 {
-    [Serializable] public sealed class ViewState { public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha; }
+    [Serializable] public sealed class FeedbackState { public string name; public bool active,interactable; public float scaleX,scaleY,offset,x,y,width,height; }
+    [Serializable] public sealed class ViewState { public string selected; public bool keyboard; public FeedbackState[] feedback; public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha; }
     public FocusScenePreview preview;
     public TMP_Text timer,title;
     public RectTransform controls,header,sceneFrame,dragHandle,timerBacking;
@@ -23,7 +25,9 @@ public sealed class CompanionWindowUI : MonoBehaviour
     CompanionState state=new CompanionState{connected=false};
     float nextPoll,startup,pendingSince,reveal;
     int lastWidth,lastHeight;
-    bool configured,closing;
+    bool configured,closing,keyboardNavigation;
+    Button[] keyboardButtons;
+    PointerEventData pointerExit;
     bool IsCompact=>Screen.width<360 || Screen.height<260;
     void Start()
     {
@@ -35,6 +39,8 @@ public sealed class CompanionWindowUI : MonoBehaviour
         close.onClick.AddListener(CloseDisplay);
         pin.onClick.AddListener(TogglePinned);
         minimize.onClick.AddListener(CompanionNativeWindow.Minimize);
+        keyboardButtons=new[]{pin,minimize,close,start,end,rest,retry};
+        if(EventSystem.current)pointerExit=new PointerEventData(EventSystem.current);
         RefreshPin();
     }
     void Update()
@@ -57,10 +63,49 @@ public sealed class CompanionWindowUI : MonoBehaviour
 #if UNITY_EDITOR || !UNITY_STANDALONE_WIN
         inside=Application.isFocused && point.x>=0 && point.y>=0 && point.x<Screen.width && point.y<Screen.height;
 #endif
-        reveal=Mathf.MoveTowards(reveal,inside?1:0,Time.unscaledDeltaTime/(inside?.32f:.24f));
-        controlFade.alpha=Mathf.SmoothStep(0,1,reveal);controlFade.blocksRaycasts=inside && reveal>.7f;controlFade.interactable=controlFade.blocksRaycasts;
+        // Native windows can stop reporting pointer motion outside their client area.
+        // Recheck while outside: reopening a modal can replay cached pointer-enter events.
+        // Pointer exits preserve keyboard selection.
+        if(!inside && pointerExit!=null)
+            foreach(var button in keyboardButtons)
+                if(button.gameObject.activeInHierarchy)ExecuteEvents.Execute(button.gameObject,pointerExit,ExecuteEvents.pointerExitHandler);
+        bool focused=CompanionNativeWindow.IsForeground;
+        if(!focused && (keyboardNavigation || (EventSystem.current && EventSystem.current.currentSelectedGameObject)))OnApplicationFocus(false);
+        UpdateKeyboardNavigation();
+        bool showControls=inside || (keyboardNavigation && focused);
+        reveal=Mathf.MoveTowards(reveal,showControls?1:0,Time.unscaledDeltaTime/(showControls?.32f:.24f));
+        controlFade.alpha=Mathf.SmoothStep(0,1,reveal);controlFade.blocksRaycasts=inside && reveal>.7f;
+        controlFade.interactable=showControls && (keyboardNavigation || reveal>.7f);
         if(lastWidth!=Screen.width || lastHeight!=Screen.height){ApplyLayout(IsCompact,inside);lastWidth=Screen.width;lastHeight=Screen.height;}
         if(CompanionProtocol.HasArgument("--companion-smoke"))WriteVerification();
+    }
+    void UpdateKeyboardNavigation()
+    {
+        var events=EventSystem.current;var keys=Keyboard.current;
+        if(!events || keys==null || !CompanionNativeWindow.IsForeground)return;
+        if(cancelConfirmation && cancelConfirmation.IsOpen)return; // The prompt owns its focus and Escape.
+        if(Mouse.current!=null && Mouse.current.leftButton.wasPressedThisFrame)keyboardNavigation=false;
+        if(keys.escapeKey.wasPressedThisFrame){keyboardNavigation=false;events.SetSelectedGameObject(null);return;}
+        bool tab=keys.tabKey.wasPressedThisFrame;
+        bool arrow=keys.leftArrowKey.wasPressedThisFrame || keys.rightArrowKey.wasPressedThisFrame
+            || keys.upArrowKey.wasPressedThisFrame || keys.downArrowKey.wasPressedThisFrame;
+        if(!tab && !arrow)return;
+        keyboardNavigation=true;
+        controlFade.interactable=true;
+        int current=Array.FindIndex(keyboardButtons,b=>b.gameObject==events.currentSelectedGameObject);
+        if(!tab && current>=0)return; // InputSystemUIInputModule owns ordinary arrow navigation.
+        int direction=tab && (keys.leftShiftKey.isPressed || keys.rightShiftKey.isPressed)?-1:1;
+        if(current<0)current=direction>0?-1:0;
+        for(int step=1;step<=keyboardButtons.Length;step++){
+            var candidate=keyboardButtons[(current+direction*step+keyboardButtons.Length*2)%keyboardButtons.Length];
+            if(candidate.gameObject.activeInHierarchy && candidate.interactable){events.SetSelectedGameObject(candidate.gameObject);return;}
+        }
+    }
+    void OnApplicationFocus(bool focused)
+    {
+        if(focused)return;
+        keyboardNavigation=false;
+        if(EventSystem.current)EventSystem.current.SetSelectedGameObject(null);
     }
     void TogglePinned()
     {
@@ -135,13 +180,24 @@ public sealed class CompanionWindowUI : MonoBehaviour
         var sprite=battle?battle.transform.Find(child)?.GetComponent<SpriteRenderer>().sprite:null;
         return sprite?sprite.name:"";
     }
+    FeedbackState[] FeedbackSnapshot()
+    {
+        var result=new FeedbackState[keyboardButtons.Length];
+        for(int i=0;i<keyboardButtons.Length;i++){
+            var button=keyboardButtons[i];var effect=button.GetComponent<JuicyButton>();var rect=(RectTransform)button.transform;
+            result[i]=new FeedbackState{name=button.name,active=button.gameObject.activeInHierarchy,interactable=button.IsInteractable(),
+                scaleX=effect?effect.DrawScale.x:1,scaleY=effect?effect.DrawScale.y:1,offset=effect?effect.DrawOffset:0,
+                x=rect.anchoredPosition.x,y=rect.anchoredPosition.y,width=rect.rect.width,height=rect.rect.height};
+        }
+        return result;
+    }
     void WriteVerification()
     {
         try
         {
             var battle=preview.Stage?preview.Stage.GetComponentInChildren<FocusTrainingBattle>():null;
             var aura=preview.Stage?preview.Stage.GetComponentInChildren<CharacterEquipmentAura>():null;
-            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
+            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{selected=EventSystem.current&&EventSystem.current.currentSelectedGameObject?EventSystem.current.currentSelectedGameObject.name:"",keyboard=keyboardNavigation,feedback=FeedbackSnapshot(),auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
             string input=Path.Combine(directory,"companion-ui.request");
             if(File.Exists(input)){
                 string action=File.ReadAllText(input).Trim();File.Delete(input);

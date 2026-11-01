@@ -9,6 +9,9 @@ public static class CompanionNativeWindow
     public static bool IsPinned { get; private set; } = true;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern IntPtr GetFocus();
+    [DllImport("user32.dll")] static extern IntPtr SetFocus(IntPtr window);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window,int command);
     delegate bool EnumProc(IntPtr window, IntPtr data);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc callback,IntPtr data);
@@ -47,6 +50,16 @@ public static class CompanionNativeWindow
         }
     }
 #endif
+    public static bool IsForeground
+    {
+        get {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            return Handle!=IntPtr.Zero && !IsIconic(Handle) && GetForegroundWindow()==Handle;
+#else
+            return Application.isFocused;
+#endif
+        }
+    }
     public static bool Configure()
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
@@ -154,6 +167,10 @@ public static class CompanionNativeWindow
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         if (IsIconic(Handle)) return;
+        // A borderless window shown without activation can become foreground with no
+        // keyboard focus. Windows then sends WM_SYSKEYDOWN (Enter can toggle fullscreen).
+        // Repair only our own already-foreground window; never activate another app.
+        if (GetForegroundWindow()==Handle && GetFocus()==IntPtr.Zero) SetFocus(Handle);
         UpdateRoundedRegion();
         GetClientRect(Handle,out var rect);
         int width=rect.right-rect.left,height=rect.bottom-rect.top;

@@ -14,7 +14,13 @@ Pet Widget 打开 420×300 默认置顶窗口，浅色标题栏居中显示主�
 
 Pin 切换置顶，缩放不改变该状态。伙伴打开时即显示任务栏入口，最小化及恢复后继续保留；最小化不结束专注。UI 遮罩和原生窗口区域均为 16 像素圆角，随缩放刷新。标题栏下是完整训练画面，天空计时、水面会话操作，不显示任务、奖励、预设细节或悬停提示。
 
-所有尺寸下，指针在外时隐藏会话按钮，进入约 0.32 秒淡入、离开约 0.24 秒淡出。Start、Cancel、End Focus、End Focus Early、Finish Rest、Retry Save 共用行为，不改变动画构图。标题栏拖动，四边四角用标准 Windows 光标缩放，最小 240×180。关闭立即隐藏原生窗，再在 Unity 清理时退出子进程，主应用继续计时。
+所有尺寸下，指针在外时隐藏会话按钮；已获得焦点的伙伴正在使用键盘导航时除外，进入约 0.32 秒淡入、离开约 0.24 秒淡出。Start、Cancel、End Focus、End Focus Early、Finish Rest、Retry Save 共用行为，不改变动画构图。标题栏拖动，四边四角用标准 Windows 光标缩放，最小 240×180。关闭立即隐藏原生窗，再在 Unity 清理时退出子进程，主应用继续计时。
+
+## 键盘与重复输入
+
+Tab 从 Pin 开始键盘导航；Tab / Shift+Tab 在 Pin、Minimize、Close 和当前可用的会话操作之间循环，跳过未显示或已禁用的操作。方向键使用现有 Unity 控件导航，Enter 激活选中按钮。键盘导航时，即使指针在外，会话操作仍保持可见；Escape 清除普通选择并恢复由指针控制的淡入淡出。Cancel 确认框打开时独立管理 Tab／Enter／Escape 焦点；Escape 关闭确认框，不取消专注。
+
+指针离开原生窗口时会明确清除悬停／按压反馈，同时保留键盘选择。应用失焦或最小化会清除键盘选择并复位反馈。如果伙伴已是 Windows 前台窗口，却没有原生键盘焦点，会补回缺失的焦点；不会主动抢占其他应用。这避免 Enter 被作为系统键／全屏切换命令处理。连续提交会话操作仍由现有 pending 请求和主程序防重机制处理，反馈不额外提交命令，也不结算奖励。
 
 ## 编辑与构建
 
@@ -85,3 +91,7 @@ pwsh -NoProfile -File Tools/Verify-FocusModesWindows.ps1 -Executable Builds/Focu
 静态资产为 `Assets/Prefabs/Focus/FocusStatistics.prefab`，嵌套在原 Focus 页。`FocusStatistics` 纯查询，`FocusStatisticsUI` 显示输入，`FocusStatisticsGraph` 批量网格柱图。按钮来自 SimpleCasual Btn_MenuButton_Rectangle01_Light 并保留字体、JuicyButton。无需图表包、迁移或重置。
 
 编译后创建空 `Temp/verify-focus-statistics.request`，隔离领域和 Play 结果在 `Library/FocusStatisticsVerification`。恢复环境、起始场景、暂停及 Game View，不修改修复资产。指针检查是 EventSystem，不是真实 OS 鼠标。
+
+## 伙伴输入回归
+
+对最新 Windows 构建执行 `pwsh -NoProfile -File Tools/Verify-CompanionInputWindows.ps1 -Executable Builds/Windows/CatQuest.exe`。需可交互的 Windows 桌面：运行器发送真实键盘／鼠标输入，并实际点击任务栏按钮，不用 ShowWindow 代替恢复。它使用已解锁功能的虚构隔离存档，检查普通／最小尺寸、键盘焦点与导航、快速输入、pending 请求防重、保存失败／重试及确认框行为，并恢复 PlayerPrefs、指针和前台窗口。结果与截图在 `Library/CompanionInputVerification/native-*`；找不到任务栏目标或原生输入被拒绝均判为失败。此检查不替代完整奖励验证。
