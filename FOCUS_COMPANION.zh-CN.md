@@ -12,13 +12,17 @@
 
 Pet Widget 打开 420×300 默认置顶窗口，浅色标题栏居中显示主程序发布的玩家名，包含 Pin、Minimize、Close。Close 来自 SimpleCasual Lobby_Popup_User_Info，置顶和最小化用 Lucide 图标，许可在 `Assets/Generated/Icons/WindowControls`。伙伴不读玩家存档。
 
-Pin 切换置顶，缩放不改变该状态。最小化提供任务栏恢复入口，不结束专注。UI 遮罩和原生窗口区域均为 16 像素圆角，随缩放刷新。标题栏下是完整训练画面，天空计时、水面会话操作，不显示任务、奖励、预设细节或悬停提示。
+Pin 切换置顶，缩放不改变该状态。伙伴打开时即显示任务栏入口，最小化及恢复后继续保留；最小化不结束专注。UI 遮罩和原生窗口区域均为 16 像素圆角，随缩放刷新。标题栏下是完整训练画面，天空计时、水面会话操作，不显示任务、奖励、预设细节或悬停提示。
 
 所有尺寸下，指针在外时隐藏会话按钮，进入约 0.32 秒淡入、离开约 0.24 秒淡出。Start、Cancel、End Focus、End Focus Early、Finish Rest、Retry Save 共用行为，不改变动画构图。标题栏拖动，四边四角用标准 Windows 光标缩放，最小 240×180。关闭立即隐藏原生窗，再在 Unity 清理时退出子进程，主应用继续计时。
 
 ## 编辑与构建
 
+伙伴的七个按钮（Start、End/Cancel、Finish Rest、Retry Save、Pin、Minimize、Close）复用项目的 `JuicyButton` / `JuicyButtonMesh`，提供悬停、按压回弹及键盘选中/提交反馈，保持点击区域与原有布局不动。伙伴打开时即显示任务栏入口，最小化及恢复后继续保留。修改伙伴 prefab 后，需重新构建 `Builds/Windows/CatQuest.exe`，Editor 启动的预览才会更新。
+
 时长控件来自 SimpleCasual Light/Material_Level_Up 的 Quantity 行，保留蓝色填充、三角标记、青色加减。点击拖动选整分钟，加减每次一分钟，边界禁用。模式选择来自 `Btn_MenuButton_Rectangle01-Group.prefab` 的 `Btn_MenuButton_Rectangle01_Light`，保留互斥 Toggle、反馈、字体及蓝色选中线，使用循环箭头、秒表和沙漏。正计时隐藏时长卡，倒计时隐藏休息，开始后锁定设置。
+
+Window 根对象保留现有 `CompanionRoundedMask` / `Mask` 所需的 `CanvasRenderer`。未指定子 visual 时，反馈通过网格动画实现，不移动按钮 RectTransform，也不接管点击操作。原生任务栏样式在窗口配置时设置，不再于最小化／恢复时来回切换。
 
 - 直接编辑序列化控件，不运行旧整页或伙伴生成器。
 - Windows x64 启用场景顺序为 CatQuestBootstrap、IntroStory、CharacterHome，伙伴以独立参数启动同一 exe，分发完整构建目录。

@@ -9,7 +9,6 @@ public static class CompanionNativeWindow
     public static bool IsPinned { get; private set; } = true;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);
-    static bool minimizedToTaskbar;
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window,int command);
     delegate bool EnumProc(IntPtr window, IntPtr data);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc callback,IntPtr data);
@@ -52,12 +51,15 @@ public static class CompanionNativeWindow
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         var window=Handle; if(window==IntPtr.Zero) return false;
+        // Refresh shell registration without activating the companion.
+        ShowWindow(window,0);
         int style=GetWindowLong(window,-16);
         SetWindowLong(window,-16,(style & ~0x00C40000)); // Remove caption and sizing frame; custom handles below.
-        SetWindowLong(window,-20,(GetWindowLong(window,-20)|0x80) & ~0x40000); // Tool window, no taskbar entry.
+        SetWindowLong(window,-20,(GetWindowLong(window,-20) & ~0x80)|0x40000); // WS_EX_APPWINDOW, not WS_EX_TOOLWINDOW: keep a taskbar entry.
         var monitor=new MonitorInfo{size=Marshal.SizeOf<MonitorInfo>()};
         GetMonitorInfo(MonitorFromWindow(window,2),ref monitor);
         SetWindowPos(window,new IntPtr(IsPinned ? -1 : -2),Math.Max(monitor.work.left,monitor.work.right-440),Math.Max(monitor.work.top,monitor.work.bottom-320),420,300,0x0020|0x0010);
+        ShowWindow(window,4); // SW_SHOWNOACTIVATE
 #endif
         return true;
     }
@@ -74,11 +76,6 @@ public static class CompanionNativeWindow
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         var window = Handle;
         if (window == IntPtr.Zero) return;
-        // Expose a taskbar button so the hidden tool window can be restored.
-        ShowWindow(window,0);
-        SetWindowLong(window,-20,(GetWindowLong(window,-20) & ~0x80)|0x40000);
-        SetWindowPos(window,IntPtr.Zero,0,0,0,0,0x0037);
-        minimizedToTaskbar = true;
         ShowWindow(window,2);
 #endif
     }
@@ -157,12 +154,6 @@ public static class CompanionNativeWindow
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         if (IsIconic(Handle)) return;
-        if (minimizedToTaskbar)
-        {
-            minimizedToTaskbar = false;
-            SetWindowLong(Handle,-20,(GetWindowLong(Handle,-20)|0x80) & ~0x40000);
-            SetWindowPos(Handle,new IntPtr(IsPinned ? -1 : -2),0,0,0,0,0x0033);
-        }
         UpdateRoundedRegion();
         GetClientRect(Handle,out var rect);
         int width=rect.right-rect.left,height=rect.bottom-rect.top;

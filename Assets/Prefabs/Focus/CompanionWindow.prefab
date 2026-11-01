@@ -259,6 +259,7 @@ GameObject:
   - component: {fileID: 8359113344507824443}
   - component: {fileID: 3998029254165753495}
   - component: {fileID: 2916733051778612235}
+  - component: {fileID: 134303157211586614}
   m_Layer: 5
   m_Name: Window
   m_TagString: Untagged
@@ -330,6 +331,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Mask
   m_ShowMaskGraphic: 0
+--- !u!222 &134303157211586614
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 516860421649236731}
+  m_CullTransparentMesh: 1
 --- !u!1 &532029561663127716
 GameObject:
   m_ObjectHideFlags: 0
@@ -1087,6 +1096,7 @@ GameObject:
   - component: {fileID: 5422524076139162406}
   - component: {fileID: 6688012478030829454}
   - component: {fileID: 5188582544853336168}
+  - component: {fileID: 8580626872419519883}
   m_Layer: 5
   m_Name: End
   m_TagString: Untagged
@@ -1216,6 +1226,20 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &8580626872419519883
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2079543396886799578}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8ac83946c26a7a4f9c1c361ef094a1b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
+  visual: {fileID: 0}
+  shine: {fileID: 0}
 --- !u!1 &2478383582549026578
 GameObject:
   m_ObjectHideFlags: 0
@@ -1394,6 +1418,7 @@ GameObject:
   - component: {fileID: 2030533051634407452}
   - component: {fileID: 2805034622377359941}
   - component: {fileID: 7683127671026703775}
+  - component: {fileID: 6151738293751318297}
   m_Layer: 5
   m_Name: Rest
   m_TagString: Untagged
@@ -1523,6 +1548,20 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &6151738293751318297
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3077418858611549243}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8ac83946c26a7a4f9c1c361ef094a1b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
+  visual: {fileID: 0}
+  shine: {fileID: 0}
 --- !u!1 &3139870967774172570
 GameObject:
   m_ObjectHideFlags: 0
@@ -1784,6 +1823,7 @@ GameObject:
   - component: {fileID: 6609645861794138755}
   - component: {fileID: 8904260373085259589}
   - component: {fileID: 7460848327339640486}
+  - component: {fileID: 2582008841148097843}
   m_Layer: 5
   m_Name: PinWindow
   m_TagString: Untagged
@@ -1914,6 +1954,20 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &2582008841148097843
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4265541300159641747}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8ac83946c26a7a4f9c1c361ef094a1b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
+  visual: {fileID: 0}
+  shine: {fileID: 0}
 --- !u!1 &4484828534894948551
 GameObject:
   m_ObjectHideFlags: 0
@@ -1978,6 +2032,7 @@ GameObject:
   - component: {fileID: 1724256590804094072}
   - component: {fileID: 1191381419604021847}
   - component: {fileID: 4231734457155722738}
+  - component: {fileID: 1827773241085579858}
   m_Layer: 0
   m_Name: CloseWidget
   m_TagString: Untagged
@@ -2087,6 +2142,20 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &1827773241085579858
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5069982242928441246}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8ac83946c26a7a4f9c1c361ef094a1b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
+  visual: {fileID: 0}
+  shine: {fileID: 0}
 --- !u!1 &5096712427079650172
 GameObject:
   m_ObjectHideFlags: 0
@@ -2736,6 +2805,7 @@ GameObject:
   - component: {fileID: 3886236574535366821}
   - component: {fileID: 838987857301363561}
   - component: {fileID: 1514023557443615986}
+  - component: {fileID: 1356967741977978546}
   m_Layer: 5
   m_Name: MinimizeWindow
   m_TagString: Untagged
@@ -2866,6 +2936,20 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &1356967741977978546
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6423318947212213582}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8ac83946c26a7a4f9c1c361ef094a1b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
+  visual: {fileID: 0}
+  shine: {fileID: 0}
 --- !u!1 &6805564457672326649
 GameObject:
   m_ObjectHideFlags: 0
@@ -3217,6 +3301,7 @@ GameObject:
   - component: {fileID: 5017615280658272383}
   - component: {fileID: 8682871866504538344}
   - component: {fileID: 2701823817235678218}
+  - component: {fileID: 4794067671855543099}
   m_Layer: 5
   m_Name: Start
   m_TagString: Untagged
@@ -3346,6 +3431,20 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &4794067671855543099
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7913866096973413243}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8ac83946c26a7a4f9c1c361ef094a1b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
+  visual: {fileID: 0}
+  shine: {fileID: 0}
 --- !u!1 &8246309509260458692
 GameObject:
   m_ObjectHideFlags: 0
@@ -3449,6 +3548,7 @@ GameObject:
   - component: {fileID: 5004748884625322694}
   - component: {fileID: 7022319938816839278}
   - component: {fileID: 3045638191505742208}
+  - component: {fileID: 6189630993083265914}
   m_Layer: 5
   m_Name: Retry
   m_TagString: Untagged
@@ -3578,6 +3678,20 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &6189630993083265914
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8583830427177453117}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8ac83946c26a7a4f9c1c361ef094a1b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
+  visual: {fileID: 0}
+  shine: {fileID: 0}
 --- !u!1 &8810321836914680331
 GameObject:
   m_ObjectHideFlags: 0
