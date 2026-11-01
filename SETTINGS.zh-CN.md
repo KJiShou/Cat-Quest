@@ -24,7 +24,7 @@
 
 ## 账号与隐私
 
-Account 支持本地校验显示名 1–20 字符、浏览器 Google 登录、退出和可选分享。配置缺失时禁用登录并解释，本地功能可用，关闭 Account/Settings 取消待登录。
+Account 支持本地校验显示名 1–20 字符、浏览器 Google 登录、退出和可选分享。保存显示名时，在同一次本地事务中同步用户名和排行榜名字；保存失败则两者均保留原值。配置缺失时禁用登录并解释，本地功能可用，关闭 Account/Settings 取消待登录。
 
 登录不发布，开启分享只上传 `playerId`、`playerName`、`bossStage`、`totalTasksCompleted`、`totalFocusMinutes`、`power`、`catLevel`、服务器 `updatedAt`，不含任务标题描述、日程标签、目标责任、AI 或详细历史。主存档仍权威，这不是云备份恢复。[排行榜](LEADERBOARD.zh-CN.md) 登录后读取汇总。
 

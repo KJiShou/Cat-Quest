@@ -24,7 +24,7 @@ Delete requires confirmation showing the number of affected tasks. It detaches t
 
 ## Account and privacy
 
-Account supports a local, validated leaderboard display name (1–20 characters), Google browser sign-in, sign-out and optional statistics sharing. Until the connection asset is configured, the sign-in button is disabled with an explanation. Local settings, tasks and progress remain available. Closing Account/Settings cancels an outstanding sign-in attempt.
+Account supports a local, validated display name (1–20 characters). Saving it updates the player username and leaderboard name together in one local transaction; a failed save preserves both previous names. Account also supports Google browser sign-in, sign-out and optional statistics sharing. Until the connection asset is configured, the sign-in button is disabled with an explanation. Local settings, tasks and progress remain available. Closing Account/Settings cancels an outstanding sign-in attempt.
 
 Google sign-in alone does not publish data. Enabling sharing publishes only `playerId`, `playerName`, `bossStage`, `totalTasksCompleted`, `totalFocusMinutes`, `power`, `catLevel` and server `updatedAt`. Task titles/descriptions/schedules/tags, goals, responsibilities, AI content and detailed local history are excluded. The main Unity save remains authoritative. This is aggregate publication, not player-save backup or cloud restore. The separate [Leaderboard page](LEADERBOARD.md) reads these published aggregates after sign-in.
 

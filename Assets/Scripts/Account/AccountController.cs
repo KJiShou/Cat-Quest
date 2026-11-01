@@ -188,8 +188,8 @@ public sealed class AccountController : MonoBehaviour
     {
         value = (value ?? "").Trim();
         if (!AccountAggregate.ValidName(value)) { SetStatus("Enter a display name of 1–20 characters without markup or control characters."); return; }
-        var prefs = service.AccountSettings; prefs.playerName = value;
-        if (Save(prefs)) { dirty = true; nextSync = Time.unscaledTime + 2; SetStatus("Display name saved."); }
+        if (service.RenamePlayer(value)) { dirty = true; nextSync = Time.unscaledTime + 2; SetStatus("Display name saved."); }
+        else SetStatus(service.LastError);
     }
     public void SetUploadEnabled(bool enabled)
     {

@@ -97,13 +97,31 @@ public static class SettingsAccountVerification
         string context = "UTC " + DateTime.UtcNow.ToString("o") + " | Unity " + Application.unityVersion;
         try
         {
-            VerifyAggregates(); VerifyOAuthAndWire(); VerifyLocalOwnership(); VerifyPublication();
+            VerifyPlayerName(); VerifyAggregates(); VerifyOAuthAndWire(); VerifyLocalOwnership(); VerifyPublication();
             File.WriteAllText("Temp/verify-settings-account.result", "PASS: " + context +
                 "\nIsolated aggregate caps/duplicates/undo, cumulative Focus seconds, Boss gates, equipped Power, OAuth PKCE/state/path, strict payload, ownership, disk reload, local write failure, conflict/lost response, opt-out and in-flight signout.\nNo Google/Firebase calls or real credentials used. Live sign-in and deployed rules remain unverified.");
             Debug.Log("Settings account verification: PASS");
         }
         catch (Exception error) { File.WriteAllText("Temp/verify-settings-account.result", "FAIL: " + context + "\n" + error); throw; }
     }
+    static void VerifyPlayerName()
+    {
+        WithController((c, store, http) =>
+        {
+            store.Data.username = "Original"; store.Data.account.playerName = "Original";
+            store.fail = true; c.SetPlayerName("New name");
+            Check(store.Data.username == "Original" && store.Data.account.playerName == "Original", "Failed rename changed names.");
+            store.fail = false; c.SetPlayerName("  Mochi  "); c.SetPlayerName("Mochi");
+            Check(store.Data.username == "Mochi" && c.State.playerName == "Mochi", "Rename did not synchronize names.");
+            foreach (string invalid in new[] { "", "<b>name</b>", new string('a', 21) }) c.SetPlayerName(invalid);
+            Check(store.Data.username == "Mochi" && store.Data.account.playerName == "Mochi", "Invalid rename changed names.");
+            string path = Path.GetFullPath("Library/SettingsAccountVerification/name-" + Guid.NewGuid().ToString("N") + ".json");
+            var disk = new PlayerDataStore(path); Check(disk.TrySave(PlayerDataStore.Copy(store.Data), out _), "Name save failed.");
+            var loaded = new PlayerDataStore(path).Data;
+            Check(loaded.username == "Mochi" && loaded.account.playerName == "Mochi" && http.methods.Count == 0, "Name reload failed or rename required network.");
+        });
+    }
+
     static void VerifyAggregates()
     {
         var store = new Store(); var service = new TaskService(store, new Clock());

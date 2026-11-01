@@ -187,6 +187,7 @@ public sealed class RewardFlightUI : MonoBehaviour
                     pending[f.kind] -= f.amount;
                     displayed[f.kind] = Math.Max(0, observed[f.kind] - pending[f.kind]);
                     RecordArrival(f.kind, f.amount);
+                    SettingsAudio.Instance?.PlayRewardCollect();
                     f.active = false; f.icon.gameObject.SetActive(false); ActiveCount--;
                 }
             }

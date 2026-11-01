@@ -4,6 +4,19 @@ public sealed partial class TaskService
 {
     public AccountPreferences AccountSettings => PlayerDataStore.Copy(AccountPreferences.Normalize(store.Data.account));
 
+    public bool RenamePlayer(string name)
+    {
+        name = (name ?? "").Trim();
+        if (!AccountAggregate.ValidName(name))
+        { LastError = "Enter a display name of 1–20 characters without markup or control characters."; return false; }
+        return Commit(data =>
+        {
+            data.username = name;
+            data.account = AccountPreferences.Normalize(data.account);
+            data.account.playerName = name;
+        });
+    }
+
     public bool SaveAccountSettings(AccountPreferences draft)
     {
         if (draft == null) { LastError = "Account settings are missing."; return false; }

@@ -19,6 +19,7 @@ public sealed class SettingsAudio : MonoBehaviour
     public AudioClip catAttack, bossAttack, battleVictory, battleDefeat;
     [Header("Timer notifications")]
     public AudioClip focusComplete, restComplete;
+    AudioClip rewardCollect;
     AudioListener fallbackListener;
     TaskService service;
     FocusPhase focusPhase;
@@ -120,6 +121,11 @@ public sealed class SettingsAudio : MonoBehaviour
     public void PlayButtonClick() => PlaySound(buttonClick);
     public void PlayTaskComplete() => PlaySound(taskComplete);
     public void PlayEquipmentClaim() => PlaySound(equipmentClaim);
+    public void PlayRewardCollect()
+    {
+        if (!rewardCollect) rewardCollect = Resources.Load<AudioClip>("RewardCollect");
+        PlaySound(rewardCollect);
+    }
     public void PlayAttack(bool catAttacks) => PlaySound(catAttacks ? catAttack : bossAttack);
     public void PlayBattleResult(BattleOutcome outcome)
     {

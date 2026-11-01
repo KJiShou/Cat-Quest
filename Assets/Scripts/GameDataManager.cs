@@ -51,6 +51,8 @@ public class GameDataManager : MonoBehaviour
     {
         var candidate = PlayerDataStore.Copy(PlayerData);
         candidate.username = username;
+        candidate.account = AccountPreferences.Normalize(candidate.account);
+        candidate.account.playerName = username;
         if (!store.TrySave(candidate, out var error)) throw new IOException(error);
     }
     public string GetUsername() => PlayerData.username;

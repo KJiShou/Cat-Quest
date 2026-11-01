@@ -61,6 +61,8 @@ public static class RewardFlightVerification
     static void Capture(string name) => ScreenCapture.CaptureScreenshot(Path.GetFullPath(Folder+"/"+name+".png"));
     static IEnumerator Run()
     {
+        var collect = Resources.Load<AudioClip>("RewardCollect");
+        Check(collect && collect.length > .35f && collect.length < .45f, "Single-item collection audio missing or contains the repeated preview.");
         var ui = UnityEngine.Object.FindFirstObjectByType<RewardFlightUI>(); Check(ui, "Reward flight binding missing");
         var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         var manager = GameDataManager.EnsureInstance(); var service = manager.Tasks;
