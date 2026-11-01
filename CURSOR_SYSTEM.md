@@ -1,5 +1,7 @@
 # App cursor
 
+[English](CURSOR_SYSTEM.md) | [简体中文](CURSOR_SYSTEM.zh-CN.md)
+
 The main Unity application installs one persistent `AppCursor` before its first
 scene. It uses `Cursor.SetCursor` (hardware cursor where supported), without a UI
 overlay or changes to button input, navigation, rewards or save data. The separate
@@ -21,7 +23,7 @@ Select `Assets/Resources/AppCursorSettings.asset` in the Inspector:
 
 Import replacement PNG artwork as **Cursor**, enable **Read/Write**, disable mipmaps
 and compression, and start with **Max Size 32** (pixels, independent of Canvas scale).
-Assign the imported texture; adjust the hotspot to the visible tip. Keep this asset
+Assign the imported texture. Adjust the hotspot to the visible tip. Keep this asset
 at its existing Resources path. No scene changes or generator runs are needed.
 
 The active cursor is Kenney Cursor Pack 1.1's
@@ -34,17 +36,17 @@ keeps the current arrow or hover hand without a visual jump.
 Button hover uses `PNG/Outline/Default/hand_point.png` from the same pack, copied
 unchanged to `Assets/Resources/Cursors/KenneyHandPoint.png`, with fingertip hotspot
 `(9, 3)`. Its import settings match the arrow. `AppCursor` reuses raycast storage
-and checks the EventSystem's top hit and click-handler hierarchy each frame;
+and checks the EventSystem's top hit and click-handler hierarchy each frame.
 it does not add listeners/components to buttons or interfere with JuicyButton.
 Keyboard selection alone does not change the mouse cursor. Sliders, toggles and
 text fields retain the arrow unless their actual click handler is a Button.
 
 Source: https://opengameart.org/content/cursor-pack-1 (Kenney, CC0).
 The original license is preserved in `Assets/Resources/Cursors/Kenney-License.txt`.
-This user-selected artwork replaces the previous SimpleCasual tutorial hand;
+This user-selected artwork replaces the previous SimpleCasual tutorial hand.
 the existing `SimpleCasualHand.png` and vendor originals remain untouched.
 The prior reference component was SimpleCasual's
-`Prefabs/Prefabs_Component_UI_Etc/Tutorial_Focus_Icon_Hand.prefab`; no page layout,
+`Prefabs/Prefabs_Component_UI_Etc/Tutorial_Focus_Icon_Hand.prefab`. No page layout,
 typography or button feedback is changed by this cursor artwork substitution.
 
 Focus loss, pointer leaving the client viewport, cursor locking, disabling the

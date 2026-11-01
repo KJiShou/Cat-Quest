@@ -19,6 +19,7 @@ public class TaskDatePicker : MonoBehaviour
     public int month = 8;
     public int day = 4;
 
+    public event Action<DateTime> DateSelected;
     private DateTime displayedMonth;
     private DateTime firstGridDay;
     private readonly Color ink = new Color32(20, 45, 77, 255);
@@ -81,6 +82,9 @@ public class TaskDatePicker : MonoBehaviour
         firstGridDay = displayedMonth.AddDays(-leadingDays);
         for (int i = 0; i < days.Length; i++)
         {
+            bool inRange = (DateTime.MaxValue.Date - firstGridDay).Days >= i;
+            days[i].gameObject.SetActive(inRange);
+            if (!inRange) continue;
             var date = firstGridDay.AddDays(i);
             var label = days[i].GetComponentInChildren<TMP_Text>();
             label.text = date.Day.ToString();
@@ -95,6 +99,7 @@ public class TaskDatePicker : MonoBehaviour
         year = date.Year; month = date.Month; day = date.Day;
         dateLabel.text = date.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
         overlay.SetActive(false);
+        DateSelected?.Invoke(date);
     }
 
     private void OnDisable()

@@ -68,7 +68,7 @@ public static class SettingsPlayVerification
         {
             SessionState.SetBool(Flag + ".enteredPlay", true);
             evidence.Clear(); checks.Clear(); loggedError = null;
-            run = Run(); next = EditorApplication.timeSinceStartup + 2;
+            run = SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
         }
         if (state == PlayModeStateChange.EnteredEditMode)
         {
@@ -107,13 +107,15 @@ public static class SettingsPlayVerification
                 else
                 {
                     Check(evidence.All(path => File.Exists(path) && new FileInfo(path).Length > 100), "A requested screenshot is missing or empty.");
-                    Finish("PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
+                    Finish(SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
                 }
             }
             catch (Exception e) { Finish("FAIL at " + context + ": " + e); }
             return;
         }
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists(Request)) return;
+        SessionState.SetBool(Flag + ".taskDates", File.ReadAllText(Request).Trim().StartsWith("task-dates"));
+        SessionState.SetBool(Flag + ".beforeDates", File.ReadAllText(Request).Trim() == "task-dates-before");
         File.Delete(Request);
         evidence.Clear(); checks.Clear(); context = "static authored bindings"; loggedError = null;
         string folder = Output + "/" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N");
@@ -122,6 +124,7 @@ public static class SettingsPlayVerification
         try
         {
             ValidateBindings();
+            if (SessionState.GetBool(Flag + ".taskDates", false) && !SessionState.GetBool(Flag + ".beforeDates", false)) SettingsVerification.Run(folder);
             string previous = Environment.GetEnvironmentVariable(StoreVariable);
             SessionState.SetBool(Flag + ".hadStore", previous != null);
             SessionState.SetString(Flag + ".store", previous ?? "");
@@ -320,6 +323,124 @@ public static class SettingsPlayVerification
         Check(Vector2.Distance(before.position, after.position) < 1 && Vector2.Distance(before.size, after.size) < 1, "Feedback moved the control's hit area: " + control.name);
     }
     static void Reset(JuicyButton feedback, string reason) => Check(Vector2.Distance(feedback.DrawScale, Vector2.one) < .005f && Mathf.Abs(feedback.DrawOffset) < .1f, reason);
+
+    static IEnumerator RunTaskDates()
+    {
+        var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
+        var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
+        var service = GameDataManager.EnsureInstance().Tasks;
+        Check(Path.GetFullPath(GameDataManager.EnsureInstance().SavePath) == Path.GetFullPath(Folder + "/save.json"), "Expected isolated save");
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
+        yield return .3;
+        var now = service.LocalNow.Date;
+        foreach (var offset in new[] { -1, 0, 1, 3, 8, 18, 40, 90 })
+        {
+            var draft = new QuestTask { title = "Plan for " + now.AddDays(offset).ToString("MMM d",CultureInfo.InvariantCulture), scheduled = true, date = TaskService.DateKey(now.AddDays(offset)) };
+            Check(service.Upsert(draft, Array.Empty<string>(), out _), "Seed scheduled task");
+        }
+        Check(service.Upsert(new QuestTask { title = "Read every day", daily = true, scheduled = true, date = TaskService.DateKey(now) }, Array.Empty<string>(), out _), "Seed daily task");
+        Check(service.Upsert(new QuestTask { title = "An idea for later" }, Array.Empty<string>(), out _), "Seed unscheduled task");
+        foreach (var size in new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720) })
+        {
+            var suffix = size.x + "x" + size.y;
+            context = "Task date groups " + suffix;
+            Resolution(size); yield return .5;
+            Check(nav.ShowPage(MainMenuPage.Tasks), "Open Tasks"); yield return .3;
+            nav.taskSystem.SelectTab(TaskTab.Tags); yield return .2;
+            Capture("date-groups-tags-reference-" + suffix); yield return .2;
+            nav.taskSystem.SelectTab(TaskTab.Todo);
+            nav.taskSystem.listContent.GetComponentInParent<ScrollRect>().verticalNormalizedPosition=1;
+            yield return .3;
+            if (!SessionState.GetBool(Flag + ".beforeDates", false))
+            {
+                var tasks=nav.taskSystem;
+                var expected=service.Query(TaskTab.Todo).Concat(service.Query(TaskTab.Daily).Where(v=>!v.Completed)).ToArray();
+                Check(tasks.listContent.Cast<Transform>().Count(t=>t.gameObject.activeSelf && t.name.StartsWith("Task_"))==expected.Length,"Todo dropped or duplicated tasks");
+                foreach(var group in expected.GroupBy(v=>TaskDateGroups.Classify(v.task,service.LocalNow)))
+                    Check(tasks.listContent.Find("TagGroup_date_"+group.Key),"Missing date heading: "+group.Key);
+                tasks.search.text="Read every day"; yield return .2;
+                Check(tasks.listContent.Cast<Transform>().Count(t=>t.gameObject.activeSelf && t.name.StartsWith("TagGroup_date_"))==1,"Search kept empty date groups");
+                tasks.search.text=""; yield return .2;
+            }
+            Capture("date-groups-todo-top-" + suffix); yield return .2;
+            nav.taskSystem.listContent.GetComponentInParent<ScrollRect>().verticalNormalizedPosition = 0;
+            yield return .2; Capture("date-groups-todo-bottom-" + suffix); yield return .2;
+            Check(nav.ShowPage(MainMenuPage.Dashboard), "Open Dashboard"); yield return .3;
+            var dashboardTop=UnityEngine.Object.FindFirstObjectByType<DashboardTasksUI>();
+            dashboardTop.taskScroll.verticalNormalizedPosition=1; yield return .2;
+            Capture("date-groups-dashboard-top-" + suffix); yield return .2;
+            var dashboard = UnityEngine.Object.FindFirstObjectByType<DashboardTasksUI>();
+            dashboard.taskScroll.verticalNormalizedPosition = 0;
+            yield return .2; Capture("date-groups-dashboard-bottom-" + suffix); yield return .2;
+            if (!SessionState.GetBool(Flag + ".beforeDates", false))
+            {
+                var row=dashboard.taskScroll.content.GetComponentsInChildren<DashboardTaskRow>().First(r=>r.taskTitle.text=="An idea for later");
+                Click(row.GetComponent<Button>()); yield return .3;
+                var task=service.Query(TaskTab.Todo).First(v=>v.task.title=="An idea for later");
+                Check(nav.taskSystem.CurrentTab==TaskTab.Todo && nav.taskSystem.SelectedKey==task.Key,"Dashboard did not open the future/unscheduled task");
+                Check(nav.ShowPage(MainMenuPage.Dashboard),"Return after Dashboard task navigation"); yield return .2;
+            }
+            Click(launcher.GetComponent<Button>()); yield return .3;
+            Capture("date-groups-settings-" + suffix); yield return .2;
+            var panel = UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();
+            Layout(panel, size);
+            if (!SessionState.GetBool(Flag + ".beforeDates", false))
+            {
+                Check(panel.defaultTaskTabs.Length == 3, "Three default tab bindings required");
+                var groupBounds=Bounds((RectTransform)panel.defaultTaskTabs[0].transform.parent);
+                foreach(var button in panel.defaultTaskTabs)
+                {
+                    var buttonBounds=Bounds((RectTransform)button.transform);
+                    Check(buttonBounds.xMin>=groupBounds.xMin-1 && buttonBounds.xMax<=groupBounds.xMax+1,"Default choice leaves its group");
+                }
+                for(int i=0;i<3;i++)
+                {
+                    var choice = panel.defaultTaskTabs[i];
+                    Click(choice); yield return .2;
+                    Check(service.Settings.DefaultTaskTab == (TaskTab)i && new PlayerDataStore(GameDataManager.EnsureInstance().SavePath).Data.settings.DefaultTaskTab == (TaskTab)i, "Default tab selection/reload failed");
+                    Check(panel.defaultTaskTabs.Count(button => ((Image)button.targetGraphic).sprite == panel.rankingSelected) == 1,"Default tab selected visuals not exclusive");
+                    var effect=choice.GetComponent<JuicyButton>(); var bounds=Bounds((RectTransform)choice.transform);
+                    ExecuteEvents.Execute(choice.gameObject,Pointer(choice),ExecuteEvents.pointerEnterHandler);
+                    yield return .15; Check(effect.DrawScale.y>1.01f,"Default choice hover has no motion");
+                    Capture("default-tab-hover-"+i+"-"+suffix); yield return .15;
+                    ExecuteEvents.Execute(choice.gameObject,Pointer(choice),ExecuteEvents.pointerExitHandler);
+                    ExecuteEvents.Execute(choice.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.deselectHandler);
+                    yield return .3; Reset(effect,"Default choice did not settle"); Stable(bounds,choice);
+                    for(int repeat=0;repeat<5;repeat++) Click(choice);
+                    ExecuteEvents.Execute(choice.gameObject,Pointer(choice),ExecuteEvents.pointerDownHandler);
+                    yield return .15;
+                    Check(effect.DrawScale.y<.99f,"Default choice press has no feedback");
+                    ExecuteEvents.Execute(choice.gameObject,Pointer(choice),ExecuteEvents.pointerExitHandler);
+                    yield return .3; Reset(effect,"Pointer exit left choice pressed");
+                    effect.SendMessage("OnApplicationFocus",false,SendMessageOptions.RequireReceiver);
+                    Reset(effect,"Focus loss did not reset choice"); Stable(bounds,choice);
+                    choice.interactable=false; yield return .2;
+                    Check(!choice.IsInteractable(),"Disabled choice accepts input");
+                    choice.interactable=true;
+                    EventSystem.current.SetSelectedGameObject(choice.gameObject);
+                    ExecuteEvents.Execute(choice.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler);
+                    yield return .2;
+                    Click(panel.close); yield return .2;
+                    Reset(effect,"Closing Settings retained button motion");
+                    Check(nav.ShowPage(MainMenuPage.Tasks),"Open default task tab"); yield return .2;
+                    Check(nav.taskSystem.CurrentTab==(TaskTab)i,"Entering Tasks ignored selected default");
+                    Check(nav.ShowPage(MainMenuPage.Dashboard),"Return Dashboard"); yield return .2;
+                    Click(launcher.GetComponent<Button>()); yield return .2;
+                }
+            }
+            Click(panel.close); yield return .2;
+        }
+        if (!SessionState.GetBool(Flag + ".beforeDates", false))
+        {
+            foreach(var task in service.Query(TaskTab.Todo).Concat(service.Query(TaskTab.Daily)).ToArray())
+                Check(service.Delete(task.task.id),"Delete isolated fixture task");
+            Check(nav.ShowPage(MainMenuPage.Dashboard),"Show empty Dashboard"); yield return .2;
+            var dashboard=UnityEngine.Object.FindFirstObjectByType<DashboardTasksUI>();
+            var titles=dashboard.taskScroll.content.GetComponentsInChildren<TMP_Text>().Select(t=>t.text).ToArray();
+            Check(titles.Contains("Daily Tasks") && titles.Contains("Today's Tasks") && !titles.Contains("Tomorrow") && !titles.Contains("No Date"),"Empty Dashboard retained optional date headings");
+            checks.Add("Date boundaries, legacy/default preference, failed save/retry and reload; Todo grouping/count/search, Dashboard navigation and empty groups; three default tabs, real raycast clicks, keyboard submit, hover/press/exit/reset, repeated clicks, simulated focus loss, disabled/re-enabled and page close at both resolutions.");
+        }
+    }
 
     static IEnumerator Run()
     {

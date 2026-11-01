@@ -144,6 +144,11 @@ public class DashboardTasksUI : MonoBehaviour
         RenderGroup(content, "Today's Tasks", today,
             "No tasks due today.");
 
+        var upcoming = service.Query(TaskTab.Todo)
+            .Where(view => !view.task.scheduled || (TaskService.TryDate(view.task.date, out var date) && date.Date > service.LocalNow.Date));
+        foreach (var group in upcoming.GroupBy(view => TaskDateGroups.Classify(view.task, service.LocalNow)).OrderBy(group => group.Key))
+            RenderGroup(content, TaskDateGroups.Caption(group.Key), group.ToArray(), "");
+
         LayoutRebuilder.MarkLayoutForRebuild(content);
     }
 
@@ -269,7 +274,7 @@ public class DashboardTasksUI : MonoBehaviour
             yield break;
 
         taskManager.SelectTab(
-            view.task.daily ? TaskTab.Daily : TaskTab.Today);
+            view.task.daily ? TaskTab.Daily : TaskTab.Todo);
 
         taskManager.SelectTask(view.task.id);
     }

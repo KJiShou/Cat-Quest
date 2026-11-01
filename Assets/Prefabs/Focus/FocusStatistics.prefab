@@ -644,7 +644,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &4354356432735972623
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -658,7 +658,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &2779639801223376169
 MonoBehaviour:
@@ -955,7 +955,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &3424071168570616628
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -969,7 +969,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &6364622381996763512
 MonoBehaviour:
@@ -1266,7 +1266,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &4778187165581706575
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1280,7 +1280,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &3107872697590338299
 MonoBehaviour:
@@ -1874,7 +1874,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &6066853419562447331
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1888,7 +1888,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &8830151988619962110
 MonoBehaviour:
@@ -3498,7 +3498,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &3722263645404418676
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3512,7 +3512,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &1795221323781748317
 MonoBehaviour:
@@ -4495,7 +4495,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &1627769425214383294
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4509,7 +4509,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &4343285283369927892
 MonoBehaviour:
@@ -5453,7 +5453,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &6222212129373653547
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5467,7 +5467,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &2746486651358613224
 MonoBehaviour:
@@ -8543,7 +8543,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &7643670440562393142
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8557,7 +8557,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &3535757043071979739
 MonoBehaviour:
@@ -9307,7 +9307,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &7076560410765040874
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9321,7 +9321,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &7033755004221241100
 MonoBehaviour:
@@ -9551,7 +9551,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &3150250091327461011
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9565,7 +9565,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &7035613132634440754
 MonoBehaviour:
@@ -10419,7 +10419,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_PixelsPerUnitMultiplier: 2
 --- !u!114 &7969555733862187028
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10433,7 +10433,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.07058824}
-  m_EffectDistance: {x: 0, y: -9}
+  m_EffectDistance: {x: 0, y: -3}
   m_UseGraphicAlpha: 1
 --- !u!114 &9130143846559149128
 MonoBehaviour:

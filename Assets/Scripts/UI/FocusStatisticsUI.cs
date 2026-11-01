@@ -133,7 +133,7 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         }
     }
     static void Tint(Button button,bool selected) {
-        if(button.targetGraphic)button.targetGraphic.color=selected?new Color32(68,185,231,255):new Color32(220,237,251,255);
+        if(button.targetGraphic)button.targetGraphic.color=selected?new Color32(96,115,168,255):new Color32(231,239,250,255);
         var label=button.GetComponentInChildren<TMP_Text>();
         if(label)label.color=selected?Color.white:TaskUIBuilder.Ink;
     }

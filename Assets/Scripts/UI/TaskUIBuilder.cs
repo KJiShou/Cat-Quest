@@ -79,7 +79,7 @@ public sealed class TaskUIBuilder
     {
         var r=Rect(parent,name); var le=Height(r,40); le.preferredWidth=le.minWidth=width; if(width==0) Flex(r);
         var image=Image(r,color ?? new Color32(215,240,255,255),Rounded); var button=r.gameObject.AddComponent<Button>(); button.targetGraphic=image;
-        var text=Text(r,caption,18,Blue); text.alignment=TextAlignmentOptions.Center; Stretch(text.rectTransform,8,8); return button;
+        var text=Text(r,caption,18,Ink); text.alignment=TextAlignmentOptions.Center; Stretch(text.rectTransform,8,8); return button;
     }
     public static void LayoutTag(GameObject chip, string caption, float fontSize=18, float height=34)
     {

@@ -1,5 +1,7 @@
 # Google sign-in artwork
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 `GoogleSignIn.png` is the unmodified, pre-approved light pill sign-in button
 from Google's Android + Web PNG @4x bundle. The complete image preserves the
 Google mark, button proportions, caption, and Google Sans typography. It is an

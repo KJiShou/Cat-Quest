@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest a focused improvement to the productivity experience.
+title: "[Feature] "
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: User need
+      description: What are you trying to accomplish, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the user-visible result and a concrete example.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workflows or smaller changes that could address the need.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and impact
+      description: Which pages or systems would change? Mention any effect on saved data, rewards, privacy or native Windows behavior.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked existing issues and understand this is a student project with limited scope.
+          required: true

@@ -65,6 +65,7 @@ public static class SettingsVerification
     static void Check(bool condition,string message) { if(!condition)throw new Exception(message); }
     public static void Run(string folder)
     {
+        VerifyDateGroups();
         var old=JsonUtility.FromJson<PlayerData>("{\"version\":5,\"username\":\"Settings test\",\"fishCoins\":31}"); PlayerDataStore.Normalize(old);
         Check(old.settings.notificationsEnabled && Math.Abs(old.settings.soundVolume-.594f)<.0001f && old.settings.musicVolume==0 && old.fishCoins==31,"Legacy setting defaults or unrelated data changed");
         var store=new Store(); var service=new TaskService(store,new Clock()); int changed=0; service.Changed+=()=>changed++;
@@ -91,6 +92,20 @@ public static class SettingsVerification
             var reopened=new TaskService(new PlayerDataStore(path),new Clock());
             Check(reopened.Settings.DashboardRanking==kind && reopened.Settings.musicVolume==.7f && !reopened.Settings.notificationsEnabled && reopened.Snapshot.fishCoins==31,"Ranking reload changed selection or unrelated data: "+kind);
         }
+        Check(legacy.settings.DefaultTaskTab == TaskTab.Today, "Legacy settings must open Today");
+        Check(AppSettings.Normalize(new AppSettings { defaultTaskTab = TaskTab.History }).DefaultTaskTab == TaskTab.Today, "History accepted as default tab");
+        Check(AppSettings.Normalize(new AppSettings { defaultTaskTab = (TaskTab)99 }).DefaultTaskTab == TaskTab.Today, "Invalid default tab accepted");
+        foreach(var tab in new[] { TaskTab.Today, TaskTab.Daily, TaskTab.Todo })
+        {
+            var preference = persisted.Settings; preference.defaultTaskTab = tab;
+            Check(persisted.SaveSettings(preference), "Default tab save failed");
+            Check(new PlayerDataStore(path).Data.settings.DefaultTaskTab == tab, "Default tab not persisted");
+        }
+        var tabDraft = service.Settings; tabDraft.defaultTaskTab = TaskTab.Todo;
+        store.fail = true;
+        Check(!service.SaveSettings(tabDraft) && service.Settings.DefaultTaskTab == TaskTab.Today, "Failed tab save changed committed preference");
+        store.fail = false;
+        Check(service.SaveSettings(tabDraft) && service.SaveSettings(tabDraft) && service.Settings.DefaultTaskTab == TaskTab.Todo, "Tab save retry/repeat failed");
         var previous=service.Settings;store.fail=true;
         var rejected=service.Settings;rejected.dashboardRanking=LeaderboardKind.Power.ToString();
         Check(!service.SaveSettings(rejected) && service.Settings.DashboardRanking==previous.DashboardRanking,"Failed ranking save changed committed preference");
@@ -139,4 +154,19 @@ public static class SettingsVerification
         }
         finally { PrefabUtility.UnloadPrefabContents(canvas); }
     }
+    static void VerifyDateGroups()
+    {
+        var now = new DateTime(2026,10,14); // Wednesday
+        var dates = new[] { "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-18", "2026-10-19", "2026-10-25", "2026-10-26", "2026-10-31", "2026-11-01", "2026-11-30", "2026-12-01" };
+        var expected = new[] { TaskDateGroup.Due, TaskDateGroup.Today, TaskDateGroup.Tomorrow, TaskDateGroup.ThisWeek, TaskDateGroup.NextWeek, TaskDateGroup.NextWeek, TaskDateGroup.ThisMonth, TaskDateGroup.ThisMonth, TaskDateGroup.NextMonth, TaskDateGroup.NextMonth, TaskDateGroup.Later };
+        for(int i=0;i<dates.Length;i++)
+            Check(TaskDateGroups.Classify(new QuestTask { scheduled=true,date=dates[i] },now)==expected[i], "Date bucket boundary failed: " + dates[i]);
+        Check(TaskDateGroups.Classify(new QuestTask(),now)==TaskDateGroup.NoDate,"Unscheduled task lost");
+        Check(TaskDateGroups.Classify(new QuestTask { daily=true, scheduled=true,date="2027-01-01" },now)==TaskDateGroup.Daily,"Future daily template lost");
+        Check(TaskDateGroups.Classify(new QuestTask { scheduled=true,date="2026-11-02" },new DateTime(2026,11,1))==TaskDateGroup.Tomorrow,"Tomorrow must win over next week");
+        Check(TaskDateGroups.Classify(new QuestTask { scheduled=true,date="2027-01-01" },new DateTime(2026,12,31))==TaskDateGroup.Tomorrow,"Year rollover failed");
+        Check(TaskDateGroups.Classify(new QuestTask { scheduled=true,date="2028-02-29" },new DateTime(2028,2,28))==TaskDateGroup.Tomorrow,"Leap day failed");
+        Check(TaskDateGroups.Classify(new QuestTask { scheduled=true,date="2026-10-14" },now.AddDays(1))==TaskDateGroup.Due,"Midnight bucket did not advance");
+    }
+
 }

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security reporting
+    url: https://github.com/KJiShou/Cat-Quest/security/advisories
+    about: Use private reporting if available; otherwise request a private contact without publishing sensitive details.

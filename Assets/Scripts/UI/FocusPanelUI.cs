@@ -307,7 +307,7 @@ public sealed class FocusPanelUI : MonoBehaviour
     private static void Style(Button button, bool enabled, bool selected)
     {
         button.interactable = enabled;
-        if (button.targetGraphic) button.targetGraphic.color = selected ? new Color32(113,227,171,255) : new Color32(225,240,250,255);
+        if (button.targetGraphic) button.targetGraphic.color = selected ? new Color32(189,224,254,255) : new Color32(231,239,250,255);
     }
     private void RefreshTime()
     {

@@ -6,6 +6,8 @@ public sealed class AppSettings
     public bool notificationsEnabled = true;
     public float soundVolume = .594f;
     public float musicVolume;
+    public TaskTab defaultTaskTab = TaskTab.Today;
+    public TaskTab DefaultTaskTab => defaultTaskTab == TaskTab.Daily || defaultTaskTab == TaskTab.Todo ? defaultTaskTab : TaskTab.Today;
     public string dashboardRanking = nameof(LeaderboardKind.FocusMinutes);
     // Missing fields in older saves are false, so every existing card stays visible.
     public bool hideDashboardRanking, hideDashboardTasks, hideDashboardDailyRewards, hideDashboardFocus, hideDashboardCharacter;
@@ -19,6 +21,7 @@ public sealed class AppSettings
         value ??= new AppSettings();
         value.soundVolume = Volume(value.soundVolume, .594f);
         value.musicVolume = Volume(value.musicVolume, 0);
+        value.defaultTaskTab = value.DefaultTaskTab;
         value.dashboardRanking = value.DashboardRanking.ToString();
         return value;
     }

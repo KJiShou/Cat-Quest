@@ -1,5 +1,7 @@
 # Master Loke tutorial and feature access
 
+[English](TUTORIAL_SYSTEM.md) | [简体中文](TUTORIAL_SYSTEM.zh-CN.md)
+
 ## Product behavior
 
 Tasks are available from Lv.1. Focus opens at Lv.2. Boss and Leaderboard open at Lv.5. These rules apply to existing and new saves independently of tutorial completion. Dashboard, Tasks, Settings, Chat and the existing equipment-unlock rule are unchanged. Later bosses retain their previous-victory and Lv.10/Lv.20 requirements. Master still requires a Boss 3 victory.
@@ -31,7 +33,7 @@ Boss uses seven explanations: selected enemy, cat health/stats, the stage select
 
 Focus is a seven-step guide: Pomodoro purpose, timer modes, focus duration, Rest duration, optional tags, finish/cancel behavior, then Start. Continue advances the descriptive steps. Settings changes never advance it automatically. The final Start step requires an actual click on Start Focus. The step is saved through the existing tutorial-state path. Help restarts this sequence. Finishing an explanation never starts a session.
 
-Equipment uses seven Continue-driven explanations in Cat Home: mastery rewards and the empty Backpack, the three slots, category filters, equip/unequip, upgrade costs and the Cat Level limit, Auto Select, and set bonuses. The navigation explanation waits for Continue before opening Cat Home. These steps do not enable equipment actions or spend currency. equipmentStep persists explanation progress; Settings > Help > Rewards continues into this guide and restarts it. Existing read receipts remain respected. New equipment text uses the existing text reveal fallback until matching voice clips are authored.
+Equipment uses seven Continue-driven explanations in Cat Home: mastery rewards and the empty Backpack, the three slots, category filters, equip/unequip, upgrade costs and the Cat Level limit, Auto Select, and set bonuses. The navigation explanation waits for Continue before opening Cat Home. These steps do not enable equipment actions or spend currency. equipmentStep persists explanation progress. Settings > Help > Rewards continues into this guide and restarts it. Existing read receipts remain respected. New equipment text uses the existing text reveal fallback until matching voice clips are authored.
 
 The tutorial highlight retains all three SimpleCasual rounded layers, using project-owned copies with nine-slice borders and Sliced Images so corners are not stretched. The dimming overlay and input restrictions are unchanged.
 

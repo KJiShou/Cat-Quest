@@ -210,6 +210,8 @@ public static class TaskSystemVerification
             VerifyNewerSaveProtection(folder);
             report.Add("PASS: future primary/backup/missing/corrupt combinations, service initialization, retries/reload and external replacement preserve every original byte; future candidate rejected; supported saves remain writable.");
             VerifyTagIdentityAndColors(folder);
+            TaskCalendarVerification.Run();
+            report.Add("PASS: calendar read-only projection, date boundaries, daily previews/history, filters, undo and rollback.");
             report.Add("PASS: stable tag IDs/name/color edits, live filters, immutable history colors, validation, failed-write rollback/retry, deletion/stale edits, additive legacy load/backup and reload.");
             VerifyReopeningAndOverdue();
             report.Add("PASS: reopen ordinary/current Daily, history restrictions, duplicate clicks, retained rewards/progress, restored receipts, failed-write rollback, date-only overdue deadlines, legacy history compatibility.");

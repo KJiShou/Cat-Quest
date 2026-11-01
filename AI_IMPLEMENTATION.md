@@ -1,11 +1,13 @@
 # AI Chat and task proposals
 
+[English](AI_IMPLEMENTATION.md) | [简体中文](AI_IMPLEMENTATION.zh-CN.md)
+
 ## Product behavior
 
 The Chat navigation page replaces automatic difficulty advice. The existing AI
 settings retain browser sign-in, disconnect, model selection and usage management.
 Old `automatic` preferences are ignored. There are no background task-analysis
-requests. New proposals default to Medium; editing preserves the existing
+requests. New proposals default to Medium. Editing preserves the existing
 manual difficulty, and only the user can change it in the review form.
 
 Chat supports conversation, task lookups, new task proposals and edits to existing
@@ -31,18 +33,18 @@ writes leave local task data intact. Completion and reward rules are unchanged.
 
 Only user-sent messages and requested task facts are sent using the connected
 ChatGPT plan. Credentials remain protected by Windows DPAPI. The single chat is
-stored separately in `ai/chat.dpapi`, also protected by DPAPI; it never changes
+stored separately in `ai/chat.dpapi`, also protected by DPAPI. It never changes
 the player-save schema. Clearing chat keeps saved tasks.
 
 Requests include up to 20 recent messages / 16,000 text characters. Each message
 is limited to 2,000 characters. Older conversation is still visible locally but
 may not be sent. Fresh task lookups resolve current facts. One request runs at a
-time; stop, disconnect, model changes and clear discard late responses. Changing
+time. Stop, disconnect, model changes and clear discard late responses. Changing
 pages retains the session. Failed requests can be retried.
 
 The main Unity process owns queries and confirmation. The Companion does not
 initialize AI. Tests use injected stores or isolated directories and never use the
-live player save. Ordinary JSON remains bounded to four million characters;
+live player save. Ordinary JSON remains bounded to four million characters.
 transport retains its separate SSE/output limits and 20-second request deadline.
 
 ## UI and implementation
@@ -53,7 +55,7 @@ Source reference: SimpleCasual `Preview/042_Chat.png`,
 Project-owned Chat, ChatMessage and ChatTaskDraft prefabs reuse existing task
 editing, SidebarNavigationButton and JuicyButton components. Existing Fredoka
 fonts are retained, with a runtime Windows Microsoft YaHei fallback for
-Chinese in Chat and saved tasks; vendor assets and primary typography remain unchanged.
+Chinese in Chat and saved tasks. Vendor assets and primary typography remain unchanged.
 
 AI Settings opened from Chat dismisses directly back to Chat and restores focus
 to its settings button. Opening AI from general Settings retains its normal back
@@ -85,7 +87,7 @@ manual verification gaps are recorded in the implementation delivery report.
 
 ## Historical difficulty-advice verification (superseded)
 
-The earlier difficulty-advice implementation was tested on 2026-10-24; these results do not validate Chat.
+The earlier difficulty-advice implementation was tested on 2026-10-24. These results do not validate Chat.
 
 - Current data/protocol/transport and existing task/reward/settings/Google-account
   regressions passed in
@@ -100,11 +102,11 @@ The earlier difficulty-advice implementation was tested on 2026-10-24; these res
   `Builds/SettingsVerification/Build-20261024-042805/CatQuest.exe`.
 - Real Windows player verification passed in
   `Temp/AiWindowsSmoke/20261024-122146/result.json`: the user's browser authorization
-  established the independent Cat Quest connection; the corrected build restored
+  established the independent Cat Quest connection. The corrected build restored
   DPAPI credentials after restart, loaded the account's models, forced a serialized
   token refresh, completed one synthetic inference and revoked/disconnected the
   session. `ai-player.png` captures the final state. Only encrypted registration
-  remains; test tokens were cleared. `live-save-after.json` confirms the live
+  remains. Test tokens were cleared. `live-save-after.json` confirms the live
   player-save SHA-256 is unchanged.
 
 The real account's catalog exceeded the original 256 KiB HTTP and JSON limits.
@@ -112,10 +114,9 @@ The separate limits were corrected together, covered by the transport regression
 and rebuilt. Earlier failed runs are retained as diagnostic history, not passes.
 
 Real provider-side denial, exhausted quota, outages and two-minute browser timeout
-were not all exercised with this account; protocol/transport negative checks use
+were not all exercised with this account. Protocol/transport negative checks use
 isolated synthetic fixtures. Google account regression used the existing verifier,
 not a fresh live Google/Firebase login. This is a Windows local prototype only.
-
 
 ## Official protocol references
 
@@ -124,34 +125,33 @@ not a fresh live Google/Firebase login. This is a Windows local prototype only.
 - [Preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 - [Accounts and sessions](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
 
-## Current Chat verification, 2026-10-24
+## Historical Chat verification, 2026-10-24
 
 Data/protocol/task/account/settings regressions passed in
 `Library/AiVerification/Data-20261024-063908/result.txt`. Play Mode checks and
 reviewed screenshots are in `Library/AiVerification/Play-20261024-063950/`.
 The Development Windows build `Builds/SettingsVerification/Build-20261024-064040/`
 completed with zero errors. An isolated Windows batch-mode mock chat and restart
-passed; this does not establish live ChatGPT inference or native interaction.
+passed. This does not establish live ChatGPT inference or native interaction.
 Use `--ai-smoke --ai-chat-offline --smoke-dir <isolated-directory>` with the marker
-for this mock mode; normal `--ai-smoke` still requires user browser authorization.
+for this mock mode. Normal `--ai-smoke` still requires user browser authorization.
 Full evidence, limitations and source hashes are recorded under
 `Library/AiVerification/Delivery-20261024-0644/`.
-
 
 ## Sensei chat presentation
 
 Chat uses the existing Sensei idle texture in editable circular portrait masks,
 with a face crop in the header and assistant message template. The model persona
-is Sensei, a patient mentor; query and task-confirmation permissions are unchanged.
+is Sensei, a patient mentor. Query and task-confirmation permissions are unchanged.
 The three project Chat prefabs retain their existing objects and bindings. A
 padded surface leaves the application background visible around the page.
 SimpleCasual `042_Chat`, `ChatFrame01,02_Light-Group`, and `Caht/CharacterFrame`
-provide the reference; task-style PictoIcons and the Tasks Today icon accompany
+provide the reference. Task-style PictoIcons and the Tasks Today icon accompany
 controls and draft proposals. Existing Fredoka and JuicyButton feedback remain.
 
 Presentation verification and limitations are recorded in
 `Library/AiVerification/Sensei-20261024/report.md`. The earlier Windows build
-predates this visual refinement; this UI-only revision was checked in the open
+predates this visual refinement. This UI-only revision was checked in the open
 Unity Editor, not rebuilt for Windows.
 
 ## Model dropdown and live Windows follow-up
@@ -167,30 +167,30 @@ limits, including the earlier invalid aggregate result and its corrected check.
 
 Messages show the existing player portrait on the right and Sensei on the left,
 with separate larger speaker labels and plain-text message bodies. The header
-uses only Sensei. Disabled Chat controls use neutral grey; the pending label
+uses only Sensei. Disabled Chat controls use neutral grey. The pending label
 animates individual glyph vertices with unscaled time and resets on stop/disable.
-Idle proposal/context reminders and the review instruction line are removed;
+Idle proposal/context reminders and the review instruction line are removed.
 errors and committed save outcomes remain visible.
 
 Draft cards reuse Tasks difficulty badge sprites, schedule/subtask/tag icons and
 coloured tag chips. Review uses the existing editor in a bounded, centred panel
-with a full Canvas dimmer and fixed footer; only its form content scrolls.
+with a full Canvas dimmer and fixed footer. Only its form content scrolls.
 
 AI Settings > Reply language supports Auto (latest user message), English and
-Simplified Chinese. Preferences remain separate from player data; existing
+Simplified Chinese. Preferences remain separate from player data. Existing
 connections default to Auto without resetting login. Explicit language overrides
 prior conversation language in the request instructions. Language/model changes
 cancel pending chat. Existing task titles stay intact when referred to.
 
 The bounded `tags` lookup exposes only existing tag IDs/names. Model drafts may
-select existing tagIds; unknown IDs are rejected. Omitted tagIds preserve an
+select existing tagIds. Unknown IDs are rejected. Omitted tagIds preserve an
 edited task's tags. AI never creates tags, chooses difficulty or grants rewards.
 
 Current evidence: Library/AiVerification/ChatPolish-20261024/report.md.
 
 ### Per-turn language drift guard
 
-Auto resolves English/Chinese from the latest user message once per turn; explicit
+Auto resolves English/Chinese from the latest user message once per turn. Explicit
 settings take precedence. Task/tag lookups and retries within the turn reuse that
 language instead of redetecting it from returned task data or old replies.
 Other scripts remain model-detected in Auto. This small script heuristic is not a
@@ -199,6 +199,6 @@ general language detector (for example, it cannot distinguish English/French).
 Before publishing a final reply, obvious Cyrillic drift in English/Chinese or Han
 drift in English triggers one regeneration using the same facts. Exact user text
 and retrieved task text are exempt so task names can retain their original script.
-A second mismatch or additional lookup during correction fails with Retry; rejected
+A second mismatch or additional lookup during correction fails with Retry. Rejected
 messages and drafts are never saved. Cancellation discards late corrections.
 Existing history is retained, including old wrong-language replies.

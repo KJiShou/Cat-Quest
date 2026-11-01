@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible Cat Quest problem using sanitized evidence.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "For vulnerabilities, follow SECURITY.md instead. Never attach account credentials, real player saves or private task/chat content."
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What went wrong, and which page or feature is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Use a minimal example with synthetic tasks. Include the selected mode and relevant level/state.
+      placeholder: "1. Open...\n2. Select...\n3. Observe..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit or build identifier, Windows version, Unity version, Editor or built player, window resolution and sidebar state if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Optional screenshots, short recording or relevant error excerpt. Remove personal information first.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked existing issues and the README troubleshooting section.
+          required: true
+        - label: This report contains no credentials, personal task/chat content or real player save.
+          required: true

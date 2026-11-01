@@ -28,6 +28,8 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public SettingsTagRow tagRowTemplate;
     public Button googleSignIn, signOut, savePlayerName, retryUpload, replaceStatistics;
     public Button[] backdropButtons;
+    public Button[] defaultTaskTabs;
+    TaskTab selectedTaskTab;
     public Button[] dashboardRankings;
     public Sprite rankingNormal, rankingSelected;
     public Toggle showDashboardRanking, showDashboardTasks, showDashboardDailyRewards, showDashboardFocus, showDashboardCharacter;
@@ -82,6 +84,16 @@ public sealed class SettingsPanelUI : MonoBehaviour
                 selectedRanking = kind;
                 SaveSettings();
                 RefreshRankingSelection();
+            });
+        }
+        for (int i = 0; i < defaultTaskTabs.Length; i++)
+        {
+            var tab = (TaskTab)i;
+            defaultTaskTabs[i].onClick.AddListener(() => {
+                if (selectedTaskTab == tab) return;
+                selectedTaskTab = tab;
+                SaveSettings();
+                RefreshTaskTabSelection();
             });
         }
         tagName.onValueChanged.AddListener(_ => UpdateTagPreview());
@@ -210,6 +222,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         draft.notificationsEnabled = notifications.isOn;
         draft.soundVolume = sound.value;
         draft.musicVolume = music.value;
+        draft.defaultTaskTab = selectedTaskTab;
         draft.dashboardRanking = selectedRanking.ToString();
         draft.hideDashboardRanking = !showDashboardRanking.isOn;
         draft.hideDashboardTasks = !showDashboardTasks.isOn;
@@ -217,6 +230,15 @@ public sealed class SettingsPanelUI : MonoBehaviour
         draft.hideDashboardFocus = !showDashboardFocus.isOn;
         draft.hideDashboardCharacter = !showDashboardCharacter.isOn;
         return draft;
+    }
+    void RefreshTaskTabSelection()
+    {
+        for (int i = 0; i < defaultTaskTabs.Length; i++)
+        {
+            bool selected = i == (int)selectedTaskTab;
+            ((Image)defaultTaskTabs[i].targetGraphic).sprite = selected ? rankingSelected : rankingNormal;
+            defaultTaskTabs[i].GetComponentInChildren<TMP_Text>().color = selected ? Color.white : settingsInk;
+        }
     }
     void RefreshRankingSelection()
     {
@@ -251,6 +273,8 @@ public sealed class SettingsPanelUI : MonoBehaviour
     void RefreshSettings(bool clearStatus = true)
     {
         var saved = service.Settings;
+        selectedTaskTab = saved.DefaultTaskTab;
+        RefreshTaskTabSelection();
         selectedRanking = saved.DashboardRanking;
         RefreshRankingSelection();
         refreshing = true;

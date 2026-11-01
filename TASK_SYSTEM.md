@@ -1,116 +1,125 @@
-# Cat Quest 任务系统
+# Task system and productivity rewards
 
-MainMenu 的任务 UI 现在由真实任务数据驱动。运行 MainMenu 即可使用，无需先进入 IntroStory；已有用户名存档会保留。
+[English](TASK_SYSTEM.md) | [简体中文](TASK_SYSTEM.zh-CN.md)
 
-## 使用方式
+Open `Assets/Scenes/CharacterHome.unity` for the main UI, or start through `CatQuestBootstrap.unity` for onboarding. Existing player names and progress are retained. The sidebar provides Dashboard, Tasks, Chat, Focus, Boss, Cat Home and Leaderboard. Later features are implemented, not placeholder containers. Feature gates are described in [Tutorial](TUTORIAL_SYSTEM.md).
 
-左侧导航可切换 Dashboard、TaskManager、Focus、Boss、Cat Home 和 Leaderboard。前两项使用原有页面；后四项为预留页面容器。切换页面时提交非空快速输入并丢弃尚未保存的编辑草稿，返回 TaskManager 时刷新日期和任务。右上角显示鱼币和 Ticket；旧存档缺少 Ticket 时从 0 开始，不转换已有 XP。
-左侧当前页面保持原有 `Button_Nav` 的 Selected 动画（紫色背景、白色文字）。鼠标移开或输入焦点转移到搜索等控件时，选中样式仍保持；不额外显示蓝色指示线。
+## Task views and interaction
 
-- **Today**：今天和逾期未完成的普通任务，以及今天未完成的每日任务。
-- **Daily Tasks**：每日模板及今天的完成状态；到设备本地午夜会切换当天状态。未来开始的每日任务不能提前完成。
-- **Todo**：所有未完成的普通任务，包括没有 Schedule 的任务。
-- **Tags**：按照标签分组显示未完成任务；多标签任务出现在对应的每个分组，没有标签的任务放在 No Tags。管理标签入口暂不放在此页。
-- **History**：已完成记录，按完成时间倒序；详情只读。仍存在的普通任务和今天的每日任务可通过左侧勾选框撤销完成；往日每日记录和已删除任务的勾选框禁用。
+| View | Contents |
+| --- | --- |
+| Today | Today's and overdue unfinished scheduled Todo items, plus eligible unfinished daily occurrences |
+| Daily Tasks | Daily templates and today's completion state. Future-start templates cannot be completed early |
+| Todo | Unfinished one-off and daily tasks, grouped by date |
+| Tags | Active tasks grouped by tag, including multiple groups for multiple tags and No Tags for untagged tasks |
+| History | Completion records, newest first, with read-only details |
 
-未选择任务时仅显示全宽任务列表；点击任务行显示右侧详情，点击 **Edit** 打开编辑草稿。切换 Tab、筛选移除选择或完成后任务离开列表时，恢复全宽列表。
-点击详情及任务行以外的区域可关闭详情并恢复全宽列表；详情内操作不会关闭面板，正在编辑的草稿和已打开的弹窗不受外部关闭影响。描述按实际可用宽度换行并同步实际区域高度，空描述不显示空白区域。
-点击 **+** 在左边直接输入标题，同时隐藏加号；按 Enter 保存非空标题后继续输入下一项。点击其他位置时保存非空标题并收起输入行、恢复加号，空白输入不建立任务，Escape 取消。
-编辑中的 **Save Changes** 才会提交；**Cancel / ×** 丢弃编辑草稿。空白子任务行不保存。
+The sidebar retains its selected purple/white `Button_Nav` styling after pointer exit or focus changes. Switching pages commits nonempty quick input and discards unsaved edit drafts. Returning to Tasks refreshes the date. In List it opens the saved default tab (Today, Daily Tasks or Todo); an active Calendar retains its current view. Explicit task links still select their destination.
 
-创建任务时，Today 默认安排今天，Todo 默认没有安排，Daily Tasks 默认每日重复。Repeat daily 会要求 Schedule。Schedule 只选择日期，不提供时间选择；列表、快速输入和详情仅显示安排日期。History 仍显示实际完成日期与时间。旧存档的 minuteOfDay 字段保留兼容，编辑时保留原值，但不再参与日程校验、排序或逾期判断，无需迁移或重置存档。
+Without a selection, the list fills the page. Selecting a row opens details, and Edit opens an independent draft. A tab/filter change or completion that removes the selected item restores the full-width list. Clicking outside rows/details closes ordinary details but does not discard an edit draft or interfere with an open modal. Descriptions wrap to available width and empty descriptions reserve no blank area.
 
-详情页勾选子任务立即保存。Complete 会在还有未完成子任务时要求确认，然后一起完成并领取奖励。
-任务行左侧勾选框可直接完成任务，沿用未完成子任务确认；该点击不会选择任务行。History 和 Daily 当天已完成任务的勾选框可撤销完成，不弹确认。撤销保留子任务进度和已获奖励，同一次任务重新完成恢复原历史记录、更新时间，不重复发奖。未完成普通任务在安排日期的次日本地午夜起视为逾期，日期在列表和详情显示红色；安排当天不逾期。每日任务以当天为执行日期，当天不逾期，午夜后继续沿用每日重置规则。相同日期的任务按标题排序，不再使用旧时间。
-Easy / Medium / Hard 的 Lv.1 基础奖励分别为 **15 / 25 / 40 EXP 和 6 / 10 / 16 鱼币**；存档内部保留 Normal 的枚举编号，界面统一显示 Medium。普通任务一次，每日任务每个日期一次。任务每日基础上限为 150 EXP 和 60 鱼币；奖励与上限都按结算前等级的 `1 + 0.1 × (等级 − 1)` 倍率提升，分别按剩余额度裁剪；达到上限仍记录任务完成。每天首个首次结算的有效任务自动给予 1 张 Ticket，与货币上限独立；撤销或重做不会重复发放。新存档余额从 0 开始，场景里的示例任务和 500 不导入数据。
+The **+** action opens quick title input. Enter saves a nonempty title and allows another entry. Clicking elsewhere saves nonempty input and closes it. Empty input creates nothing and Escape cancels. Only **Save Changes** commits edits. Cancel/close discards them and blank subtask rows are excluded.
 
-删除任务先确认；删除每日模板停止后续重复，历史和奖励仍保留。删除标签仅解除当前任务的标签关联，历史快照不变。
+Today defaults to today's date, Todo to no schedule and Daily Tasks to daily repetition. Repetition requires a start date. Scheduling is date-only. History still shows actual completion date/time. Legacy `minuteOfDay` is retained when editing but does not control validation, ordering or overdue status. No save reset is needed.
 
-搜索匹配标题、描述和标签；Filter 可叠加难度和多个标签。Today、Daily Tasks、Todo 的数字表示该 Tab 的完整集合；Tags 和 History 不显示数字徽章，搜索筛选只影响当前列表。当前筛选排除刚保存的任务时，选择状态清空；任务仍能从对应 Tab 找到。
+Subtask checkboxes save immediately. Completing a task with unfinished subtasks requires confirmation, then completes them together. The row checkbox completes without selecting its row. History and today's completed daily items allow eligible undo without confirmation. Older daily occurrences and deleted tasks cannot be restored. Undo keeps subtask progress and paid rewards. Recompletion restores/updates the original history receipt without paying again.
 
-## 数据如何串联
+Todo becomes overdue at local midnight after its scheduled date, shown in red. Daily tasks use today's occurrence and midnight reset rules. Unfinished daily occurrences become Missed without rewards. Equal-date items sort by title. Daily state is created on first access and refreshed at midnight, return or restart, without fabricating every offline date. Template edits affect current unfinished and future occurrences, not completed history.
 
-`GameDataManager` 管理唯一存档和 `TaskService`，保留 SetUsername / GetUsername / HasUsername / SaveData 接口。
+Deletion requires confirmation. Removing a daily template stops future recurrence while retaining history/rewards. Deleting a tag detaches current associations without changing history snapshots. Tag management is in Settings. Search matches title, description and tags. Difficulty and multiple tag filters combine. Today/Daily/Todo badges show each full collection, not the filtered count. Tags/History have no count badge. A saved task excluded by the filter remains saved even when selection clears.
 
-`PlayerData` 增加版本、鱼币、Ticket、总 XP、任务、标签、执行进度和完成历史：
+Todo uses nonempty Due, Daily, Today, Tomorrow, This Week, Next Week, This Month, Next Month, Later and No Date groups, with the existing Tags heading treatment. Due means before today. Weeks run Monday–Sunday; the most specific matching group wins, so tasks are never duplicated across date groups. Search/difficulty/tag filters apply before grouping. Future daily templates stay in Daily with the existing eligibility restriction. The Todo badge includes its unfinished daily tasks; the service's one-off `Query(TaskTab.Todo)` contract remains unchanged.
 
-- `QuestTask` 是任务定义，任务、标签和子任务均使用 GUID。
-- `TaskOccurrence` 是实际执行状态：普通任务的 day 为 once；每日任务的 day 为本地 yyyy-MM-dd。记录子任务进度、完成状态和奖励是否已发放。
-- `TaskCompletion` 保存完成时的标题、描述、标签名称、子任务、难度和奖励快照，编辑模板不会重写历史。`revoked` 标记撤销记录，旧存档缺少该字段时默认 false；重新完成会更新该记录的完成快照，原奖励金额保留。
+Dashboard keeps Daily Tasks and Today's Tasks (including overdue Todo items), then adds only nonempty upcoming date/Later/No Date groups. Clicking any one-off task opens and selects it in Todo. Task completion, rewards and recurrence rules are unchanged.
 
-`TaskService` 是统一业务入口：Upsert、Delete、SetSubtask、Complete、UndoCompletion、CanUndoCompletion、IsOverdue、SaveTag、DeleteTag、Query 和 RefreshDate。撤销使用 History 记录 ID，并校验任务仍存在及执行日期可恢复。变更先复制数据、验证和存档，成功后发出 Changed；写入失败不替换内存数据。
+## Calendar view
 
-`TaskSystemUI` 绑定 MainMenu 的列表、详情、Tabs、HUD、搜索和对话框。`EditTaskDetailsUI` 只管理独立草稿。标签选项从存档目录读取，按照稳定 ID 保存；多选勾选和标签 × 删除同步。
+Tasks has a List / Calendar switch. List keeps the five existing tabs and the configured default tab; Calendar is a separate month view with independent search, difficulty/tag filters and a Show completed toggle (on by default). View/month/selection survive navigation within the process, without adding save fields.
 
-每日状态在当天首次访问时创建。午夜、返回游戏或重新启动时刷新，不补生成离线期间的日期。每日模板修改影响当前未完成项目及后续日期，已完成历史保留。
+The calendar starts on Monday and shows six weeks. Todo stays on its scheduled date, including overdue items. Completed Todo uses the original receipt snapshot schedule, not its completion date. No Date contains unscheduled Todo. Clicking a date opens a day drawer; clicking a title opens the existing details presentation. New tasks inherit the selected date (or no schedule from No Date). Editing, completion, confirmation, deletion and eligible undo use the existing task service. Save failure keeps the draft open.
 
-## 存档位置与恢复
+Today’s Daily entries are actionable. Future Daily entries are read-only previews from current templates and their start dates; Edit daily task edits the template without changing today’s subtask progress. Previews cannot complete or update subtasks. Past days show saved completion snapshots and aggregate saved missed occurrences only. Offline gaps are not fabricated; missed aggregates are hidden with metadata filters because old occurrences lack historical metadata. Calendar queries never persist or create occurrences.
 
-文件：`Application.persistentDataPath/catquest-data.json`。
+The drawer appears beside the month when both Canvas space and rendered width allow it; otherwise it overlays the month. This accounts for Canvas scaling at 1280×720. Only the drawer scrolls. Arrow keys navigate focused dates, Enter opens one, Page Up/Down changes month, and Escape backs out of the topmost calendar state. Editing blocks the month and view switch.
 
-Windows 当前项目默认路径为：
-`%USERPROFILE%\AppData\LocalLow\DefaultCompany\Cat Quest\catquest-data.json`
+Calendar assets are editable project prefabs under `Assets/Prefabs/Task/Calendar`. The view switch retains Tasks/TabMenuFrame styling; controls reuse SimpleCasual Button_Round01 and the existing task date picker, row, details and editor. Do not regenerate the Tasks page.
 
-- 旧的仅含 username 的 JSON 自动扩展为 version 2。
-- 保存先写 `.tmp`，再原子替换主文件，上一份有效数据保存为 `.bak`。
-- 主文件无法读取时尝试备份，并显示恢复提示。
-- 损坏的主文件在恢复保存时另存为 `.corrupt.<GUID>`；有效备份不被损坏内容覆盖。
-- 玩家用户名、任务进度、完成记录和奖励在同一份数据中保存。
+Calendar projection regressions run within Verify Task System (and its existing aggregates). `Temp/verify-task-calendar.request` runs the isolated calendar Play flow; results and screenshots are in `Library/TaskCalendarVerification/`. Verification does not install or repair UI assets.
 
-不包含云同步、通知提醒或装备系统。右上角第二种资源为 Ticket，不显示 XP，任务完成不会增加 Ticket。
+## Ownership and persistence
 
-## Dashboard 与奖励 / Focus
+`GameDataManager` owns the shared store and `TaskService`, retaining SetUsername/GetUsername/HasUsername/SaveData APIs. `TaskSystemUI` binds the list, details, tabs, HUD, search and dialogs. `EditTaskDetailsUI` owns only its draft.
 
-Dashboard 默认打开；中间沿用 Ninja Cat 角色和现有预览，标题显示玩家名字，显示真实 LV、等级内 EXP 和进度。等级行复用 `Lobby_Popup_User_Info` 的 LV 数字与绿色经验条。等级从 1 开始，每级需要 `100 + 25 × (当前等级 − 1)` EXP；一次奖励可以连续升级。三个装备槽复用 `Equipment` 的灰色空槽，排列在角色下方，不显示槽位文字；本次不显示虚构 Rank、Power 或已装备物品。
+- `QuestTask` defines tasks. Tasks, subtasks and tags have stable GUIDs.
+- `TaskOccurrence` records subtask progress, completion and reward settlement. Its day is `once` for Todo or local `yyyy-MM-dd` for daily tasks.
+- `TaskCompletion` snapshots title, description, tags, subtasks, difficulty and actual rewards. `revoked` tracks undo, defaulting to false for older saves. Recompletion updates the completion snapshot but retains original paid amounts.
+- `TaskService` handles Upsert, Delete, SetSubtask, Complete, UndoCompletion, CanUndoCompletion, IsOverdue, SaveTag, DeleteTag, Query and RefreshDate. Undo validates the history ID, surviving task and eligible date. Mutations copy, validate and save before Changed is emitted. Failed writes do not replace committed memory.
 
-右侧 Daily Mission Rewards 保留原有两张卡片。Task 卡先显示完成 1 个任务（基础 10 EXP + 5 鱼币），领取后显示完成 3 个不同任务执行记录（额外 20 EXP + 10 鱼币）；Focus 卡为当天累计有效 Focus 满 25 分钟（10 EXP + 5 鱼币）。奖励按领取前等级的 `1 + 0.1 × (等级 − 1)` 倍率分别向下取整，每个阶段每天各领一次；领取后显示实际收据，不占基础奖励额度。首个 Task 的自动 Ticket 不需要点击 Claim。提前结束的 Focus 也计入目标，按秒累加，进度显示完整分钟；旧存档兼容已记录分钟。外观复用现有 `Mission` 组件，沿用 Claim / In Progress / Claimed 状态。Daily Task 和普通 Todo 都算，子任务不单独计数。撤销减少未领取目标进度，已领取奖励保留；重做不会重复发奖。本地午夜重置，不结转未领取奖励。
+Save: `Application.persistentDataPath/catquest-data.json`. Current Windows default: `%USERPROFILE%\AppData\LocalLow\DefaultCompany\Cat Quest\catquest-data.json`.
 
-Focus 页提供番茄钟（专注/休息各 1–60 分钟，默认 25/5）、正计时及倒计时（1–180 分钟）。仅番茄钟在成功结算后进入 Rest；正计时可超过三小时并手动结束。正常结束或主动 End Focus Early 按完整有效分钟结算：每分钟基础 0.5 EXP，每完整 5 分钟基础 1 鱼币，先乘会话开始时等级倍率再向下取整；每完整 25 分钟 1 Ticket。完整间隔按单次会话计算，不拼接短会话。每次最多前 180 分钟、三种模式每天共享前 240 分钟可获得 EXP / 鱼币，Focus 每天最多 3 张 Ticket（独立于 Task 的 1 张及升级赠票）。完整 25 分钟仍满足目标，即使基础奖励额度已耗尽。
+Writes use `.tmp`, atomic replacement and a rolling `.bak`. An unreadable main file falls back to a valid backup with a notice. Recovery preserves the corrupt original as `.corrupt.<GUID>` rather than overwriting a good backup with corrupt content. Username, tasks and progression share the local save. Schema 5 preserves earlier username-only, task and Focus schemas. Online publication is not cloud-save restoration.
 
-Focus 计时由持久化管理对象维护，切换页面和切换到其他应用继续计时。设备休眠、暂停或超过 10 秒无法验证的播放器更新间隔使当前 Focus 失效；重启不会奖励未完成会话。Cancel 不发奖、不开始 Rest；End Focus Early 保留完整分钟的奖励。保存成功后才进入 Rest，失败会冻结结算并提供 Retry Save，避免重复发奖。Rest 不发奖，可提前结束；结束后提供再次 Focus 或返回 Dashboard。跨午夜 Focus 归入结算日。
+## Rewards and daily goals
 
-存档升级到 version 3，新增每日奖励额度/Claim 状态和独立 Focus 会话收据。旧余额、Ticket、任务难度编号和历史实际奖励保留；已有当天任务收据计入额度，不补发新旧奖励差额。
+At Lv.1, Easy/Medium/Hard pay **15/25/40 EXP** and **6/10/16 Fish Coins**. The saved Normal enum remains compatible and displays as Medium. Each Todo pays once and each daily occurrence pays once per date. Task daily bases are **150 EXP and 60 Fish**. Amounts and caps scale with the pre-settlement level using `1 + 0.1 × (level - 1)`, then floor and clip each currency to its remaining allowance. Completion is recorded even at the cap. The first valid first-time settlement each day gives one automatic Ticket independently of currency caps. Undo/recompletion cannot duplicate it. New saves start at zero, not scene mock balances.
 
-Unity 菜单 **Tools → Cat Quest → Verify Rewards and Focus** 验证奖励分档、上限、独立目标、撤销、午夜、Focus 结算/重试/取消/Rest、迁移及等级，并运行现有任务和 CharacterHome 检查。结果位于 `Temp/reward-system.verification`。
+At Lv.30, Medium pays 97 EXP/39 Fish and task caps are 585 EXP/234 Fish. Previews share settlement math. Paid currency, including revoked receipts, consumes allowance. Undo does not release allowance.
 
-Unity 菜单 **Tools → Cat Quest → Verify Dashboard Rewards Play Flow** 在实际 Play Mode 中使用隔离存档，验证 Claim、Focus 快捷入口、页面切换、HUD/等级刷新、Rest 与取消，并检查 1280×720 / 1920×1080 的界面。截图位于 `Library/DashboardRewardPlayVerification/<GUID>/`，结果位于 `Temp/dashboard-reward-play.verification`。共享界面保存在 Canvas prefab，可在编辑器定点调整；保留的整页生成器不应用于修改已有界面。
+Dashboard shows the real name, level, within-level EXP, equipped slots and authoritative stats/Power. Its LV/green bar derives from `Lobby_Popup_User_Info`. Levels start at 1 and require `100 + 25 × (current level - 1)` EXP per level. One reward can cross multiple levels.
 
-## 可重复验证
+The existing two Daily Mission Rewards cards use Mission visuals and Claim/In Progress/Claimed states:
 
-Unity 菜单 **Tools → Cat Quest → Verify Task System**：
-验证 CRUD、草稿隔离、筛选、标签关联、奖励去重、撤销／重新完成、历史恢复限制、按日期逾期及排序、旧时间兼容、午夜、未来开始日期、不补离线日期、旧存档迁移、失败回滚及备份恢复。
+| Goal | Base bonus |
+| --- | --- |
+| First completed task | 10 EXP + 5 Fish |
+| Three distinct task occurrences, after the first goal | An additional 20 EXP + 10 Fish |
+| 25 accumulated eligible Focus minutes | 10 EXP + 5 Fish |
 
-Unity 菜单 **Tools → Cat Quest → Verify MainMenu Play Flow**：
-在 MainMenu 的 Edit Mode 执行，自动进入 Play Mode，验证实际 UI 操作与落盘，结束后退出 Play Mode。测试使用 `Library/TaskSystemPlayVerification/<GUID>/save.json`，不写入真实玩家存档。
+Each stage is claimable once daily. Bonuses scale/floor at claim level and do not consume base allowances. Todo and daily occurrences count, subtasks do not. Undo lowers unclaimed progress but keeps paid bonuses. Recompletion cannot pay twice. Local midnight resets goals without carrying unclaimed bonuses forward. End Early seconds count toward Focus goals, with displayed progress floored to minutes and legacy-minute fallback. The automatic first-task Ticket requires no Claim click.
 
-测试报告位于 `Temp/task-system.verification` 和 `Temp/task-system.play-result`。
+## Focus settlement
 
-## Optional AI Chat
+Pomodoro uses 1–60 minute Focus/Rest selectors, default 25/5. Stopwatch counts up beyond three hours. Countdown accepts 1–180 minutes. Only Pomodoro enters Rest after successful settlement. The current Pomodoro UI offers confirmed Cancel, while Stopwatch End Focus and Countdown End Focus Early retain earned-time settlement. The underlying and historical End Early rules remain supported.
 
-Chat can query tasks and propose new tasks or edits. Each proposal requires local
-review and confirmation. Difficulty is manual: new tasks default to Medium and
-edits preserve their previous value. Task completion/rewards never depend on AI.
+Currency bases are 0.5 EXP per complete minute and 1 Fish per complete 5 minutes, multiplied using the session-start level before flooring. Only the first 180 minutes per session and 240 minutes per day earn currency across all modes. Tickets use complete 25-minute intervals with a separate 3-per-day Focus cap. Short sessions are not joined for ticket/fish intervals. A valid 25-minute session can still meet the daily goal after currency limits are exhausted.
 
-`TaskService.ConfirmChatDraft` reuses the existing atomic upsert validation and
-rejects stale, deleted, settled, duplicate and cross-day proposals. Task text is
-only shared when a chat lookup requests it. See `AI_IMPLEMENTATION.md`.
+The persistent main controller keeps time through page/application changes. Sleep, suspension or an unverifiable update gap over 10 seconds invalidates active Focus. Restart does not reward unfinished sessions. Cancel/invalid/interrupted sessions grant nothing and do not start Rest. Save failure freezes settlement for Retry Save without duplicate rewards. Rest grants nothing and can end early. Sessions crossing midnight belong to the settlement day. See [Focus and Companion](FOCUS_COMPANION.md).
 
-## Level-scaled task rewards (2026-10-25)
+## Compatibility and level-up gifts
 
-Updated 2026-10-31: Task completion uses the Cat Level immediately before settlement, with multiplier `1 + 0.1 * (level - 1)`. Easy/Medium/Hard bases are 15/25/40 EXP and 6/10/16 Fish; multiply and floor separately. Daily bases are 150 EXP / 60 Fish. At Lv.30, Medium pays 97 EXP / 39 Fish; caps are 585 EXP / 234 Fish. Previews share settlement calculations. Paid currency, including revoked receipts, consumes allowance. Undo/recompletion cannot release allowance or repay rewards. First-time settlement of the first task each day pays one automatic Ticket. Goal bonuses follow the two-stage Task and Focus rules above, outside base caps.
+Reward changes dated 2026-10-31 add fields without changing schema 5. Existing balances, receipts and paid daily totals remain even if above new caps. Already-used legacy task days do not gain the new first-task Ticket/goal retroactively. The next day is eligible. Existing Focus goal receipts retain their amounts. Loading alone does not rewrite the save.
 
-Save compatibility: additive fields only; version remains 5. Existing balances, historical receipts and already-paid daily totals are retained even above the new caps. An already-used legacy task day does not retroactively receive the new first-task Ticket or first-task goal bonus; the next local day is eligible. Existing claimed Focus goals retain their old receipt amounts. Loading alone does not rewrite the save; ordinary successful mutations retain atomic save/backup behavior. `Temp/verify-reward-balance.request` runs isolated-save regression checks followed by LevelProgression and the Equipment → Battle → Focus → Rewards → Tasks/CharacterHome chain; result: `Temp/verify-reward-balance.result`.
+Each newly reached level L gives `5 × L` Fish. Multiples of five also give one Ticket. Multi-level gains sum gifts, committed atomically with the triggering reward outside normal allowances. Loading, failed saves, duplicates and undo/recompletion do not backfill or repay them.
 
-## Level-up celebration and gifts (2026-10-25)
+`Assets/Prefabs/LevelUpCelebration.prefab` embeds SimpleCasual Light/LevelUp with project HUD font/icons and JuicyButton. After committed reward feedback, unscaled fade, badge pop and rotating rays present the reached level and total gifts. Continue/Escape dismiss only presentation and notifications queue. Goal labels remain serialized in Canvas.
 
-Every newly reached level L awards 5 × L Fish; reaching a multiple of five also awards one Boss Ticket. Multiple levels sum these gifts. The gifts are persisted atomically with the triggering reward and do not consume task/Focus allowances. Loading an existing save does not backfill gifts; failed saves, duplicate settlement and undo/recompletion do not award them again.
+## Header allowance preview
 
-`Assets/Prefabs/LevelUpCelebration.prefab` embeds the SimpleCasual Light/LevelUp prefab and uses the project HUD font, Fish and Ticket icons, and JuicyButton feedback. After committed reward feedback finishes, it displays the reached level and total gifts with an unscaled fade, badge pop and rotating rays. Continue/Escape dismiss presentation only; consecutive notifications queue. Daily Goal labels use serialized bindings in Canvas.prefab.
+Hover Fish, Ticket or the avatar to see the corresponding allowance. Fish/EXP show Task and Focus bars. Ticket shows paid Task + Focus Tickets out of 4 with the separate 1 + 3 limits. Task bars use level-scaled caps, Focus bars use rewarded minutes and the shared formula at the active reward level. Daily goals and level-up gifts are extra.
 
-### Header reward-limit hover
+`TaskService.TodayRewards` drives the read-only tooltip, refreshed on service changes and dismissed on exit/press, navigation, disable or focus loss. `Assets/Prefabs/RewardLimitTooltip.prefab` retains the EquipmentItemDetail background/shadow/TopFrame and header font. Sliders reuse UserInfo/Slider_Green from SimpleCasual SliderGroup_UserInfo_Light. They have no navigation/callbacks/raycast capture and ignore parent layout. All header targets are serialized without rebuilding the page.
 
-Hover Fish for Fish limits only, Boss Ticket for Tickets only, and the avatar for EXP limits only. Fish and EXP show Task and Focus allowance sliders. Tickets shows combined paid Task + Focus Tickets / 4, with the separate 1 + 3 source limits stated below. Task bars use paid rewards / level-scaled daily caps. Focus bars use rewarded minutes / daily minute allowance, with the currency's nominal daily maximum calculated by the shared reward formula at the active session reward level. Daily Goal and level-up bonuses are extra. The read-only view uses `TaskService.TodayRewards`, updates on service changes, and dismisses on pointer exit/press, page change, disable or focus loss.
+## Optional AI
 
-`Assets/Prefabs/RewardLimitTooltip.prefab` retains the existing EquipmentItemDetail popup background, shadow and TopFrame (SimpleCasual Light/Equipment_Popup_Detail), with the existing header font. Its authored sliders reuse the header UserInfo/Slider_Green, originating from SimpleCasual Prefabs_Component_Sliders/SliderGroup_UserInfo_Light. Sliders are noninteractive, have no navigation or callbacks, and do not intercept raycasts. The CanvasGroup does not block input and the LayoutElement ignores the main container layout. All three header targets are serialized in Canvas.prefab; the original avatar and currency geometry remain intact. No page generation is required.
+Chat queries tasks and proposes creation/edits requiring confirmation. Difficulty is manual, new proposals default to Medium and edits preserve prior values. `TaskService.ConfirmChatDraft` reuses atomic upsert and rejects stale, deleted, settled, duplicate and cross-day proposals. Only requested task facts are shared. See [AI](AI_IMPLEMENTATION.md).
 
-With the project open in Edit Mode, `Temp/verify-reward-tooltip.request` containing `after` runs the isolated-save Play Mode checks and captures 1920x1080 / 1280x720 output under `Library/RewardLimitTooltipVerification/`. `before` captures the current UI with the tooltip closed. The runner restores the previous save environment, Play Mode start scene, pause and Game View settings.
+## Verification
+
+Use isolated saves in the already-open Editor and restore prior state. These are available entrypoints, not results of this documentation update.
+
+| Entry point | Coverage and output |
+| --- | --- |
+| Tools → Cat Quest → Verify Task System | CRUD, drafts, filters/tags, deduplication, undo/history, dates, midnight, legacy data, rollback/backup. `Temp/task-system.verification` |
+| Tools → Cat Quest → Verify MainMenu Play Flow | Historical menu name for the existing task Play runner. UI and persistence using `Library/TaskSystemPlayVerification/<GUID>/save.json`. `Temp/task-system.play-result` |
+| Tools → Cat Quest → Verify Rewards and Focus | Rewards, caps/goals, undo, midnight, settlement/retry/cancel/Rest, migration/levels plus task/CharacterHome checks. `Temp/reward-system.verification` |
+| Tools → Cat Quest → Verify Dashboard Rewards Play Flow | Claims, navigation, Focus, HUD, Rest/cancel/reload and 1280×720/1920×1080. `Temp/dashboard-reward-play.verification`, `Library/DashboardRewardPlayVerification/<GUID>/` |
+| `Temp/verify-reward-balance.request` | Isolated balance checks, LevelProgression and Equipment → Battle → Focus → Rewards → Tasks/CharacterHome. `Temp/verify-reward-balance.result` |
+| `Temp/verify-reward-tooltip.request` containing `after` | Allowance tooltip Play checks at both standard sizes in `Library/RewardLimitTooltipVerification/`. `before` captures closed tooltips |
+
+Keep saved Canvas components editable and do not regenerate whole pages. Missing, stale or failed results are not passes.
+
+## Calendar button presentation
+
+Today uses a blue date marker independently of the selected-date background. List / Calendar uses navy with white text for the selected view and a light background with deep ink for the other view. Today and Add Task use blue primary buttons, Filter uses sky blue, No Date uses aqua and Clear uses blue-gray. Compact sliced buttons use multiplier 2 with reduced shadows; see [design context](.impeccable.md#compact-button-appearance).
+
+The grid labels future recurrence counts as `Daily · N`; opening one explains its preview status. Preview means a future Daily projection, not a saved occurrence or an opportunity to complete early.

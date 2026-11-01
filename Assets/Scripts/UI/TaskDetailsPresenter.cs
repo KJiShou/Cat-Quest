@@ -62,7 +62,7 @@ public sealed class TaskDetailsPresenter
         var glow=root.Find("ScrollRect/BottomGlow"); if(glow) glow.gameObject.SetActive(false);
     }
     public void Render(TaskView view, Func<TaskView,string> scheduleText, TaskService service,
-        Action<TaskView> onEdit, Action<string> onComplete, Action<string> onDelete, Action<string> error)
+        Action<TaskView> onEdit, Action<string> onComplete, Action<string> onDelete, Action<string> error, bool readOnly = false)
     {
         currentView=view;
         TaskUIBuilder.Clear(tags); TaskUIBuilder.Clear(subtasks);
@@ -101,14 +101,15 @@ public sealed class TaskDetailsPresenter
             row.GetComponentInChildren<TMP_Text>(true).text=sub.title;
             var toggle=row.GetComponentInChildren<Toggle>(true); toggle.onValueChanged.RemoveAllListeners();
             toggle.SetIsOnWithoutNotify(view.Completed || view.occurrence.completedSubtaskIds.Contains(sub.id));
-            toggle.interactable=!view.IsHistory && !view.Completed && service.Eligible(view.task);
-            toggle.onValueChanged.AddListener(value=> { if(!service.SetSubtask(view.task.id,sub.id,value)) { error(service.LastError); toggle.SetIsOnWithoutNotify(!value); } });
+            toggle.interactable=!readOnly && !view.IsHistory && !view.Completed && service.Eligible(view.task);
+            toggle.onValueChanged.AddListener(value=> { if((view.task.daily && view.occurrence.day != TaskService.DateKey(service.LocalNow)) || !service.SetSubtask(view.task.id,sub.id,value)) { error(service.LastError ?? "The day has changed. Reopen today’s task."); toggle.SetIsOnWithoutNotify(!value); } });
         }
         body.Find("SubTasks").gameObject.SetActive(view.task.subtasks.Count>0);
         var reward = service.PreviewReward(view);
         fish.text=reward.fishCoins.ToString();
         xp.text=reward.experience.ToString();
-        complete.interactable=!view.Completed && service.Eligible(view.task);
+        complete.interactable=!readOnly && !view.Completed && service.Eligible(view.task);
+        delete.interactable = !readOnly;
         complete.onClick.AddListener(()=>onComplete(view.task.id)); edit.onClick.AddListener(()=>onEdit(view)); delete.onClick.AddListener(()=>onDelete(view.task.id));
         LayoutRebuilder.MarkLayoutForRebuild((RectTransform)body);
     }

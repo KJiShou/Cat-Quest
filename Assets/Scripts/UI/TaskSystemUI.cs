@@ -7,7 +7,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityEngine.Serialization;
 
-public class TaskSystemUI : MonoBehaviour
+public partial class TaskSystemUI : MonoBehaviour
 {
     public EditTaskDetailsUI editor;
     public RectTransform listContent;
@@ -96,7 +96,8 @@ public class TaskSystemUI : MonoBehaviour
         editor.transform.Find("Header/Close").GetComponent<Button>().onClick.AddListener(CancelDraft);
         BuildDetails(); BuildModal();
         editor.gameObject.SetActive(false); detailsRoot.gameObject.SetActive(false);
-        CurrentTab = TaskTab.Today;
+        CurrentTab = Service.Settings.DefaultTaskTab;
+        calendar?.Initialize(this);
         Refresh();
         if (!string.IsNullOrEmpty(manager.LoadNotice)) Notify(manager.LoadNotice, true);
         else if (!string.IsNullOrEmpty(Service.LastError)) Notify(Service.LastError, true);
@@ -122,7 +123,7 @@ public class TaskSystemUI : MonoBehaviour
     }
     private void OnEnable()
     {
-        if(Service!=null) { Service.RefreshDate(); Refresh(); }
+        if(Service!=null) { Service.RefreshDate(); if (calendar && calendar.Active) Refresh(); else SelectTab(Service.Settings.DefaultTaskTab); }
     }
     public bool PrepareToLeavePage()
     {
@@ -151,7 +152,7 @@ public class TaskSystemUI : MonoBehaviour
     }
     private void CaptureOutsideClick(Transform target)
     {
-        if(editing || SelectedKey==null || !detailsRoot.gameObject.activeInHierarchy
+        if((calendar && calendar.Active) || editing || SelectedKey==null || !detailsRoot.gameObject.activeInHierarchy
             || (filters && filters.gameObject.activeSelf) || confirmation.Root.activeSelf) return;
         if(target && target.IsChildOf(detailsRoot)) return;
         for(var current=target; current && current.IsChildOf(listContent); current=current.parent)
@@ -188,11 +189,12 @@ public class TaskSystemUI : MonoBehaviour
         if(Service==null || ui==null) return;
         if(committingQuick) { pendingRefresh=true; return; }
         pendingRefresh=false;
+        if (calendar && calendar.Active) { calendar.Refresh(); return; }
         var data=Service.Snapshot;
         tagFilters.RemoveWhere(id=>!data.tags.Any(t=>t.id==id));
         for(int i=0;i<5;i++)
         {
-            int count=i==(int)TaskTab.Tags ? data.tags.Count : Service.Query((TaskTab)i).Count;
+            int count=i==(int)TaskTab.Tags ? data.tags.Count : (i == (int)TaskTab.Todo ? QueryTodo().Count : Service.Query((TaskTab)i).Count);
             bool active=i==(int)CurrentTab;
             Color color=active ? TaskUIBuilder.Blue : new Color32(121,143,173,255);
             tabCounts[i].text=count.ToString(); tabCounts[i].color=Color.white;
@@ -205,7 +207,7 @@ public class TaskSystemUI : MonoBehaviour
         }
         fishCoins.text=data.fishCoins.ToString(); tickets.text=data.tickets.ToString();
         listHeading.text=new[]{"Today's Tasks","Daily Tasks","Todo","Tags","History"}[(int)CurrentTab];
-        visible=Service.Query(CurrentTab,search.text,difficultyFilter,tagFilters);
+        visible=CurrentTab == TaskTab.Todo ? QueryTodo(search.text,difficultyFilter,tagFilters) : Service.Query(CurrentTab,search.text,difficultyFilter,tagFilters);
         scheduleLabels.Clear();
         suppressQuickBlur=true;
         if(quickInput) quickInput.transform.parent.SetParent(transform,false);
@@ -217,7 +219,8 @@ public class TaskSystemUI : MonoBehaviour
         }
         if(quickInput) { quickInput.transform.parent.SetParent(listContent,false); quickInput.transform.parent.SetSiblingIndex(0); }
         if(visible.Count==0 && !quickInput) ui.Text(listContent,CurrentTab==TaskTab.History ? "No completed tasks yet." : "No tasks here. Add a task or adjust your filters.",20,new Color32(123,145,171,255));
-        if(CurrentTab==TaskTab.Tags) RenderTagGroups(data.tags);
+        if(CurrentTab==TaskTab.Todo) RenderDateGroups();
+        else if(CurrentTab==TaskTab.Tags) RenderTagGroups(data.tags);
         else foreach(var row in visible) RenderRow(row);
         suppressQuickBlur=false;
         var selected=visible.FirstOrDefault(v=>v.Key==SelectedKey);
@@ -309,7 +312,7 @@ public class TaskSystemUI : MonoBehaviour
             message=>Notify(message,true));
 
     }
-    private static void SpaceSchedule(TMP_Text date)
+    internal static void SpaceSchedule(TMP_Text date)
     {
         date.textWrappingMode=TextWrappingModes.NoWrap;
         var size=date.GetComponent<LayoutElement>() ?? date.gameObject.AddComponent<LayoutElement>();
@@ -325,10 +328,12 @@ public class TaskSystemUI : MonoBehaviour
             }
         }
     }
-    public void CompleteSelected(string id)
+    public void CompleteSelected(string id) => CompleteForDate(id, null);
+    public void CompleteForDate(string id, string expectedDay)
     {
         Action complete=()=>
         {
+            if (expectedDay != null && expectedDay != TaskService.DateKey(Service.LocalNow)) { Notify("The day has changed. Select today to complete this daily task.",true); Refresh(); return; }
             var before=Service.Query(TaskTab.Daily).Concat(Service.Query(TaskTab.Todo)).FirstOrDefault(v=>v.task.id==id);
             if(!Service.Complete(id,true)) Notify(Service.LastError,true);
             else {
@@ -416,14 +421,31 @@ public class TaskSystemUI : MonoBehaviour
     public void SaveDraft()
     {
         var draft=editor.ReadDraft(out var done);
+        if (calendar && calendar.Active && !calendar.ValidateDraftDate(draft)) return;
         if(!Service.Upsert(draft,done,out var id)) { Notify(Service.LastError,true); return; }
-        SelectedKey=id; CancelDraft(); Refresh(); Notify("Task saved.");
+        SelectedKey=id; CancelDraft();
+        if (calendar && calendar.Active) calendar.FollowSaved(draft, id);
+        Refresh(); Notify("Task saved.");
     }
     public void CancelDraft()
     {
         editing=false; editor.datePicker.overlay.SetActive(false); editor.timePicker.overlay.SetActive(false);
         editor.gameObject.SetActive(false);
-        if(Service!=null) RenderDetails(visible.FirstOrDefault(v=>v.Key==SelectedKey));
+        if (calendar && calendar.Active) calendar.EndEdit();
+        else if(Service!=null) RenderDetails(visible.FirstOrDefault(v=>v.Key==SelectedKey));
+    }
+    private List<TaskView> QueryTodo(string text = "", TaskDifficulty? difficulty = null, IEnumerable<string> tags = null)
+    {
+        return Service.Query(TaskTab.Todo,text,difficulty,tags)
+            .Concat(Service.Query(TaskTab.Daily,text,difficulty,tags).Where(view => !view.Completed)).ToList();
+    }
+    private void RenderDateGroups()
+    {
+        foreach(var group in visible.GroupBy(view => TaskDateGroups.Classify(view.task,Service.LocalNow)).OrderBy(group => group.Key))
+        {
+            RenderTagHeading("date_"+group.Key,TaskDateGroups.Caption(group.Key),group.Count());
+            foreach(var task in group) RenderRow(task);
+        }
     }
     private void RenderTagGroups(List<QuestTag> tags)
     {
