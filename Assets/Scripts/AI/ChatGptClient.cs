@@ -23,7 +23,6 @@ public sealed class ChatGptClient : MonoBehaviour
     Action success;
     CancellationTokenSource cancellation;
     ChatGptBrowserAuth browser;
-    TMPro.TMP_FontAsset chineseFallback;
     IChatGptStorage verificationStorage;
     IChatGptHttp verificationHttp;
 
@@ -50,11 +49,6 @@ public sealed class ChatGptClient : MonoBehaviour
     {
         if (Connection != null) return;
         Instance = this; Ready = false;
-        // Missing Chinese glyphs fall back at runtime; primary authored fonts stay unchanged.
-        if (!chineseFallback) {
-            chineseFallback = TMPro.TMP_FontAsset.CreateFontAsset("Microsoft YaHei", "Regular");
-            if (chineseFallback) TMPro.TMP_Settings.fallbackFontAssets.Add(chineseFallback);
-        }
         string directory = Path.Combine(Application.persistentDataPath, "ai");
         string isolated = Environment.GetEnvironmentVariable("CATQUEST_AI_TEST_DIRECTORY");
         string testSave = Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");
@@ -139,10 +133,6 @@ public sealed class ChatGptClient : MonoBehaviour
         cancellation?.Cancel(); browser?.Dispose(); Chat?.Stop(); Connection?.Dispose();
         cancellation?.Dispose(); cancellation = null; browser = null; operation = null; success = null;
         Connection = null; Ready = false;
-        if (chineseFallback) {
-            TMPro.TMP_Settings.fallbackFontAssets.Remove(chineseFallback);
-            Destroy(chineseFallback); chineseFallback = null;
-        }
     }
     void OnDestroy() { if (Instance == this) { OnDisable(); Instance = null; } }
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

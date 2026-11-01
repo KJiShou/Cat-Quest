@@ -54,8 +54,10 @@ Source reference: SimpleCasual `Preview/042_Chat.png`,
 `Prefabs_Component_Frames/ChatFrame01,02_Light-Group.prefab`.
 Project-owned Chat, ChatMessage and ChatTaskDraft prefabs reuse existing task
 editing, SidebarNavigationButton and JuicyButton components. Existing Fredoka
-fonts are retained, with a runtime Windows Microsoft YaHei fallback for
-Chinese in Chat and saved tasks. Vendor assets and primary typography remain unchanged.
+fonts are retained, with a bundled dynamic Noto Sans CJK SC fallback registered
+in TMP Settings for Chinese throughout the application. It is independent of
+the AI client's lifecycle and installed Windows fonts. Vendor assets and primary
+typography remain unchanged.
 
 AI Settings opened from Chat dismisses directly back to Chat and restores focus
 to its settings button. Opening AI from general Settings retains its normal back

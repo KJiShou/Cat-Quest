@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -11,6 +12,18 @@ using UnityEngine.UI;
 [InitializeOnLoad]
 public static class CharacterHomeVerification
 {
+    private sealed class MemoryStore : IPlayerDataStore
+    {
+        public PlayerData Data { get; private set; } = new PlayerData { experience = 10000 };
+        public bool TrySave(PlayerData data, out string error) { Data = data; error = null; return true; }
+    }
+
+    private sealed class Clock : ITaskClock
+    {
+        public DateTime LocalNow => new DateTime(2026, 11, 1, 12, 0, 0);
+        public DateTime UtcNow => LocalNow.AddHours(-8);
+    }
+
     static CharacterHomeVerification() { EditorApplication.delayCall += AutoRun; }
     private static void AutoRun()
     {
@@ -40,6 +53,11 @@ public static class CharacterHomeVerification
         {
             var roots = scene.GetRootGameObjects();
             var navigation = roots.SelectMany(r => r.GetComponentsInChildren<MainMenuNavigation>(true)).Single();
+            // Preview scenes do not run Start. Inject an unlocked in-memory fixture
+            // instead of letting CanOpen create a manager backed by the live save.
+            var service = new TaskService(new MemoryStore(), new Clock());
+            Require(Enum.GetValues(typeof(ProgressionFeature)).Cast<ProgressionFeature>().All(service.CanAccess), "Navigation fixture must unlock all pages.");
+            typeof(MainMenuNavigation).GetField("service", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(navigation, service);
             Require(navigation.buttons.Length == 7 && navigation.pages.Length == 7 && navigation.pages[(int)MainMenuPage.Chat].GetComponent<AiChatPage>(), "Missing navigation pages.");
             Require(navigation.initialPage == MainMenuPage.Dashboard, "Character dashboard is not the initial page.");
             Require(navigation.taskSystem && navigation.fishCoins && navigation.tickets, "Missing UI bindings.");
@@ -65,13 +83,13 @@ public static class CharacterHomeVerification
             var catPreview = home.GetComponentInChildren<CharacterHomePreview>(true);
             Require(catPreview && catPreview.previewCamera == preview.previewCamera && catPreview.character == preview.character, "Cat Home must use the authored scene preview.");
             Require(preview.GetComponent<RectTransform>().anchoredPosition == Vector2.zero, "Preview is not centered.");
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < navigation.pages.Length; i++)
             {
                 Require(navigation.buttons[i] && navigation.buttons[i].interactable, "Disabled navigation button.");
-                Require(navigation.ShowPage((MainMenuPage)i), "Page navigation failed.");
-                for (int j = 0; j < 6; j++) Require(navigation.pages[j].activeSelf == (i == j), "Page visibility mismatch.");
+                Require(navigation.ShowPage((MainMenuPage)i), "Page navigation failed: " + (MainMenuPage)i);
+                for (int j = 0; j < navigation.pages.Length; j++) Require(navigation.pages[j].activeSelf == (i == j), "Page visibility mismatch.");
             }
-            File.WriteAllText("Temp/character-home-verification.txt", "PASS: Unity loaded CharacterHome; all six page switches, UI bindings, EventSystem, input module, raycaster and centered character preview passed.");
+            File.WriteAllText("Temp/character-home-verification.txt", "PASS: Unity loaded CharacterHome; all seven page switches with isolated unlocked data, UI bindings, EventSystem, input module, raycaster and centered character preview passed.");
             Debug.Log("Character Home verification passed.");
         }
         catch (Exception ex)

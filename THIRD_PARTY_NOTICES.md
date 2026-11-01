@@ -14,6 +14,7 @@ This is a navigation aid to the bundled materials, not a replacement for their l
 | Spine runtime and examples | `Assets/Spine` and `Assets/Spine Examples`. Retain runtime source headers and individual example `license.txt` files |
 | Unity packages and TextMesh Pro | `Packages/manifest.json`, `Packages/packages-lock.json` and package-provided terms. Liberation Sans OFL is under `Assets/TextMesh Pro/Fonts` |
 | Fonts | `Assets/Fonts` and vendor font folders. Retain bundled font terms, including MuseoModerno, Quicksand and Rubik OFL files in the SimpleCasual package |
+| Noto Sans CJK SC | [SIL Open Font License](Assets/Fonts/NotoSansCJK/LICENSE.txt), [source and TMP configuration](Assets/Fonts/NotoSansCJK/README.md). Windows ZIPs include the license under `Licenses/NotoSansCJK-OFL.txt` |
 | Window control icons | [Bundled icon license](Assets/Generated/Icons/WindowControls/LICENSE.txt) |
 | Cozy Frequency Vol. 1 | Music by **PghNerd (Four One Two Talk)**. [bundled terms](Assets/StreamingAssets/AudioLicenses/cozy-LICENSE.txt) |
 | Cozy UI Sounds | [Bundled terms](Assets/StreamingAssets/AudioLicenses/spaceyyy-LICENSE.txt) |

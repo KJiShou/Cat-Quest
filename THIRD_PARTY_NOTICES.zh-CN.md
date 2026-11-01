@@ -14,6 +14,7 @@
 | Spine 运行库和示例 | Assets/Spine 与 Assets/Spine Examples，保留源码头部及各示例 license.txt |
 | Unity 包与 TextMesh Pro | Packages 的声明和锁文件及各包条款，Liberation Sans OFL 在 Assets/TextMesh Pro/Fonts |
 | 字体 | Assets/Fonts 及原包字体目录，保留 MuseoModerno、Quicksand、Rubik 等 OFL |
+| Noto Sans CJK SC | [SIL Open Font License](Assets/Fonts/NotoSansCJK/LICENSE.txt)、[来源与 TMP 配置](Assets/Fonts/NotoSansCJK/README.md)。Windows 压缩包内附 `Licenses/NotoSansCJK-OFL.txt` |
 | 窗口按钮图标 | [附带许可](Assets/Generated/Icons/WindowControls/LICENSE.txt) |
 | Cozy Frequency Vol. 1 | 作者 PghNerd（Four One Two Talk），[条款](Assets/StreamingAssets/AudioLicenses/cozy-LICENSE.txt) |
 | Cozy UI Sounds | [条款](Assets/StreamingAssets/AudioLicenses/spaceyyy-LICENSE.txt) |

@@ -22,7 +22,7 @@ JSON 响应包含 message、可选 query 和 drafts，查询支持 today/date/se
 
 ## UI 与实现
 
-参考 SimpleCasual `Preview/042_Chat.png`、`Prefabs_DemoScene_Panels/Light/Caht.prefab`（原厂拼写）和 `Prefabs_Component_Frames/ChatFrame01,02_Light-Group.prefab`。项目 Chat、ChatMessage、ChatTaskDraft 复用任务编辑器、SidebarNavigationButton 和 JuicyButton，保留 Fredoka，并在 Windows 为中文提供 Microsoft YaHei 运行时回退，不更换主字体或供应商资产。
+参考 SimpleCasual `Preview/042_Chat.png`、`Prefabs_DemoScene_Panels/Light/Caht.prefab`（原厂拼写）和 `Prefabs_Component_Frames/ChatFrame01,02_Light-Group.prefab`。项目 Chat、ChatMessage、ChatTaskDraft 复用任务编辑器、SidebarNavigationButton 和 JuicyButton，保留 Fredoka，并在 TMP Settings 全局注册项目自带的动态 Noto Sans CJK SC 中文备用字体。中文显示不依赖 AI 组件生命周期或电脑已安装的字体，不更换主字体或供应商资产。
 
 从 Chat 打开 AI 设置，关闭返回 Chat 并恢复设置按钮焦点，从总设置打开保留正常返回。消息泡尺寸由可编辑 ChatMessage 文本内边距决定。导航枚举追加在 Leaderboard 后以保留旧索引，Canvas 只加入 Chat 页面按钮并删除旧 advice 子树，Settings 移除自动建议控制并更新隐私文案。
 
