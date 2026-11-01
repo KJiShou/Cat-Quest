@@ -31,7 +31,7 @@ public sealed class TutorialController : MonoBehaviour
     EquipmentPageUI equipmentPage;
     Button observedButton;
     string queuedAction;
-    bool advancingFromTarget, ownsAccount;
+    bool advancingFromTarget, ownsAccount, ownsSettings;
     public Button[] topics;
     public TMP_Text nextLabel;
     public GameObject[] blockers;
@@ -42,7 +42,7 @@ public sealed class TutorialController : MonoBehaviour
     PlayerData snapshot;
     bool dirty = true;
     string shown, manualTopic;
-    int manualIndex;
+    int manualIndex, settingsStep;
     bool snoozed, focused = true, changing, ownsStagePicker;
     float pollAt, noticeUntil;
     RectTransform target;
@@ -93,7 +93,7 @@ public sealed class TutorialController : MonoBehaviour
     bool ReadAlready(string topic) => progress.read.Contains(topic);
     bool Busy()
     {
-        return !focused || (settings && settings.gameObject.activeInHierarchy && !ownsAccount)
+        return !focused || (settings && settings.gameObject.activeInHierarchy && !ownsAccount && !ownsSettings)
             || (celebration && (celebration.IsShowing || celebration.PendingCount > 0))
             || (rewards && rewards.IsAnimating) || (tasks && tasks.gameObject.activeInHierarchy && tasks.TutorialBlocked)
             || blockers.Any(b => b && b.activeInHierarchy && !(ownsStagePicker && b == bossPage.stagePicker))
@@ -117,7 +117,7 @@ public sealed class TutorialController : MonoBehaviour
         { Read("focus"); Hide(); Show("focus-running", "Your training has started. Switching pages or apps will keep the timer running. Time to focus!", null, "Got it"); noticeUntil = Time.unscaledTime + 6; return; }
         if(Busy()) { Hide(); return; }
         if(helpPanel.activeSelf) return;
-        if(manualTopic != null) { if(!panel.activeSelf) { if(manualTopic == "equipment") ShowEquipment(); else if(manualIndex == 1) ShowFocus(); else if(manualIndex == 3) ShowBoss(); else if(manualIndex == 4) ShowLeaderboard(); else OpenTopic(manualIndex); } return; }
+        if(manualTopic != null) { if(!panel.activeSelf) { if(manualTopic == "settings") ShowSettings(); else if(manualTopic == "equipment") ShowEquipment(); else if(manualIndex == 1) ShowFocus(); else if(manualIndex == 3) ShowBoss(); else if(manualIndex == 4) ShowLeaderboard(); else OpenTopic(manualIndex); } return; }
         if(shown == "focus-running") return;
         if(focus.Phase is FocusPhase.Focusing or FocusPhase.Saving or FocusPhase.Resting) { Hide(); return; }
         if(shown is "locked" or "error") return;
@@ -299,12 +299,53 @@ public sealed class TutorialController : MonoBehaviour
         if(index == 1) { if(!Save(p => p.focusStep = 0)) return; if(service.CanAccess(ProgressionFeature.Focus)) navigation.ShowPage(MainMenuPage.Focus); ShowFocus(); }
         else if(index == 2) Show("help-rewards", "Complete real tasks to earn EXP and Fish Coins within daily allowances. Completed work is recorded even at the cap. Claim completed Daily Reward goals separately. The first claim opens equipment management.", null, "Close");
         else if(index == 3) { if(!Save(p => p.bossStep = 0)) return; if(service.CanAccess(ProgressionFeature.Boss) && !navigation.ShowPage(MainMenuPage.Boss)) { manualTopic = null; return; } ShowBoss(); }
+        else if(index == 5) { manualTopic = "settings"; settingsStep = 0; ShowSettings(); }
         else { if(!Save(p => p.leaderboardStep = 0)) return; if(service.CanAccess(ProgressionFeature.Leaderboard) && !navigation.ShowPage(MainMenuPage.Leaderboard)) { manualTopic = null; return; } ShowLeaderboard(); }
+    }
+    void ShowSettings()
+    {
+        if(!settings.gameObject.activeSelf) settings.Open(gameObject);
+        ownsSettings = true;
+        settings.TutorialOwnsInput = true;
+        transform.SetAsLastSibling();
+        RectTransform anchor; string text;
+        switch(settingsStep)
+        {
+            case 0: anchor = settings.notifications.transform.parent as RectTransform;
+                text = "Focus notifications let you know when Focus or Rest finishes. This switch controls those reminders. The guide leaves your current choice unchanged."; break;
+            case 1: anchor = settings.sound.transform.parent as RectTransform;
+                text = "Sound controls effects and feedback volume. Move this slider when you want louder or quieter sounds. Zero mutes sound effects."; break;
+            case 2: anchor = settings.music.transform.parent as RectTransform;
+                text = "Music has its own volume control. You can keep background music quiet or mute it while leaving sound effects on."; break;
+            case 3: anchor = settings.dashboardRankings[0].transform.parent as RectTransform;
+                text = "Choose the ranking shown on your Dashboard: Boss Stage, Tasks Completed, Focus Minutes or Power. This choice does not enable statistics uploads."; break;
+            case 4: anchor = settings.defaultTaskTabs[0].transform.parent as RectTransform;
+                text = "Choose which tab opens when you enter Tasks: Today, Daily Tasks or Todo. Your tasks stay saved whichever starting tab you prefer."; break;
+            case 5: anchor = settings.showDashboardTasks.transform.parent.parent as RectTransform;
+                text = "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session."; break;
+            case 6: anchor = settings.tagsButton.transform as RectTransform;
+                text = "Manage tags opens your tag collection. Add tags, rename them and choose their colours here. Tasks and Focus use those same tag colours."; break;
+            case 7: anchor = settings.accountButton.transform as RectTransform;
+                text = "Account manages your display name, sign-in and optional leaderboard uploads. Sharing is your choice. Your private tasks and detailed history stay local."; break;
+            default: anchor = settings.aiButton.transform as RectTransform;
+                text = "AI opens your chat connection settings. You can create and complete tasks without an AI connection. Continue to finish and return to Settings."; break;
+        }
+        Show("help-settings-" + settingsStep, text, anchor, "Continue");
+    }
+    void FinishSettingsGuide()
+    {
+        manualTopic = null; Hide(); snoozed = true;
+        settings.Open(gameObject);
     }
     public void Continue()
     {
         if(typing != null) { CompleteTyping(); return; }
         if(RequiresTargetClick() && !advancingFromTarget) return;
+        if(manualTopic == "settings") {
+            if(settingsStep < 8) { settingsStep++; ShowSettings(); }
+            else FinishSettingsGuide();
+            return;
+        }
         if(shown == "help-rewards") {
             if(!Save(p => p.equipmentStep = 0)) return;
             manualTopic = "equipment"; Hide(); ShowEquipment(); return;
@@ -361,7 +402,7 @@ public sealed class TutorialController : MonoBehaviour
         else if(key is "reward" or "daily" or "equipment" or "boss" or "leaderboard") { if(!Save(p => { if(!p.read.Contains(key)) p.read.Add(key); })) return; }
         Hide(); pollAt = Time.unscaledTime + .5f;
     }
-    public void Skip() { if(Save(p => p.dismissed = true)) { snoozed = true; manualTopic = null; Hide(); } }
+    public void Skip() { if(Save(p => p.dismissed = true)) { if(ownsSettings) { FinishSettingsGuide(); return; } snoozed = true; manualTopic = null; Hide(); } }
     void LockedNotice(string message) { if(!Busy()) Show("locked", message + ". Complete tasks to grow your cat. You can read the guide in Settings > Help.", null, "Got it"); }
     void Show(string key, string text, RectTransform anchor, string button, bool welcome = false)
     {
@@ -392,8 +433,9 @@ public sealed class TutorialController : MonoBehaviour
             target.GetWorldCorners(corners);
             Vector2 min = root.InverseTransformPoint(corners[0]), max = root.InverseTransformPoint(corners[2]);
             highlight.anchorMin = highlight.anchorMax = root.pivot;
-            highlight.pivot = Vector2.zero; highlight.anchoredPosition = min - Vector2.one * 5;
-            highlight.sizeDelta = max - min + Vector2.one * 10;
+            float padding = manualTopic == "settings" ? 20 : 5;
+            highlight.pivot = Vector2.zero; highlight.anchoredPosition = min - Vector2.one * padding;
+            highlight.sizeDelta = max - min + Vector2.one * (padding * 2);
             top = min.y < -root.rect.height * .12f;
         }
         if(pointer) {
@@ -443,5 +485,5 @@ public sealed class TutorialController : MonoBehaviour
     public void CompleteTyping() { if(!IsTyping)return; StopTalking();dialogue.Complete();Position(shown == "task-0"); }
     void Idle() { var animator = mentor ? mentor.CharacterAnimator : null; if(animator && animator.isActiveAndEnabled && animator.gameObject.activeInHierarchy && !animator.GetCurrentAnimatorStateInfo(0).IsName("sensei-idle")) animator.Play("sensei-idle", 0, 0); }
     void StopTalking() { SettingsAudio.Instance?.StopDialogue(this); if(typing != null) StopCoroutine(typing); typing = null; Idle(); }
-    void Hide() { Observe(null); queuedAction=null; if(typingShield)typingShield.gameObject.SetActive(false); if(pointer)pointer.gameObject.SetActive(false); if(ownsAccount && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsAccount=false; } if(leaderboard)leaderboard.TutorialOwnsInput=false; if(ownsStagePicker && bossPage) { bossPage.stagePicker.SetActive(false); ownsStagePicker=false; } if(spotlight) spotlight.Dismiss(); if(typing != null || (panel && panel.activeSelf)) StopTalking(); shown = null; target = null; if(panel) panel.SetActive(false); if(highlight) highlight.gameObject.SetActive(false); }
+    void Hide() { Observe(null); queuedAction=null; if(typingShield)typingShield.gameObject.SetActive(false); if(pointer)pointer.gameObject.SetActive(false); if(ownsSettings && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsSettings=false; } if(ownsAccount && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsAccount=false; } if(leaderboard)leaderboard.TutorialOwnsInput=false; if(ownsStagePicker && bossPage) { bossPage.stagePicker.SetActive(false); ownsStagePicker=false; } if(spotlight) spotlight.Dismiss(); if(typing != null || (panel && panel.activeSelf)) StopTalking(); shown = null; target = null; if(panel) panel.SetActive(false); if(highlight) highlight.gameObject.SetActive(false); }
 }

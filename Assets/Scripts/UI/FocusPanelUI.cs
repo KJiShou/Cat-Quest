@@ -268,7 +268,27 @@ public sealed class FocusPanelUI : MonoBehaviour
         SetDurationButton(restIncrease, Ready && focus.Options.restMinutes < 60);
         focusDurationLabel.text = focus.Options.focusMinutes + " min";
         restDurationLabel.text = focus.Options.restMinutes + " min";
-        if (questList) foreach (var button in questList.GetComponentsInChildren<Button>()) Style(button, Ready, focus.Options.tagIds.Contains(button.name) || (button.name == "NoTags" && focus.Options.tagIds.Count == 0));
+        var catalog = GameDataManager.EnsureInstance().Tasks.Snapshot.tags;
+        if (questList) foreach (var button in questList.GetComponentsInChildren<Button>())
+        {
+            bool selected = focus.Options.tagIds.Contains(button.name) || (button.name == "NoTags" && focus.Options.tagIds.Count == 0);
+            Style(button, Ready, selected);
+            var tag = catalog.FirstOrDefault(t => t.id == button.name);
+            var label = button.GetComponentInChildren<TMP_Text>();
+            label.text = (selected ? "✓ " : "") + (tag?.name ?? "No tags");
+            if (tag != null)
+            {
+                button.targetGraphic.color = TagColors.Background(tag.colorHex);
+                label.color = TagColors.Foreground(tag.colorHex);
+            }
+        }
+        var selectedTag = catalog.FirstOrDefault(t => focus.Options.tagIds.Contains(t.id));
+        if (questSearch && questSearch.placeholder is TMP_Text tagPlaceholder)
+        {
+            tagPlaceholder.color = selectedTag != null ? TagColors.Foreground(selectedTag.colorHex) : TaskUIBuilder.Ink;
+            if (questSearch.targetGraphic) questSearch.targetGraphic.color = selectedTag != null ? TagColors.Background(selectedTag.colorHex) : Color.white;
+            questSearch.textComponent.color = tagPlaceholder.color;
+        }
         if (questContext) questContext.text = "TAGS\n" + (focus.Options.tagNames.Count == 0 ? "Free focus" : string.Join(", ", focus.Options.tagNames));
         var service = GameDataManager.EnsureInstance().Tasks;
         var day = service.TodayRewards;

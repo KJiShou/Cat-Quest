@@ -22,10 +22,11 @@ public sealed class TaskResultNotice : MonoBehaviour, IPointerClickHandler
     void Update()
     {
         elapsed += Time.unscaledDeltaTime;
+        if (elapsed >= 4f) { Dismiss(); return; }
         float t = Mathf.Clamp01(elapsed / .28f);
         float ease = 1 - Mathf.Pow(1 - t, 3);
         transform.localScale = restingScale * Mathf.Lerp(.12f, 1, ease);
-        fade.alpha = Mathf.Clamp01(t * 3);
+        fade.alpha = Mathf.Clamp01(t * 3) * Mathf.Clamp01((4f - elapsed) / .3f);
     }
     void OnApplicationFocus(bool focused) { if (!focused) Dismiss(); }
     void OnDisable() { elapsed = 0; fade.alpha = 0; transform.localScale = restingScale; }

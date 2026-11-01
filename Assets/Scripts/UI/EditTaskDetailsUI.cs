@@ -40,9 +40,15 @@ public class EditTaskDetailsUI : MonoBehaviour
     private int legacyMinuteOfDay;
     private Coroutine pendingSubtaskScroll;
     private LayoutElement tagSelectionSize;
+    private TMP_InputField submittedSubtask;
 
     private void LateUpdate()
     {
+        if (submittedSubtask)
+        {
+            var submitted = submittedSubtask; submittedSubtask = null;
+            AdvanceSubtask(submitted);
+        }
         float height = formScroll.viewport.rect.height;
         if (Mathf.Abs(formContentMinimum.minHeight - height) > .1f)
             formContentMinimum.minHeight = height;
@@ -87,7 +93,7 @@ public class EditTaskDetailsUI : MonoBehaviour
 
     public void LoadDraft(QuestTask task, List<QuestTag> tags, IEnumerable<string> completed)
     {
-        Initialize(); editingId = task.id;
+        Initialize(); submittedSubtask = null; editingId = task.id;
         selectedTagIds.Clear();
         selectedTagIds.UnionWith(task.tagIds);
         taskTitle.SetTextWithoutNotify(task.title ?? ""); description.SetTextWithoutNotify(task.description ?? ""); UpdateCount(description.text);
@@ -176,8 +182,40 @@ public class EditTaskDetailsUI : MonoBehaviour
         var input = row.GetComponentInChildren<TMP_InputField>();
         TaskUIBuilder.BlueCaret(input);
         input.SetTextWithoutNotify(title);
+        input.lineType = TMP_InputField.LineType.SingleLine;
+        input.onSubmit.AddListener(_ => submittedSubtask = input);
         BindRemove(row);
         return row;
+    }
+
+    private void AdvanceSubtask(TMP_InputField input)
+    {
+        if (!input.gameObject.activeInHierarchy || input.wasCanceled) return;
+        var rows = subtaskContent.GetComponentsInChildren<TMP_InputField>();
+        int index = System.Array.IndexOf(rows, input);
+        if (index < 0) return;
+        if (index + 1 < rows.Length) FocusSubtask(rows[index + 1]);
+        else if (!string.IsNullOrWhiteSpace(input.text)) AddSubtask();
+        else FocusSubtask(input);
+    }
+    private void FocusSubtask(TMP_InputField input)
+    {
+        input.Select(); input.ActivateInputField();
+        Canvas.ForceUpdateCanvases();
+        formScroll.StopMovement(); formScroll.verticalNormalizedPosition = 0;
+        subtaskScroll.StopMovement();
+        var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(subtaskScroll.viewport, input.transform);
+        float shift = bounds.min.y < subtaskScroll.viewport.rect.yMin ? subtaskScroll.viewport.rect.yMin - bounds.min.y
+            : bounds.max.y > subtaskScroll.viewport.rect.yMax ? subtaskScroll.viewport.rect.yMax - bounds.max.y : 0;
+        var position = subtaskContent.anchoredPosition;
+        position.y = Mathf.Clamp(position.y + shift, 0, Mathf.Max(0, subtaskContent.rect.height - subtaskScroll.viewport.rect.height));
+        subtaskContent.anchoredPosition = position;
+    }
+    private void OnDisable()
+    {
+        submittedSubtask = null;
+        if (pendingSubtaskScroll != null) StopCoroutine(pendingSubtaskScroll);
+        pendingSubtaskScroll = null;
     }
 
     private IEnumerator ScrollToNewSubtask()

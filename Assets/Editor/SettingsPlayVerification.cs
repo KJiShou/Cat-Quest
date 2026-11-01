@@ -68,7 +68,7 @@ public static class SettingsPlayVerification
         {
             SessionState.SetBool(Flag + ".enteredPlay", true);
             evidence.Clear(); checks.Clear(); loggedError = null;
-            run = SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
+            run = SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
         }
         if (state == PlayModeStateChange.EnteredEditMode)
         {
@@ -107,7 +107,7 @@ public static class SettingsPlayVerification
                 else
                 {
                     Check(evidence.All(path => File.Exists(path) && new FileInfo(path).Length > 100), "A requested screenshot is missing or empty.");
-                    Finish(SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
+                    Finish(SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
                 }
             }
             catch (Exception e) { Finish("FAIL at " + context + ": " + e); }
@@ -116,6 +116,8 @@ public static class SettingsPlayVerification
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists(Request)) return;
         SessionState.SetBool(Flag + ".taskDates", File.ReadAllText(Request).Trim().StartsWith("task-dates"));
         SessionState.SetBool(Flag + ".beforeDates", File.ReadAllText(Request).Trim() == "task-dates-before");
+        SessionState.SetBool(Flag + ".quickUX", File.ReadAllText(Request).Trim().StartsWith("quick-ux"));
+        SessionState.SetBool(Flag + ".quickBefore", File.ReadAllText(Request).Trim() == "quick-ux-before");
         File.Delete(Request);
         evidence.Clear(); checks.Clear(); context = "static authored bindings"; loggedError = null;
         string folder = Output + "/" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N");
@@ -323,6 +325,110 @@ public static class SettingsPlayVerification
         Check(Vector2.Distance(before.position, after.position) < 1 && Vector2.Distance(before.size, after.size) < 1, "Feedback moved the control's hit area: " + control.name);
     }
     static void Reset(JuicyButton feedback, string reason) => Check(Vector2.Distance(feedback.DrawScale, Vector2.one) < .005f && Mathf.Abs(feedback.DrawOffset) < .1f, reason);
+
+
+    static IEnumerator RunQuickUX()
+    {
+        bool before = SessionState.GetBool(Flag + ".quickBefore", false);
+        var manager = GameDataManager.EnsureInstance(); var service = manager.Tasks;
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.json"), "Expected isolated save");
+        var tutorial = UnityEngine.Object.FindFirstObjectByType<TutorialController>(); tutorial.Skip();
+        manager.PlayerData.experience = 100; manager.SaveData();
+        var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
+        var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
+        var canvas = launcher.GetComponentInParent<Canvas>().rootCanvas;
+        Check(service.SaveTag(service.Snapshot.tags.FirstOrDefault(t => t.name == "Study")?.id, "Study", "#3D5FC3", out var blue), "Seed blue tag");
+        service.SaveTag(null, "Creative", "#FF9E3A", out _);
+        service.SaveTag(service.Snapshot.tags.FirstOrDefault(t => t.name == "Personal")?.id, "Personal", "#2A3957", out _);
+        foreach (var size in new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720) })
+        {
+            string suffix = size.x + "x" + size.y;
+            context = "Quick UX " + suffix; Resolution(size); nav.ShowPage(MainMenuPage.Dashboard); yield return 3;
+            launcher.Open(); yield return .3;
+            var ui = UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();
+            Capture("settings-" + suffix); yield return .2;
+            var help = ui.GetComponentsInChildren<Button>().First(b => b.name == "TutorialHelp");
+            if (!before) Check(help.GetComponentInChildren<TMP_Text>().text == "Tutorial", "Tutorial entry label");
+            Click(help); yield return .3; Check(tutorial.helpPanel.activeSelf && !ui.gameObject.activeSelf, "Tutorial handoff");
+            Capture("tutorial-topics-" + suffix); yield return .2;
+            if (!before) {
+                Check(tutorial.topics.Length == 6, "Settings topic missing");
+                tutorial.SendMessage("OnApplicationFocus", true);
+                Click(tutorial.topics[5]); yield return .2;
+                var originalSettings = JsonUtility.ToJson(service.Settings);
+                RectTransform previousTarget = null;
+                for (int step = 0; step < 9; step++) {
+                    Check(tutorial.CurrentTopic == "help-settings-" + step, "Settings explanation did not advance: step=" + step + ", actual=" + tutorial.CurrentTopic + ", focus=" + Application.isFocused);
+                    tutorial.CompleteTyping(); yield return .2;
+                    Check(ui.gameObject.activeInHierarchy && ui.CurrentView == "Settings" && ui.TutorialOwnsInput, "Settings UI must stay visible under the guide");
+                    Check(tutorial.CurrentTarget && tutorial.CurrentTarget.IsChildOf(ui.settingsPage.transform) && tutorial.CurrentTarget != previousTarget, "Each Settings step needs its own real highlighted control");
+                    previousTarget = tutorial.CurrentTarget;
+                    Check(tutorial.highlight.gameObject.activeInHierarchy && tutorial.spotlight.gameObject.activeInHierarchy, "Settings highlight missing");
+                    Check(!Bounds(tutorial.card).Overlaps(Bounds(tutorial.CurrentTarget)), "Guide covers the highlighted control");
+                    Check(Hit(Bounds(tutorial.CurrentTarget).center) != tutorial.CurrentTarget.gameObject, "Explanation lets clicks change settings");
+                    tutorial.dialogue.body.ForceMeshUpdate();
+                    Check(tutorial.dialogue.body.textInfo.lineCount <= 4, "Settings copy overlaps footer");
+                    Capture("settings-introduction-" + step + "-" + suffix); yield return .2;
+                    tutorial.Continue(); yield return .2;
+                }
+                Check(!tutorial.panel.activeSelf && ui.gameObject.activeInHierarchy && !ui.TutorialOwnsInput, "Guide must return to usable Settings");
+                Check(JsonUtility.ToJson(service.Settings) == originalSettings, "Guide changed saved settings");
+                tutorial.OpenHelp(); tutorial.OpenTopic(5); tutorial.CompleteTyping(); yield return .2;
+                tutorial.SendMessage("OnApplicationFocus", false); yield return .2;
+                Check(!ui.gameObject.activeSelf && !ui.TutorialOwnsInput, "Focus loss left Settings input owned");
+                tutorial.SendMessage("OnApplicationFocus", true); yield return .4;
+                Check(ui.gameObject.activeSelf && tutorial.CurrentTopic == "help-settings-0", "Focus return did not resume Settings step");
+                tutorial.Skip(); yield return .2;
+                Check(ui.gameObject.activeInHierarchy && !ui.TutorialOwnsInput && !tutorial.panel.activeSelf, "Skip did not release Settings");
+                ui.Close();
+            }
+            tutorial.CloseHelp(); tutorial.Skip();
+            nav.ShowPage(MainMenuPage.Tasks); yield return .2;
+            var editor = nav.taskSystem.editor;
+            editor.gameObject.SetActive(true);
+            editor.LoadDraft(new QuestTask { title = "Plan the project", subtasks = new System.Collections.Generic.List<QuestSubtask> {
+                new QuestSubtask { id = "one", title = "Read the brief" }, new QuestSubtask { id = "two", title = "Write an outline" } } }, service.Snapshot.tags, Array.Empty<string>());
+            yield return .3; Capture("subtasks-" + suffix); yield return .2;
+            if (!before) {
+                var inputs = editor.subtaskContent.GetComponentsInChildren<TMP_InputField>();
+                inputs[0].onSubmit.Invoke(inputs[0].text); yield return .2;
+                Check(EventSystem.current.currentSelectedGameObject == inputs[1].gameObject && editor.subtaskContent.GetComponentsInChildren<TMP_InputField>().Length == 2, "Enter must focus existing next subtask");
+                inputs[1].onSubmit.Invoke(inputs[1].text); yield return .2;
+                inputs = editor.subtaskContent.GetComponentsInChildren<TMP_InputField>();
+                Check(inputs.Length == 3 && EventSystem.current.currentSelectedGameObject == inputs[2].gameObject, "Last Enter must append and focus");
+                inputs[2].onSubmit.Invoke(""); yield return .2;
+                Check(editor.subtaskContent.GetComponentsInChildren<TMP_InputField>().Length == 3, "Blank Enter created another empty row");
+            }
+            editor.gameObject.SetActive(false);
+            nav.taskSystem.Notify("Task completed. +10 EXP, +5 Fish Coins."); yield return .5;
+            Capture("notice-" + suffix); yield return .2;
+            var notice = UnityEngine.Object.FindFirstObjectByType<TaskResultNotice>();
+            if (!before) {
+                Time.timeScale = 0; yield return 2;
+                nav.taskSystem.Notify("Task completed. +20 EXP, +10 Fish Coins."); yield return 2.3;
+                Check(notice.gameObject.activeSelf, "Old timeout dismissed replacement");
+                yield return 2.2; Check(!notice.gameObject.activeSelf, "Notice did not expire while paused"); Time.timeScale = 1;
+                notice.Show("Dismiss me"); yield return .1;
+                notice.OnPointerClick(new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left });
+                Check(!notice.gameObject.activeSelf, "Click dismissal failed");
+            }
+            notice.Dismiss(); nav.ShowPage(MainMenuPage.Focus); yield return .3;
+            var focus = nav.pages[(int)MainMenuPage.Focus].GetComponentInChildren<FocusPanelUI>();
+            focus.questDropdown.onClick.Invoke(); yield return .3;
+            Capture("focus-tags-" + suffix); yield return .2;
+            var button = focus.questList.GetComponentsInChildren<Button>().First(b => b.name == blue);
+            button.onClick.Invoke(); yield return .2;
+            focus.questDropdown.onClick.Invoke(); yield return .2;
+            Capture("focus-tag-selected-" + suffix); yield return .2;
+            if (!before) {
+                button = focus.questList.GetComponentsInChildren<Button>().First(b => b.name == blue);
+                Check(button.targetGraphic.color == TagColors.Background("#3D5FC3"), "Selected tag lost saved color");
+                Check(button.GetComponentInChildren<TMP_Text>().text.Contains("Study"), "Selected tag lost name");
+            }
+            nav.ShowPage(MainMenuPage.Dashboard); yield return .2;
+        }
+        checks.Add(before ? "Fresh before captures at both sizes." : "Both sizes: Tutorial entry, nine visible Settings highlights, no target overlap or settings mutation, completion/Skip/input release and simulated focus-loss resume; Enter next/append/blank; unscaled notice expiry, replacement and click dismissal; Focus selected saved color. Native physical keyboard and visual/motion review remain separate.");
+    }
 
     static IEnumerator RunTaskDates()
     {

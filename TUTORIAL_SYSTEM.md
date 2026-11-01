@@ -10,7 +10,7 @@ The sidebar retains each entry with a SimpleCasual lock and hover/keyboard expla
 
 New players meet Master Loke and create a real task. Saving advances the guide. tutorial completion never marks work complete or grants rewards. The first real reward explains the actual receipt. Focus and Boss/leaderboard introductions become available with the level gates. Unlock notices wait for reward/level-up presentation and never navigate without the user's choice. Daily Reward and equipment-access explanations observe real eligibility and claims.
 
-Teaching uses only Skip and Continue. Skip disables automatic teaching without bypassing locks. Settings > Help provides topic explanations and Tasks start/resume. Locked-topic explanations do not open the underlying feature. Old saves do not automatically replay already-unlocked introductions.
+Teaching uses only Skip and Continue. Skip disables automatic teaching without bypassing locks. Settings > Tutorial provides topic explanations and Tasks start/resume. Locked-topic explanations do not open the underlying feature. Old saves do not automatically replay already-unlocked introductions.
 
 ## Ownership and authored UI
 
@@ -33,7 +33,7 @@ Boss uses seven explanations: selected enemy, cat health/stats, the stage select
 
 Focus is a seven-step guide: Pomodoro purpose, timer modes, focus duration, Rest duration, optional tags, finish/cancel behavior, then Start. Continue advances the descriptive steps. Settings changes never advance it automatically. The final Start step requires an actual click on Start Focus. The step is saved through the existing tutorial-state path. Help restarts this sequence. Finishing an explanation never starts a session.
 
-Equipment uses seven Continue-driven explanations in Cat Home: mastery rewards and the empty Backpack, the three slots, category filters, equip/unequip, upgrade costs and the Cat Level limit, Auto Select, and set bonuses. The navigation explanation waits for Continue before opening Cat Home. These steps do not enable equipment actions or spend currency. equipmentStep persists explanation progress. Settings > Help > Rewards continues into this guide and restarts it. Existing read receipts remain respected. New equipment text uses the existing text reveal fallback until matching voice clips are authored.
+Equipment uses seven Continue-driven explanations in Cat Home: mastery rewards and the empty Backpack, the three slots, category filters, equip/unequip, upgrade costs and the Cat Level limit, Auto Select, and set bonuses. The navigation explanation waits for Continue before opening Cat Home. These steps do not enable equipment actions or spend currency. equipmentStep persists explanation progress. Settings > Tutorial > Rewards continues into this guide and restarts it. Existing read receipts remain respected. New equipment text uses the existing text reveal fallback until matching voice clips are authored.
 
 The tutorial highlight retains all three SimpleCasual rounded layers, using project-owned copies with nine-slice borders and Sliced Images so corners are not stretched. The dimming overlay and input restrictions are unchanged.
 
@@ -52,3 +52,5 @@ Tests use isolated saves under Library. Never run tutorial demonstrations by res
 - Existing aggregate: `Temp/verify-battle-rules.request`, which includes FocusImplementationVerification and RewardSystemVerification. Focus fixtures now enter at Lv.2 and assert the unchanged level-scaled rewards explicitly.
 
 Screenshots alone do not establish animation or interaction quality. Review the current run's images/capture, logs and result files. historical PASS files are not current evidence.
+
+Settings tutorial keeps the actual Settings panel visible and spotlights nine sections in turn: notifications, sound, music, Dashboard ranking, default Tasks tab, Dashboard visibility, tags, Account and AI. Continue advances explanations without editing preferences. Finish/Skip returns to usable Settings; focus loss closes the guide-owned modal and resumes the same step on return.

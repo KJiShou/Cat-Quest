@@ -10,7 +10,7 @@ Tasks 从 Lv.1 可用，Focus 在 Lv.2，Boss 和 Leaderboard 在 Lv.5，所有�
 
 新玩家跟随 Master Loke 创建真实任务，保存才推进，教学不会标记工作完成或发奖，首次真实奖励解释实际收据。升级后开放 Focus、Boss 和排行榜介绍，解锁提示等候奖励升级表现，不未经选择导航。每日奖励和装备解释观察真实条件。
 
-教学只用 Skip 和 Continue，Skip 停止自动教学但不绕过锁。Settings > Help 可看主题和开始恢复 Tasks，锁主题只解释不打开功能。旧存档不自动重放已解锁介绍。
+教学只用 Skip 和 Continue，Skip 停止自动教学但不绕过锁。Settings > Tutorial 可看主题和开始恢复 Tasks，锁主题只解释不打开功能。旧存档不自动重放已解锁介绍。
 
 ## 所有权与静态 UI
 
@@ -54,3 +54,5 @@ TutorialSpotlight 在目标周围绘制暗罩并阻止其他指针，键盘只�
 - 既有聚合 `Temp/verify-battle-rules.request` 包含 FocusImplementationVerification 和 RewardSystemVerification，Focus 数据从 Lv.2 并明确断言原等级奖励。
 
 截图不能单独证明动效或交互，审查本次图像、录像、日志和结果。旧 PASS 不是当前证据。
+
+Settings 教程显示真实设置界面，依次高亮通知、音效、音乐、排行榜、默认任务页、Dashboard 显示、标签、Account 和 AI。Continue 逐步介绍，不修改设置；结束或 Skip 后返回 Settings，失焦恢复后继续原步骤。
