@@ -12,7 +12,7 @@ Open Settings from the existing gear in the main header. The modal uses the proj
 - **Dashboard leaderboard** selects Boss Stage, Tasks Completed, Focus Minutes or Power. It saves immediately and controls the Dashboard preview and View All destination. Older saves default to Focus Minutes.
 - **Show on Dashboard** independently controls Tasks, Daily rewards, Focus, Leaderboard and Character. All start visible. Changes save immediately. Failed writes restore the committed switches. Hidden cards leave the layout and empty rows collapse. When no top cards remain, the quick-action row keeps its compact height. With all five hidden, a short message points back to Settings. These settings affect only Dashboard presentation: hiding Focus does not cancel its timer, and hidden features remain available from their sidebar pages. The chosen ranking category is retained while its card is hidden.
 - Close, Escape and the backdrop return from a subview or close Settings. Closing restores focus to the header gear. Tab/Shift+Tab stay within the active view, and keyboard selection scrolls tag actions into view.
-- Settings use the existing local `catquest-data.json` transaction/backup path through `TaskService.SaveSettings`. Older version-5 saves receive additive defaults: notifications on, sound `0.594` (displayed as 59%), music zero. Existing task/progression data is retained.
+- Settings use the existing local `catquest-data.json` transaction/backup path through `TaskService.SaveSettings`. New players and older saves without settings receive defaults: notifications on, sound and music `1.0` (100%). Existing saved volumes, including mute, and task/progression data are retained.
 
 ## Tag Manage
 

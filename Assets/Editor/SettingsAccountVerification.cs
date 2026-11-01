@@ -138,15 +138,16 @@ public static class SettingsAccountVerification
         Check(AccountAggregate.From(service.Snapshot, "test-owner", "Mochi").totalTasksCompleted == 5, "Undo still counted.");
         Check(service.Complete(task, true) && service.Complete(task, true) && service.Delete(task), service.LastError);
         store.Data.history.Add(PlayerDataStore.Copy(store.Data.history.First()));
-        for (int i = 0; i < 3; i++) { Check(service.BeginFocus(new FocusSessionOptions { focusMinutes = 60 }, out string id) && service.FinishFocus(id, 3600, false), service.LastError); }
+        Check(TaskService.FocusMinuteCap == 240, "Approved daily Focus allowance must remain 240 minutes.");
+        for (int i = 0; i < 4; i++) { Check(service.BeginFocus(new FocusSessionOptions { focusMinutes = 60 }, out string id) && service.FinishFocus(id, 3600, false), service.LastError); }
         for (int i = 0; i < 2; i++) { Check(service.BeginFocus(out string id) && service.FinishFocus(id, 750, true), service.LastError); }
         Check(service.BeginFocus(out string cancelled) && service.CancelFocus(cancelled), service.LastError);
         store.Data.focusSessions.Add(PlayerDataStore.Copy(store.Data.focusSessions.First()));
         var aggregate = AccountAggregate.From(service.Snapshot, "test-owner", "Mochi");
-        Check(aggregate.totalTasksCompleted == 6 && aggregate.totalFocusMinutes == 205, "Aggregate deduplication or eligible seconds after cap failed.");
-        Check(store.Data.rewardDays.Single().focusMinutes == 120, "Aggregate changed Focus allowance.");
+        Check(aggregate.totalTasksCompleted == 6 && aggregate.totalFocusMinutes == 265, "Aggregate deduplication or eligible seconds after cap failed.");
+        Check(store.Data.rewardDays.Single().focusMinutes == 240, "Aggregate changed Focus allowance.");
         store.Data.focusSessions.Add(new FocusSession { id = "legacy", status = FocusSessionStatus.EndedEarly, eligibleMinutes = 2 });
-        Check(AccountAggregate.From(service.Snapshot, "test-owner", "Mochi").totalFocusMinutes == 207, "Legacy minute fallback failed.");
+        Check(AccountAggregate.From(service.Snapshot, "test-owner", "Mochi").totalFocusMinutes == 267, "Legacy minute fallback failed.");
         var d = service.Snapshot;
         d.experience = 0; d.bossProgress.Single(p => p.bossId == 1).wins = 1;
         Check(AccountAggregate.From(d, "test-owner", "Mochi").bossStage == 1, "Level gate ignored.");

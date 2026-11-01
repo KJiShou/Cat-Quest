@@ -4,8 +4,8 @@ using System;
 public sealed class AppSettings
 {
     public bool notificationsEnabled = true;
-    public float soundVolume = .594f;
-    public float musicVolume;
+    public float soundVolume = 1f;
+    public float musicVolume = 1f;
     public TaskTab defaultTaskTab = TaskTab.Today;
     public TaskTab DefaultTaskTab => defaultTaskTab == TaskTab.Daily || defaultTaskTab == TaskTab.Todo ? defaultTaskTab : TaskTab.Today;
     public string dashboardRanking = nameof(LeaderboardKind.FocusMinutes);
@@ -19,8 +19,8 @@ public sealed class AppSettings
     public static AppSettings Normalize(AppSettings value)
     {
         value ??= new AppSettings();
-        value.soundVolume = Volume(value.soundVolume, .594f);
-        value.musicVolume = Volume(value.musicVolume, 0);
+        value.soundVolume = Volume(value.soundVolume, 1f);
+        value.musicVolume = Volume(value.musicVolume, 1f);
         value.defaultTaskTab = value.DefaultTaskTab;
         value.dashboardRanking = value.DashboardRanking.ToString();
         return value;

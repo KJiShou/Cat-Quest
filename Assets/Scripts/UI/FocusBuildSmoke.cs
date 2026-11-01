@@ -15,6 +15,10 @@ public sealed class FocusBuildSmoke : MonoBehaviour
         public int notificationAttempts,notificationsAccepted,notificationsShown,notificationActivations;
         public string notificationSessionId,notificationKind,notificationError;
         public FocusTimerMode mode; public double elapsed; public string timer;
+        public string updateState,updateMessage,updateBlocked,appVersion;
+        public string updateWorkDirectory;
+        public float updateProgress;
+        public bool developmentBuild;
     }
     string directory;float next;MainMenuNavigation navigation;FocusPanelUI panel;FocusController focus;
     void Start() { directory=CompanionProtocol.Argument("--smoke-dir");Directory.CreateDirectory(directory); }
@@ -35,6 +39,12 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                 File.Delete(commandPath);
                 switch(command.action) {
                     case "configure": focus.Configure(new FocusSessionOptions { mode=command.mode, focusMinutes=command.focusMinutes, restMinutes=command.restMinutes });break;
+                    case "updates-prepare":AppUpdateController.Ensure().PrepareSmokeUpdate(directory);break;
+                    case "updates-check":AppUpdateController.Ensure().Check();break;
+                    case "updates-download":AppUpdateController.Ensure().Download();break;
+                    case "updates-cancel":AppUpdateController.Ensure().CancelDownload();break;
+                    case "updates-install":AppUpdateController.Ensure().Install();break;
+                    case "updates-open":FindFirstObjectByType<SettingsLauncher>().Open();FindFirstObjectByType<AppUpdatePanel>().Open();break;
                     case "quest": panel.questList.GetComponentsInChildren<UnityEngine.UI.Button>().Last().onClick.Invoke();break;
                     case "start":panel.start.onClick.Invoke();break;
                     case "end":panel.endEarly.onClick.Invoke();break;
@@ -63,6 +73,8 @@ public sealed class FocusBuildSmoke : MonoBehaviour
             var battle=stage?stage.GetComponentInChildren<FocusTrainingBattle>(true):null;
             var animation=battle?battle.animator.GetCurrentAnimatorStateInfo(0):default;
             CompanionProtocol.Write(Path.Combine(directory,"smoke-result.json"),new Result{
+                updateState=AppUpdateController.Instance?AppUpdateController.Instance.State.ToString():"",updateMessage=AppUpdateController.Instance?AppUpdateController.Instance.Message:"",updateBlocked=AppUpdateController.RestartBlockReason(),appVersion=Application.version,
+                updateWorkDirectory=AppUpdateController.Instance?AppUpdateController.Instance.DownloadDirectory:null,updateProgress=AppUpdateController.Instance?AppUpdateController.Instance.Progress:0,developmentBuild=Debug.isDebugBuild,
                 animationState=battle?(animation.IsName("Training")?"Training":"Idle"):"",animationTime=animation.normalizedTime,training=battle && battle.IsTraining,
                 ninjaSprite=battle?battle.transform.Find("Training Ninja").GetComponent<SpriteRenderer>().sprite.name:"",
                 acornSprite=battle?battle.transform.Find("Acorn").GetComponent<SpriteRenderer>().sprite.name:"",

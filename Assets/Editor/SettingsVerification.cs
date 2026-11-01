@@ -67,7 +67,10 @@ public static class SettingsVerification
     {
         VerifyDateGroups();
         var old=JsonUtility.FromJson<PlayerData>("{\"version\":5,\"username\":\"Settings test\",\"fishCoins\":31}"); PlayerDataStore.Normalize(old);
-        Check(old.settings.notificationsEnabled && Math.Abs(old.settings.soundVolume-.594f)<.0001f && old.settings.musicVolume==0 && old.fishCoins==31,"Legacy setting defaults or unrelated data changed");
+        Check(old.settings.notificationsEnabled && old.settings.soundVolume==1f && old.settings.musicVolume==1f && old.fishCoins==31,"Legacy setting defaults or unrelated data changed");
+        Check(new AppSettings().musicVolume == 1f && new AppSettings().soundVolume == 1f, "New players must start with full music and SFX volume");
+        var muted = JsonUtility.FromJson<AppSettings>("{\"musicVolume\":0}");
+        Check(AppSettings.Normalize(muted).musicVolume == 0, "Existing explicit mute must be preserved");
         var store=new Store(); var service=new TaskService(store,new Clock()); int changed=0; service.Changed+=()=>changed++;
         var draft=service.Settings; draft.notificationsEnabled=false; draft.soundVolume=.25f; draft.musicVolume=.8f;
         Check(store.Data.settings.notificationsEnabled,"Reading settings exposed mutable live data");

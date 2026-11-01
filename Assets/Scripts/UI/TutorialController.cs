@@ -82,7 +82,13 @@ public sealed class TutorialController : MonoBehaviour
     }
     void OnDisable() { Hide(); }
     void OnApplicationFocus(bool value) { focused = value; if(!value) Hide(); }
-    void PageChanged(MainMenuPage page) { Hide(); pollAt = 0; }
+    void PageChanged(MainMenuPage page) {
+        Hide(); pollAt = 0;
+        // A temporary snooze of the Focus/help explanation must not suppress a newly visited guide.
+        // Explicit Skip remains persisted in progress.dismissed.
+        if(focus != null && focus.Phase == FocusPhase.Focusing
+            && (page == MainMenuPage.Boss || page == MainMenuPage.Leaderboard)) snoozed = false;
+    }
     bool Save(Action<TutorialProgress> edit)
     {
         var candidate = service.Tutorial; edit(candidate);
@@ -119,8 +125,9 @@ public sealed class TutorialController : MonoBehaviour
         if(helpPanel.activeSelf) return;
         if(manualTopic != null) { if(!panel.activeSelf) { if(manualTopic == "settings") ShowSettings(); else if(manualTopic == "equipment") ShowEquipment(); else if(manualIndex == 1) ShowFocus(); else if(manualIndex == 3) ShowBoss(); else if(manualIndex == 4) ShowLeaderboard(); else OpenTopic(manualIndex); } return; }
         if(shown == "focus-running") return;
-        if(focus.Phase is FocusPhase.Focusing or FocusPhase.Saving or FocusPhase.Resting) { Hide(); return; }
         if(shown is "locked" or "error") return;
+        if(focus.Phase is FocusPhase.Focusing or FocusPhase.Saving or FocusPhase.Resting
+            && navigation.CurrentPage != MainMenuPage.Boss && navigation.CurrentPage != MainMenuPage.Leaderboard) { Hide(); return; }
         if(snoozed || progress.dismissed) { Hide(); return; }
         if(shown != null && !shown.StartsWith("task-") && !shown.StartsWith("focus-step-") && !shown.StartsWith("boss-step-") && !shown.StartsWith("leaderboard-step-")) return;
         var data = snapshot;
@@ -362,7 +369,7 @@ public sealed class TutorialController : MonoBehaviour
         if(shown != null && shown.StartsWith("focus-step-"))
         {
             if(progress.focusStep < 6) { if(!Save(p => p.focusStep++)) return; Hide(); ShowFocus(); }
-            else { if(!Save(p => { if(!p.read.Contains("focus")) p.read.Add("focus"); })) return; manualTopic = null; snoozed = true; Hide(); }
+            else { if(!Save(p => { if(!p.read.Contains("focus")) p.read.Add("focus"); })) return; manualTopic = null; Hide(); }
             return;
         }
         if(shown != null && shown.StartsWith("task-page-"))
@@ -398,7 +405,7 @@ public sealed class TutorialController : MonoBehaviour
             if(!Save(p => p.announcedLevel = service.RewardLevel)) return;
             Hide(); navigation.ShowPage(focusFirst ? MainMenuPage.Focus : MainMenuPage.Boss); return;
         }
-        else if(key == "focus-start") { snoozed = true; Hide(); return; }
+        else if(key == "focus-start") { Hide(); return; }
         else if(key is "reward" or "daily" or "equipment" or "boss" or "leaderboard") { if(!Save(p => { if(!p.read.Contains(key)) p.read.Add(key); })) return; }
         Hide(); pollAt = Time.unscaledTime + .5f;
     }
@@ -423,7 +430,9 @@ public sealed class TutorialController : MonoBehaviour
         var root = (RectTransform)transform;
         float width = Mathf.Min(welcome ? 940 : 660, root.rect.width - 32);
         bool equipmentGuide = shown != null && shown.StartsWith("equipment-");
-        card.sizeDelta = new Vector2(width, equipmentGuide ? 260 : welcome ? 250 : 225);
+        float textHeight = dialogue.body.GetPreferredValues(dialogue.body.text, width - 205, Mathf.Infinity).y;
+        float height = Mathf.Min(root.rect.height - 32, Mathf.Max(equipmentGuide ? 280 : 260, textHeight + 150));
+        card.sizeDelta = new Vector2(width, height);
         bool top = false;
         bool targetInteractive = RequiresTargetClick() || shown == "task-page-4" || (shown == "task-page-6" && progress.taskStep != 3) || (shown != null && (shown == "focus-step-1" || shown == "focus-step-2" || shown == "focus-step-3" || shown == "focus-step-6"));
         if(spotlight) spotlight.Show(target, targetInteractive && (!IsTyping || shown == "task-page-6"), next, skip);
@@ -454,6 +463,32 @@ public sealed class TutorialController : MonoBehaviour
         card.anchorMin = card.anchorMax = welcome ? new Vector2(.5f, 0) : new Vector2(1, top ? 1 : 0);
         card.pivot = welcome ? new Vector2(.5f, 0) : new Vector2(1, top ? 1 : 0);
         card.anchoredPosition = new Vector2(welcome ? 0 : -16, top ? -95 : 18);
+        if(target && target.gameObject.activeInHierarchy) PlaceBesideTarget(root, width, height);
+    }
+    void PlaceBesideTarget(RectTransform root, float width, float height)
+    {
+        Vector2 min = root.InverseTransformPoint(corners[0]), max = root.InverseTransformPoint(corners[2]);
+        var bounds = root.rect;
+        var targetRect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        Vector2 best = default;
+        float bestScore = float.PositiveInfinity;
+        const float gap = 24;
+        for(int side = 0; side < 4; side++) {
+            Vector2 candidate = side == 0 ? new Vector2(max.x + gap, (min.y + max.y - height) * .5f)
+                : side == 1 ? new Vector2(min.x - gap - width, (min.y + max.y - height) * .5f)
+                : side == 2 ? new Vector2((min.x + max.x - width) * .5f, min.y - gap - height)
+                : new Vector2((min.x + max.x - width) * .5f, max.y + gap);
+            var position = new Vector2(Mathf.Clamp(candidate.x, bounds.xMin + 16, bounds.xMax - width - 16),
+                Mathf.Clamp(candidate.y, bounds.yMin + 16, bounds.yMax - height - 16));
+            var placed = new Rect(position, new Vector2(width, height));
+            float overlap = Mathf.Max(0, Mathf.Min(placed.xMax, targetRect.xMax) - Mathf.Max(placed.xMin, targetRect.xMin))
+                * Mathf.Max(0, Mathf.Min(placed.yMax, targetRect.yMax) - Mathf.Max(placed.yMin, targetRect.yMin));
+            float score = overlap * 1000 + (position - candidate).sqrMagnitude;
+            if(score < bestScore) { bestScore = score; best = position; }
+        }
+        card.anchorMin = card.anchorMax = root.pivot;
+        card.pivot = Vector2.zero;
+        card.anchoredPosition = best;
     }
     void LateUpdate()
     {

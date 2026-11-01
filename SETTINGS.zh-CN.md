@@ -12,7 +12,7 @@
 - **Dashboard leaderboard** 选择 Boss Stage、Tasks Completed、Focus Minutes、Power，立即保存并控制预览和 View All 目标，旧存档默认 Focus Minutes。
 - **Show on Dashboard** 独立控制 Tasks、Daily rewards、Focus、Leaderboard、Character，默认全显示。保存失败恢复，隐藏卡离开布局、空行收起，没有上方卡时快捷行保持紧凑，全隐藏显示设置提示。仅改变 Dashboard 表现，不停止计时或禁用侧栏功能，隐藏排名保留分类。
 - 关闭、Escape、背景返回上一级或退出，退出恢复齿轮焦点，Tab/Shift+Tab 限在当前视图，键盘选标签操作会滚动到可见。
-- `TaskService.SaveSettings` 使用已有 `catquest-data.json` 原子备份。旧 version 5 增加默认：通知开、音效 0.594 显示 59%、音乐零，保留任务和成长。
+- `TaskService.SaveSettings` 使用已有 `catquest-data.json` 原子备份。新玩家及没有设置的旧存档默认：通知开、音效和音乐均为 1.0，显示 100%。保留已有音量（包括静音）、任务和成长。
 
 ## 标签管理
 

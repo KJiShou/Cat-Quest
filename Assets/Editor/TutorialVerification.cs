@@ -76,13 +76,15 @@ public static class TutorialVerification
         SessionState.SetString(Flag+".folder",folder);SessionState.SetBool(Flag+".before",before);
         SessionState.SetBool(Flag+".intro",intro);SessionState.SetBool(Flag+".introBefore",mode=="intro-before");
         SessionState.SetBool(Flag+".equipment",mode=="equipment");
+        SessionState.SetBool(Flag+".focusAccess",mode=="focus-access");
         var store=Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");SessionState.SetBool(Flag+".hadStore",store!=null);SessionState.SetString(Flag+".store",store??"");
         SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(EditorSceneManager.playModeStartScene));
         SessionState.SetInt(Flag+".size",(int)SizeProperty.GetValue(View));SessionState.SetInt(Flag+".count",Count(Group(),"GetCustomCount"));SessionState.SetBool(Flag+".paused",EditorApplication.isPaused);
         SessionState.SetString(Flag+".deadline",DateTime.UtcNow.AddSeconds(300).Ticks.ToString());SessionState.SetBool(Flag,true);
         try{
             File.WriteAllText(folder+"/result.txt",DateTime.UtcNow.ToString("O")+" RUNNING");
-            if(!before&&!intro&&mode!="equipment")TutorialRulesVerification.Run();
+            // UI-only runs retain all interaction assertions without invoking unrelated reward rules.
+            if(!before&&!intro&&mode!="equipment"&&mode!="ui"&&mode!="focus-access")TutorialRulesVerification.Run();
             Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(folder+"/save.json"));
 
             EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(intro?"Assets/Scenes/IntroStory.unity":"Assets/Scenes/CharacterHome.unity");
@@ -132,6 +134,25 @@ public static class TutorialVerification
         var hit=Hit((RectTransform)unrelated.transform);
         Check(hit==tutorial.spotlight.gameObject,"Pointer escaped spotlight to "+unrelated.name+"; actual="+(hit?hit.name:"none")+"; topic="+tutorial.CurrentTopic+"; point="+RectTransformUtility.WorldToScreenPoint(null,unrelated.transform.TransformPoint(((RectTransform)unrelated.transform).rect.center))+"; screen="+Screen.width+"x"+Screen.height+"; active="+unrelated.gameObject.activeInHierarchy);
         Check(!tutorial.later.gameObject.activeSelf && tutorial.nextLabel.text=="Continue","Unexpected tutorial actions");
+        VerifyDialogueLayout(tutorial);
+    }
+    static Rect Bounds(RectTransform rect, RectTransform root)
+    {
+        var points = new Vector3[4]; rect.GetWorldCorners(points);
+        Vector2 min = root.InverseTransformPoint(points[0]), max = root.InverseTransformPoint(points[2]);
+        return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+    }
+    static void VerifyDialogueLayout(TutorialController tutorial)
+    {
+        var body = Bounds(tutorial.dialogue.body.rectTransform, tutorial.card);
+        foreach(var button in new[]{tutorial.next, tutorial.skip}) {
+            var rect = (RectTransform)button.transform;
+            Visible(rect);
+            Check(!body.Overlaps(Bounds(rect, tutorial.card)), "Tutorial button overlaps talking text");
+            Check(rect.anchorMin == Vector2.zero && rect.anchorMax == Vector2.zero, "Tutorial actions are not anchored at lower left");
+        }
+        Visible(tutorial.card);
+        Check(!tutorial.dialogue.body.isTextOverflowing, "Tutorial talking text clipped: " + tutorial.CurrentTopic);
     }
     static IEnumerator Flow()
     {
@@ -163,7 +184,17 @@ public static class TutorialVerification
         Check(nav&&tutorial,"Tutorial bindings unavailable");
         var manager=GameDataManager.Instance;var service=manager.Tasks;
         Check(manager.SavePath.Contains("TutorialVerification"),"Unsafe save path");
+        Check(service.Settings.musicVolume==1f && service.Settings.soundVolume==1f
+            && SettingsAudio.Instance.musicSource.volume==1f && SettingsAudio.Instance.soundSource.volume==1f,
+            "Fresh settings did not enable music and SFX at 100 percent");
+        Check(AppSettings.Normalize(JsonUtility.FromJson<AppSettings>("{\"musicVolume\":0}")).musicVolume==0,
+            "Existing muted music setting changed");
         yield return 2;
+        if(SessionState.GetBool(Flag+".focusAccess",false)) {
+            var accessFlow = FocusAccess(tutorial, nav, manager);
+            while(accessFlow.MoveNext()) yield return accessFlow.Current;
+            yield break;
+        }
         if(SessionState.GetBool(Flag+".equipment",false)) {
             tutorial.Skip();
             manager.PlayerData.equipmentUnlocked=true; manager.SaveData();
@@ -308,6 +339,8 @@ public static class TutorialVerification
         {
             Check(tutorial.CurrentTopic=="focus-step-"+stepIndex,"Focus step order incorrect: "+stepIndex);
             yield return 6;
+            // Voice-synchronised lines can outlast six seconds. Use the real typing-skip control before testing target input.
+            FinishSpeech(tutorial);
             Check(!tutorial.dialogue.body.isTextOverflowing,"Focus text overflow at "+stepIndex);
             Capture("focus-step-"+stepIndex);yield return .3;
             if(stepIndex==0) {
@@ -335,6 +368,18 @@ public static class TutorialVerification
         }
         Check(FocusRunner.EnsureInstance().Controller.Phase==FocusPhase.Focusing,"Target click did not start Focus");
         if(tutorial.panel.activeSelf){FinishSpeech(tutorial);tutorial.Continue();}yield return .5;
+        manager.PlayerData.experience=550;manager.PlayerData.tickets=1;manager.SaveData();
+        p=service.Tutorial;p.announcedLevel=5;service.SaveTutorial(p);
+        var runningFocus=FocusRunner.EnsureInstance().Controller;
+        string session=runningFocus.SessionId; double elapsed=runningFocus.ElapsedSeconds;
+        Check(nav.ShowPage(MainMenuPage.Boss),"Boss navigation while focusing");yield return 1;
+        Check(tutorial.CurrentTopic=="boss-step-0" && tutorial.panel.activeSelf,"Boss tutorial suppressed during Focus");
+        FinishSpeech(tutorial); VerifyDialogueLayout(tutorial); Capture("boss-during-focus");yield return .3;
+        Check(nav.ShowPage(MainMenuPage.Leaderboard),"Leaderboard navigation while focusing");yield return 1;
+        Check(tutorial.CurrentTopic=="leaderboard-step-0" && tutorial.panel.activeSelf,"Leaderboard tutorial suppressed during Focus");
+        FinishSpeech(tutorial); VerifyDialogueLayout(tutorial); Capture("leaderboard-during-focus");yield return .3;
+        Check(runningFocus.Phase==FocusPhase.Focusing && runningFocus.SessionId==session && runningFocus.ElapsedSeconds>=elapsed
+            && service.Snapshot.tickets==1 && service.Snapshot.battles.Count==0,"Tutorial changed Focus session or spent a ticket");
         Check(FocusRunner.EnsureInstance().Controller.Cancel(),"Focus cancel failed");
         manager.PlayerData.experience=550;manager.PlayerData.tickets=1;manager.SaveData();p=service.Tutorial;p.announcedLevel=5;service.SaveTutorial(p);
         Check(nav.ShowPage(MainMenuPage.Boss),"Lv.5 Boss navigation");yield return 3;tutorial.OpenTopic(3);yield return .5;
@@ -415,5 +460,56 @@ public static class TutorialVerification
         Check(!tutorial.spotlight.gameObject.activeSelf,"Skip did not release input shield");
         Check(service.Tutorial.dismissed&&!nav.ShowPage(MainMenuPage.Focus),"Skip bypassed level locks");
         File.WriteAllText(Folder+"/checks.txt",DateTime.UtcNow.ToString("O")+" PASS: serialized guide, boundaries/navigation, real task save, no fabricated completion, help, Master animator, Focus cancellation, Boss/leaderboard access, skip remains locked. Screenshots require visual review.");
+    }
+    static IEnumerator FocusAccess(TutorialController tutorial, MainMenuNavigation nav, GameDataManager manager)
+    {
+        tutorial.Skip();
+        manager.PlayerData.experience=100; manager.PlayerData.tickets=1; manager.SaveData();
+        var service=manager.Tasks;
+        var progress=service.Tutorial;
+        progress.dismissed=false; progress.taskStep=4; progress.announcedLevel=2;
+        foreach(var key in new[]{"tasks","focus","reward","daily"}) if(!progress.read.Contains(key))progress.read.Add(key);
+        Check(service.SaveTutorial(progress),service.LastError);
+        tutorial.SendMessage("OnApplicationFocus",true);
+        Check(nav.ShowPage(MainMenuPage.Focus),"Focus page unavailable");yield return .5;
+        tutorial.OpenHelp();tutorial.CloseHelp();
+        var focus=FocusRunner.EnsureInstance().Controller;
+        Check(focus.Start(),"Could not start isolated Focus session");
+        string session=focus.SessionId; double elapsed=focus.ElapsedSeconds;
+        yield return 5;
+        foreach(var lockedPage in new[]{MainMenuPage.Boss,MainMenuPage.Leaderboard}) {
+            Check(!nav.ShowPage(lockedPage),"Level gate bypassed during Focus");yield return .5;
+            Check(tutorial.panel.activeSelf && tutorial.CurrentTopic=="locked","Unlock explanation disappeared during Focus: "+lockedPage);
+            FinishSpeech(tutorial); tutorial.Continue();yield return .5;
+        }
+        manager.PlayerData.experience=550;manager.SaveData();
+        progress=service.Tutorial;progress.announcedLevel=5;Check(service.SaveTutorial(progress),service.LastError);
+        var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
+        var expand=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
+        foreach(var page in new[]{MainMenuPage.Boss,MainMenuPage.Leaderboard}) {
+            Check(nav.ShowPage(page),"Navigation during Focus failed: "+page);yield return 1;
+            string topic=page==MainMenuPage.Boss?"boss-step-0":"leaderboard-step-0";
+            // The fixture's level increase can still be animating; the guide correctly waits for that overlay.
+            for(int wait=0;wait<80 && (!tutorial.panel.activeSelf || tutorial.CurrentTopic!=topic);wait++)yield return .25;
+            Check(tutorial.panel.activeSelf && tutorial.CurrentTopic==topic,"Tutorial suppressed during Focus: "+page
+                +" topic="+tutorial.CurrentTopic+" dismissed="+service.Tutorial.dismissed
+                +" read="+string.Join(",",service.Tutorial.read)+" rewards="+tutorial.rewards.IsAnimating);
+            FinishSpeech(tutorial);
+            foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)}) {
+                Resolution(size.x,size.y);yield return .4;
+                foreach(bool expanded in new[]{false,true}) {
+                    expand.isOn=expanded;yield return .4;
+                    VerifyDialogueLayout(tutorial);
+                    Capture(page+"-during-focus-"+size.x+(expanded?"-expanded":"-collapsed"));yield return .3;
+                }
+            }
+            Check(focus.Phase==FocusPhase.Focusing && focus.SessionId==session && focus.ElapsedSeconds>=elapsed
+                && service.Snapshot.tickets==1 && service.Snapshot.battles.Count==0,"Guide changed timer/tickets/battles");
+        }
+        tutorial.Skip();
+        Check(nav.ShowPage(MainMenuPage.Boss),"Boss return failed");yield return 1;
+        Check(!tutorial.panel.activeSelf && service.Tutorial.dismissed,"Explicit Skip was not respected during Focus");
+        Check(focus.Cancel(),"Isolated Focus cancellation failed");
+        File.WriteAllText(Folder+"/checks.txt","PASS: fresh music and SFX at 100%, explicit mute retained; automatic Boss/Leaderboard guides during active Focus after Help snooze; four resolutions with both sidebar states; dialogue/actions contained and nonoverlapping; unchanged session, increasing elapsed time, unchanged tickets/battles; explicit Skip respected; isolated cancellation.");
     }
 }

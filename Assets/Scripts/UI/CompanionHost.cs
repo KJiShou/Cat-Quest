@@ -14,9 +14,11 @@ public sealed class CompanionHost : MonoBehaviour
     public string DirectoryPath { get; private set; }
     public string OwnerId { get; private set; }
     public bool Enabled { get; private set; }
+    public bool IsUnlocked => GameDataManager.Instance.Tasks.CanAccess(ProgressionFeature.Focus);
     FocusController focus;
     Process process;
     float nextPublish;
+    bool updateShutdown;
     readonly HashSet<string> handled = new HashSet<string>();
     public static CompanionHost Ensure()
     {
@@ -29,18 +31,21 @@ public sealed class CompanionHost : MonoBehaviour
         OwnerId=Guid.NewGuid().ToString("N");
         DirectoryPath=Path.Combine(Application.temporaryCachePath,"Companion",OwnerId);
         Directory.CreateDirectory(DirectoryPath);
-        Enabled=PlayerPrefs.GetInt("PetWidgetEnabled",0)==1;
+        Enabled=IsUnlocked && PlayerPrefs.GetInt("PetWidgetEnabled",0)==1;
         focus.Changed+=OnChanged;
         Publish();
     }
-    void OnChanged() { Publish(); if(Enabled && focus.Phase==FocusPhase.Focusing && !IsOpen) Open(); }
+    void OnChanged() { Publish(); if(!updateShutdown && Enabled && focus.Phase==FocusPhase.Focusing && !IsOpen) Open(); }
     public void SetEnabled(bool enabled)
     {
+        if(enabled && !IsUnlocked) { Error=GameDataManager.Instance.Tasks.AccessMessage(ProgressionFeature.Focus); return; }
         Enabled=enabled; PlayerPrefs.SetInt("PetWidgetEnabled",enabled?1:0);
         if(enabled) Open(); else CloseWindow();
     }
     public bool Open()
     {
+        if(updateShutdown) return false;
+        if(!IsUnlocked) { Error=GameDataManager.Instance.Tasks.AccessMessage(ProgressionFeature.Focus); return false; }
         if(IsOpen) return true;
 #if UNITY_EDITOR
         string executable=Path.GetFullPath("Builds/Windows/CatQuest.exe");
@@ -76,6 +81,8 @@ public sealed class CompanionHost : MonoBehaviour
         try { if(IsOpen) File.WriteAllText(Path.Combine(DirectoryPath,"close.request"),OwnerId); }
         catch(IOException e) { Error=e.Message; }
     }
+    public void BeginUpdateShutdown() { updateShutdown=true; CloseWindow(); }
+    public void CancelUpdateShutdown() { updateShutdown=false; }
     void Update()
     {
         if(Time.unscaledTime<nextPublish) return;
@@ -87,11 +94,12 @@ public sealed class CompanionHost : MonoBehaviour
             try { File.Delete(path); } catch(IOException) { continue; }
             Execute(command);
         }
-        if(process!=null && process.HasExited) { process.Dispose(); process=null; Enabled=false; PlayerPrefs.SetInt("PetWidgetEnabled",0); }
+        if(process!=null && process.HasExited) { process.Dispose(); process=null; if(!updateShutdown) { Enabled=false; PlayerPrefs.SetInt("PetWidgetEnabled",0); } }
         Publish();
     }
     public bool Execute(CompanionCommand command)
     {
+        if(updateShutdown) return false;
         if(command==null || command.ownerId!=OwnerId || command.sessionId!=(focus.SessionId ?? "") || string.IsNullOrEmpty(command.requestId) || !handled.Add(command.requestId)) return false;
         switch(command.action)
         {

@@ -144,6 +144,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     }
     void Update()
     {
+        if (TryGetComponent<AppUpdatePanel>(out var updates) && updates.OwnsInput) return;
         if(TutorialOwnsInput) return;
         if (Input.GetKeyDown(KeyCode.Escape)) { Back(); return; }
         // Keep keyboard focus within the visible modal, including after dynamic rows refresh.

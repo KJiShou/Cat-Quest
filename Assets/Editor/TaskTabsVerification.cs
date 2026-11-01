@@ -284,6 +284,18 @@ public static class TaskTabsVerification
         Check(nav&&nav.taskSystem&&EventSystem.current,"CharacterHome navigation/input missing.");
         Check(Path.GetFullPath(GameDataManager.EnsureInstance().SavePath).StartsWith(Path.GetFullPath(Folder)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase),"Verification must use isolated save.");
         var owner=nav.taskSystem;
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
+        var manager=GameDataManager.Instance;
+        var pet=nav.GetComponentInChildren<PetWidgetToggle>(true);
+        Check(pet,"Pet Widget missing.");
+        var host=CompanionHost.Ensure();
+        manager.PlayerData.experience=99;manager.SaveData();yield return .2;
+        var visibility=pet.transform.parent.GetComponent<CanvasGroup>();
+        Check(!host.IsUnlocked && visibility && visibility.alpha==0 && !visibility.blocksRaycasts && !pet.GetComponent<Toggle>().IsInteractable(),"Level 1 widget must be hidden and unavailable.");
+        host.SetEnabled(true);
+        Check(!host.Enabled && !host.Open() && !host.IsOpen,"Level 1 widget launch was accepted.");
+        manager.PlayerData.experience=100;manager.SaveData();yield return .2;
+        Check(host.IsUnlocked && visibility.alpha==1 && visibility.blocksRaycasts && pet.GetComponent<Toggle>().IsInteractable(),"Widget did not unlock at Level 2 without reloading.");
         Check(nav.ShowPage(MainMenuPage.Tasks),"Cannot open Tasks.");yield return 1;
         Check(owner.Service.Upsert(new QuestTask { title="Responsive task",
             subtasks=new List<QuestSubtask> {
@@ -305,6 +317,12 @@ public static class TaskTabsVerification
             {
                 context=size.x+"x"+size.y+(expanded?" expanded":" collapsed");
                 toggle.isOn=expanded;owner.SelectTab(TaskTab.History);yield return 1;
+                if(!capture)capture=new GameObject("Task Tab Capture").AddComponent<RewardScreenshotCapture>();
+                manager.PlayerData.experience=99;manager.SaveData();yield return .2;
+                Check(visibility.alpha==0 && !pet.GetComponent<Toggle>().IsInteractable(),"Level 1 visibility regressed.");
+                capture.Begin(Path.GetFullPath(Folder+"/widget-level1-"+size.x+"x"+size.y+(expanded?"-expanded":"-collapsed")+".png"));
+                yield return .2;
+                manager.PlayerData.experience=100;manager.SaveData();yield return .2;
                 Layout(owner);HeaderTextVariants(nav);ClickTabs(owner);
                 owner.SelectTab(TaskTab.Todo);owner.SelectTask(shortTask);yield return .5;
                 if(!capture)capture=new GameObject("Task Tab Capture").AddComponent<RewardScreenshotCapture>();

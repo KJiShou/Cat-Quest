@@ -6,6 +6,8 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 // Bounded verification only: no asset generation or authored-scene saves.
 [InitializeOnLoad]
@@ -77,9 +79,37 @@ public static class DialogueAudioVerification
     }
     static AudioSource Voice(SettingsAudio audio) => (AudioSource)typeof(SettingsAudio).GetField("dialogueSource", Private).GetValue(audio);
     static void Invoke(object instance, string method) => instance.GetType().GetMethod(method, Private).Invoke(instance, null);
+    static void ClickSkipControl(StorySkipUI owner, string field)
+    {
+        var button = (Button)typeof(StorySkipUI).GetField(field, Private).GetValue(owner);
+        Check(button && button.IsActive() && button.IsInteractable(), field + " is available: " + (button ? button.name + " active=" + button.gameObject.activeInHierarchy + " enabled=" + button.enabled + " interactable=" + button.IsInteractable() : "missing binding"));
+        Canvas.ForceUpdateCanvases();
+        var rect = (RectTransform)button.transform;
+        var canvas = button.GetComponentInParent<Canvas>();
+        var pointer = new PointerEventData(EventSystem.current) {
+            position = RectTransformUtility.WorldToScreenPoint(canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera, rect.TransformPoint(rect.rect.center))
+        };
+        var hits = new System.Collections.Generic.List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointer, hits);
+        Check(hits.Count > 0 && ExecuteEvents.GetEventHandler<IPointerClickHandler>(hits[0].gameObject) == button.gameObject,
+            field + " raycast; first hit: " + (hits.Count > 0 ? hits[0].gameObject.name : "none"));
+        ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+    }
     static IEnumerator Run()
     {
         Check(GameDataManager.Instance.SavePath.Contains("DialogueAudioVerification"), "Isolated save path");
+        var service = GameDataManager.Instance.Tasks;
+        var defaults = service.Settings;
+        var initialAudio = SettingsAudio.Instance;
+        Check(defaults.soundVolume == 1f && defaults.musicVolume == 1f
+            && initialAudio.soundSource.volume == 1f && initialAudio.musicSource.volume == 1f,
+            "New user music and SFX start at 100 percent");
+        var muted = service.Settings; muted.soundVolume = 0; muted.musicVolume = 0;
+        Check(service.SaveSettings(muted), "Save explicit mute in isolated store");
+        var reloaded = new PlayerDataStore(GameDataManager.Instance.SavePath);
+        Check(reloaded.Data.settings.soundVolume == 0 && reloaded.Data.settings.musicVolume == 0,
+            "Existing saved music/SFX mute survives reload");
+        Check(service.SaveSettings(defaults), "Restore isolated default volumes");
         var story = UnityEngine.Object.FindFirstObjectByType<StoryController>();
         Check(story, "Story scene loaded");
         var serialized = new SerializedObject(story);
@@ -119,11 +149,13 @@ public static class DialogueAudioVerification
         Check(guard < 160 && Voice(audio).clip.name.StartsWith("mentor-"), "Story reaches approved D mentor voice");
         var skipUI = UnityEngine.Object.FindFirstObjectByType<StorySkipUI>(FindObjectsInactive.Include);
         float timeScale = Time.timeScale;
-        Invoke(skipUI, "OpenConfirmation");
+        ClickSkipControl(skipUI, "skipButton"); yield return .2;
         Check(!Voice(audio).clip && Time.timeScale == 0, "Skip confirmation stops voice and preserves pause behavior");
-        Invoke(skipUI, "CancelSkip");
+        ClickSkipControl(skipUI, "laterButton");
         Check(Time.timeScale == timeScale, "Cancel skip restores time scale");
-        story.SkipStory(); Check(!Voice(audio).clip, "Skip stops Story voice immediately"); yield return 4;
+        ClickSkipControl(skipUI, "skipButton"); yield return .2;
+        ClickSkipControl(skipUI, "yesButton");
+        Check(!Voice(audio).clip && Time.timeScale == timeScale, "Skip stops Story voice immediately and restores time"); yield return 4;
         var tutorial = UnityEngine.Object.FindFirstObjectByType<TutorialController>();
         Check(tutorial && tutorial.IsTyping && Voice(audio).clip && Voice(audio).clip.name.StartsWith("mentor-"), "Tutorial welcome plays approved D voice");
         var key = tutorial.CurrentTopic; tutorial.CompleteTyping();
@@ -145,6 +177,24 @@ public static class DialogueAudioVerification
         Check(!Voice(audio).clip, "Page change immediately stops current voice");
         yield return .5;
         tutorial.Skip(); Check(!Voice(audio).clip, "Skip tutorial stops voice");
+        tutorial.SendMessage("OnApplicationFocus", true);
+        tutorial.OpenTopic(5);
+        for(int step = 0; step < 9; step++) {
+            yield return .2;
+            Check(tutorial.CurrentTopic == "help-settings-" + step, "Settings guide step " + step);
+            var line = DialogueAudioLibrary.Find(tutorial.dialogue.body.text, false);
+            Check(line != null && Voice(audio).clip == Resources.Load<AudioClip>(line.clip)
+                && Voice(audio).isPlaying && Voice(audio).pitch == 1f,
+                "Settings step " + step + " plays its approved mentor clip");
+            tutorial.CompleteTyping();
+            Check(!Voice(audio).clip && !tutorial.IsTyping, "Settings typing skip stops voice at step " + step);
+            tutorial.Continue();
+        }
+        Check(!tutorial.panel.activeSelf && tutorial.settings.gameObject.activeSelf && !Voice(audio).clip,
+            "Finishing Settings guide returns to Settings without lingering voice");
+        tutorial.OpenTopic(5); yield return .2;
+        Check(Voice(audio).isPlaying, "Reopening Settings guide restarts voice");
+        tutorial.Skip(); Check(!Voice(audio).clip, "Skipping Settings guide stops voice");
         Check(audio.PlayDialogue(tutorial, "Uncatalogued future text", false) == 0 && !Voice(audio).clip, "Unknown text remains silent and clears previous voice");
     }
 }

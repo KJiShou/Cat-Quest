@@ -842,6 +842,87 @@
       "duration": 3.6073333333333335,
       "peak": 0.6327375769615173,
       "sha256": "c874420bc7fdd3a08fd3a538d2e870609d9ede16ad5fce8a75f28aa971017ec3"
+    },
+    {
+      "role": "mentor",
+      "text": "Focus notifications let you know when Focus or Rest finishes. This switch controls those reminders. The guide leaves your current choice unchanged.",
+      "spoken": "Focus notifications let you know when Focus or Rest finishes. This switch controls those reminders. The guide leaves your current choice unchanged.",
+      "clip": "DialogueAudio/mentor-45d35fcab3955f95260b",
+      "duration": 10.2646875,
+      "peak": 0.6454120874404907,
+      "sha256": "6129d0ebbfb1ae8c63d1c5e58287774ce3a241959ec07d4ba464fc7c4aeeb71d"
+    },
+    {
+      "role": "mentor",
+      "text": "Sound controls effects and feedback volume. Move this slider when you want louder or quieter sounds. Zero mutes sound effects.",
+      "spoken": "Sound controls effects and feedback volume. Move this slider when you want louder or quieter sounds. Zero mutes sound effects.",
+      "clip": "DialogueAudio/mentor-915cf0fd282252a58236",
+      "duration": 8.716166666666666,
+      "peak": 0.6581944227218628,
+      "sha256": "0518a50b36f8d76a141c24ea39866010a05f887d0e722998ed8da80c3b92f795"
+    },
+    {
+      "role": "mentor",
+      "text": "Music has its own volume control. You can keep background music quiet or mute it while leaving sound effects on.",
+      "spoken": "Music has its own volume control. You can keep background music quiet or mute it while leaving sound effects on.",
+      "clip": "DialogueAudio/mentor-93b548f0ee0dab2f9b6c",
+      "duration": 7.5896875,
+      "peak": 0.6506778001785278,
+      "sha256": "15bf58cf147cd4032936eebe9817de82ee3ca3113e981e8a9042cf5f1b84f9b5"
+    },
+    {
+      "role": "mentor",
+      "text": "Choose the ranking shown on your Dashboard: Boss Stage, Tasks Completed, Focus Minutes or Power. This choice does not enable statistics uploads.",
+      "spoken": "Choose the ranking shown on your Dashboard: Boss Stage, Tasks Completed, Focus Minutes or Power. This choice does not enable statistics uploads.",
+      "clip": "DialogueAudio/mentor-158ebfd90e76939d0fb6",
+      "duration": 10.1,
+      "peak": 0.6535854339599609,
+      "sha256": "640565ab2ca50de53dd43c6e11927cacddbbdd068a7ecfea8602f759feca5294"
+    },
+    {
+      "role": "mentor",
+      "text": "Choose which tab opens when you enter Tasks: Today, Daily Tasks or Todo. Your tasks stay saved whichever starting tab you prefer.",
+      "spoken": "Choose which tab opens when you enter Tasks: Today, Daily Tasks or Todo. Your tasks stay saved whichever starting tab you prefer.",
+      "clip": "DialogueAudio/mentor-6ac62d2c34c07a862c50",
+      "duration": 8.970583333333334,
+      "peak": 0.6348201632499695,
+      "sha256": "735dbc501bc9c98a15bff1cbe757ab0ab412ffde86a376fdc60673640892cd5d"
+    },
+    {
+      "role": "mentor",
+      "text": "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session.",
+      "spoken": "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session.",
+      "clip": "DialogueAudio/mentor-446ef0e4449fc503b910",
+      "duration": 8.573520833333333,
+      "peak": 0.6505845785140991,
+      "sha256": "27efacd6e524b40956eb293ba470f473dbf35ffd8c90f5dbfd8183cff5782855"
+    },
+    {
+      "role": "mentor",
+      "text": "Manage tags opens your tag collection. Add tags, rename them and choose their colours here. Tasks and Focus use those same tag colours.",
+      "spoken": "Manage tags opens your tag collection. Add tags, rename them and choose their colours here. Tasks and Focus use those same tag colours.",
+      "clip": "DialogueAudio/mentor-0ab17e4a2bd00778c897",
+      "duration": 9.330875,
+      "peak": 0.6305879950523376,
+      "sha256": "059e0866b5fd4f00580dfb569640588828677728f41a0ccd19605bc7133bb163"
+    },
+    {
+      "role": "mentor",
+      "text": "Account manages your display name, sign-in and optional leaderboard uploads. Sharing is your choice. Your private tasks and detailed history stay local.",
+      "spoken": "Account manages your display name, sign-in and optional leaderboard uploads. Sharing is your choice. Your private tasks and detailed history stay local.",
+      "clip": "DialogueAudio/mentor-7c23a1812f4842bef9b7",
+      "duration": 10.5029375,
+      "peak": 0.6347658038139343,
+      "sha256": "13b199450de61794819581b96b4850b1e399065db6b86efee8170067c877ea81"
+    },
+    {
+      "role": "mentor",
+      "text": "AI opens your chat connection settings. You can create and complete tasks without an AI connection. Continue to finish and return to Settings.",
+      "spoken": "AI opens your chat connection settings. You can create and complete tasks without an AI connection. Continue to finish and return to Settings.",
+      "clip": "DialogueAudio/mentor-55189d3bb8a41c296c2d",
+      "duration": 10.029395833333334,
+      "peak": 0.6393880248069763,
+      "sha256": "fa7db7ac3f10076f4f5a77ff576a98d32055cce3dc208ad98dcf51a6f323a03d"
     }
   ]
 }

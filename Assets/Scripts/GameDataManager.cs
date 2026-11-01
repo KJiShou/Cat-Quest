@@ -61,6 +61,7 @@ public class GameDataManager : MonoBehaviour
     {
         if (!store.TrySave(PlayerDataStore.Copy(PlayerData), out var error)) Debug.LogError(error);
     }
+    public bool TrySaveData(out string error) => store.TrySave(PlayerDataStore.Copy(PlayerData), out error);
     [ContextMenu("Delete Save Data")]
     public void DeleteSaveData()
     {

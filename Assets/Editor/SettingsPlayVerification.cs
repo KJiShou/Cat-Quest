@@ -68,7 +68,7 @@ public static class SettingsPlayVerification
         {
             SessionState.SetBool(Flag + ".enteredPlay", true);
             evidence.Clear(); checks.Clear(); loggedError = null;
-            run = SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
+            run = SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
         }
         if (state == PlayModeStateChange.EnteredEditMode)
         {
@@ -107,7 +107,7 @@ public static class SettingsPlayVerification
                 else
                 {
                     Check(evidence.All(path => File.Exists(path) && new FileInfo(path).Length > 100), "A requested screenshot is missing or empty.");
-                    Finish(SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
+                    Finish(SessionState.GetBool(Flag + ".appUpdates", false) ? "PASS: App Update bindings, state views, modal dismissal/focus, download continuity, button motion/reset at 1920x1080 and 1280x720. Network/install are verified separately." : SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
                 }
             }
             catch (Exception e) { Finish("FAIL at " + context + ": " + e); }
@@ -115,6 +115,7 @@ public static class SettingsPlayVerification
         }
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists(Request)) return;
         SessionState.SetBool(Flag + ".taskDates", File.ReadAllText(Request).Trim().StartsWith("task-dates"));
+        SessionState.SetBool(Flag + ".appUpdates", File.ReadAllText(Request).Trim() == "app-updates");
         SessionState.SetBool(Flag + ".beforeDates", File.ReadAllText(Request).Trim() == "task-dates-before");
         SessionState.SetBool(Flag + ".quickUX", File.ReadAllText(Request).Trim().StartsWith("quick-ux"));
         SessionState.SetBool(Flag + ".quickBefore", File.ReadAllText(Request).Trim() == "quick-ux-before");
