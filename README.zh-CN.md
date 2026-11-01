@@ -8,7 +8,7 @@ Cat Quest 是使用 Unity 和 C# 开发的 Windows 桌面效率应用，也是�
 
 任务和进度保存在本地。创建和完成任务不需要账号、AI 连接或网络。可选的 ChatGPT 功能帮助规划任务，可选的 Google/Firebase 连接用于在排行榜分享指定汇总统计。
 
-> **正式版：** [下载 Cat Quest v1.0（Windows x64）](https://github.com/KJiShou/Cat-Quest/releases/tag/v1.0)。完整解压 ZIP，运行 `CatQuest/CatQuest.exe`，并保留所有附带文件。本学生项目仍在持续开发，仓库提供 Unity 源工程；本项目没有采用开源许可证。
+> **正式版：** [下载 Cat Quest v1.1（Windows x64）](https://github.com/KJiShou/Cat-Quest/releases/tag/v1.1)。完整解压 ZIP，运行 `CatQuest/CatQuest.exe`，并保留所有附带文件。本学生项目仍在持续开发，仓库提供 Unity 源工程；本项目没有采用开源许可证。
 
 ![Dashboard 展示猫咪、任务概览与每日奖励](docs/images/dashboard.png)
 
