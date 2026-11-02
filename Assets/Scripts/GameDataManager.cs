@@ -70,5 +70,12 @@ public class GameDataManager : MonoBehaviour
         store = new PlayerDataStore(SavePath);
         Tasks = new TaskService(store, new SystemTaskClock());
     }
+    private void OnApplicationFocus(bool focused)
+    {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        if (Instance == this && !CompanionProtocol.HasArgument("--companion"))
+            Application.targetFrameRate = focused ? 60 : 30;
+#endif
+    }
     private void OnDestroy() { if (Instance == this) Instance = null; }
 }

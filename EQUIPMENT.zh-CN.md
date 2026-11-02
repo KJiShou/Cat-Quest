@@ -29,7 +29,7 @@ EquipmentPageUI 绑定控件并填数据，不创建这些静态面板。编辑�
 
 Cyclope 蓝、Orc 紫、Demon 黄，背包、已穿戴和领取采用 SimpleCasual 圆角底与阶色，不再生成 EquipmentGradeEffect 动画边框。升级预览及战斗武器特效独立保留。
 
-Auto Select 枚举拥有的搭配并包含套装效果，同 Power 保留现搭配，点击直接原子提交最优，不弹确认，仍受解锁和战斗限制。属性行显示真实 HP/ATK/DEF/ASPD 及独立 +gear，零加成灰色，没有填充条或暗示最大值，速度按每秒显示。
+Auto Select 枚举拥有的搭配并包含套装效果，同 Power 保留现搭配，点击直接原子提交最优，不弹确认，仍受解锁和战斗限制。属性行显示真实 HP/ATK/DEF/ASPD 及独立 +gear，零加成时单独的加成标签留空，没有填充条或暗示最大值，速度按每秒显示。
 
 物品详情是 `Assets/Prefabs/EquipmentItemDetail.prefab`，源于 SimpleCasual Light/Equipment_Popup_Detail。EquipmentPageUI 提供物品、等级、当前下一加成、套装和鱼币成本，EquipmentItemDetailUI 保留绑定并限制键盘到有效操作。背景关闭且不穿透，卡内点击和拖动不关闭。装备卸装直接执行并反馈，点击鱼币直接升级，失败在详情显示。熟练度宝箱直接领取，另一个未拥有物品详情仍保留 Claim 确认。保留 Fredoka，两处 Canvas EquipmentPageUI 引用共用详情，Boss 选择面板独立。
 

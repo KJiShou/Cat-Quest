@@ -22,13 +22,14 @@ using UnityEngine;
 }
 public static class CompanionProtocol
 {
+    static readonly string[] Args = Environment.GetCommandLineArgs();
     public static string Argument(string key)
     {
-        var args = Environment.GetCommandLineArgs();
+        var args = Args;
         for (int i=0;i<args.Length-1;i++) if(args[i]==key) return args[i+1];
         return null;
     }
-    public static bool HasArgument(string key) => Array.IndexOf(Environment.GetCommandLineArgs(),key)>=0;
+    public static bool HasArgument(string key) => Array.IndexOf(Args,key)>=0;
     public static void Write<T>(string path,T value)
     {
         string temp=path+".tmp";

@@ -26,6 +26,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     AccountController account;
     ILeaderboardSource source;
     Coroutine running;
+    int visibleRows;
     int generation;
     string context;
     bool initialized;
@@ -73,7 +74,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
             if (!account) account = AccountController.EnsureInstance();
             source = new LeaderboardReader(account);
         }
-        Stop(); Snapshot = null;
+        Stop(); Snapshot = null; visibleRows = 0;
         foreach (var row in rows) row.gameObject.SetActive(false);
         ownRow.gameObject.SetActive(false); ownMessage.gameObject.SetActive(true); ownMessage.text = "Loading your rank…";
         empty.gameObject.SetActive(true); empty.text = "Loading rankings…";
@@ -120,18 +121,26 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
         if (result.kind != CurrentKind) return;
         Snapshot = result;
         int count = result.success ? result.leaders.Count : 0;
-        while (rows.Count < count) rows.Add(Instantiate(template, content));
-        for (int i = 0; i < rows.Count; i++)
-        {
-            rows[i].gameObject.SetActive(i < count);
-            if (i < count) rows[i].Show(result.leaders[i], i + 1, CurrentKind, result.own != null && result.leaders[i].playerId == result.own.playerId);
-        }
+        int ready = Math.Min(count, Math.Max(rows.Count, 8));
+        for (int i = count; i < rows.Count; i++) rows[i].gameObject.SetActive(false);
+        visibleRows = 0;
+        BindRows(result, ready);
         empty.gameObject.SetActive(count == 0); empty.text = result.message ?? "No rankings available.";
         bool ranked = result.success && result.own != null && result.ownRank > 0;
         ownRow.gameObject.SetActive(ranked); ownMessage.gameObject.SetActive(!ranked);
         if (ranked) ownRow.Show(result.own, result.ownRank, CurrentKind, true);
         else ownMessage.text = result.ownMessage ?? "Your rank is unavailable. Refresh to retry.";
         updated.text = result.success && DateTimeOffset.TryParse(result.readTime, out var read) ? "Updated " + read.ToLocalTime().ToString("HH:mm") : "";
+    }
+    void BindRows(LeaderboardSnapshot result, int end)
+    {
+        while (visibleRows < end) {
+            int index = visibleRows++;
+            if (index == rows.Count) rows.Add(Instantiate(template, content));
+            var leader = result.leaders[index];
+            rows[index].Show(leader, index + 1, CurrentKind, result.own != null && result.own.playerId == leader.playerId);
+            rows[index].gameObject.SetActive(true);
+        }
     }
     void OpenAccount()
     {
@@ -140,6 +149,8 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     }
     void Update()
     {
+        if (Snapshot != null && Snapshot.success && visibleRows < Snapshot.leaders.Count)
+            BindRows(Snapshot, Math.Min(visibleRows + 6, Snapshot.leaders.Count));
         if(TutorialOwnsInput) return;
         if (!Input.GetKeyDown(KeyCode.Tab) || EventSystem.current == null) return;
         var selected = EventSystem.current.currentSelectedGameObject;

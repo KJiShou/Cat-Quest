@@ -6,6 +6,7 @@ public sealed class BossArenaPreview : MonoBehaviour
 {
     public GameObject stagePrefab;
     public GameObject oldForestStagePrefab, lavaDungeonStagePrefab;
+    [SerializeField] string stageResource, oldForestStageResource, lavaDungeonStageResource;
     public MasterBossAura masterAuraPrefab;
     MasterBossAura masterAura;
     public MasterBossAura MasterAura => masterAura;
@@ -28,8 +29,11 @@ public sealed class BossArenaPreview : MonoBehaviour
 
     public void SelectStage(int id)
     {
-        var prefab = id == 2 ? oldForestStagePrefab : id == 3 ? lavaDungeonStagePrefab : stagePrefab;
-        if (!prefab) prefab = stagePrefab;
+        GameObject prefab;
+        if (id == 2) prefab = oldForestStagePrefab = StagePrefabResource.Resolve(oldForestStagePrefab, oldForestStageResource);
+        else if (id == 3) prefab = lavaDungeonStagePrefab = StagePrefabResource.Resolve(lavaDungeonStagePrefab, lavaDungeonStageResource);
+        else prefab = null;
+        if (!prefab) prefab = stagePrefab = StagePrefabResource.Resolve(stagePrefab, stageResource);
         if (stage && activePrefab == prefab) return;
         ReleaseTarget();
         masterAura = null;
@@ -69,18 +73,18 @@ public sealed class BossArenaPreview : MonoBehaviour
         var size = view.rectTransform.rect.size;
         if (size.x <= 0 || size.y <= 0) return;
         float aspect = size.x / size.y;
-        int width = Mathf.Clamp(Mathf.RoundToInt(900 * aspect), 128, 2048);
-        if (!target || target.width != width)
+        var pixels = PreviewPixels.For(view, 900);
+        if (!target || target.width != pixels.x || target.height != pixels.y)
         {
             ReleaseTarget();
-            target = new RenderTexture(width, 900, 24) { name = "Boss Arena View" };
+            target = new RenderTexture(pixels.x, pixels.y, 24) { name = "Boss Arena View" };
             target.Create();
         }
-        view.texture = target;
-        stageCamera.targetTexture = target;
-        stageCamera.aspect = aspect;
+        if (view.texture != target) view.texture = target;
+        if (stageCamera.targetTexture != target) stageCamera.targetTexture = target;
+        if (!Mathf.Approximately(stageCamera.aspect, aspect)) stageCamera.aspect = aspect;
         // Preserve the authored scene camera projection, FOV and orthographic size.
-        stageCamera.enabled = true;
+        if (!stageCamera.enabled) stageCamera.enabled = true;
     }
     void OnDisable()
     {

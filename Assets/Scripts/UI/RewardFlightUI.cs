@@ -95,10 +95,9 @@ public sealed class RewardFlightUI : MonoBehaviour
     void OnApplicationFocus(bool focused) { if (!focused && initialized && flights[0] != null) { Sync(); PaintValues(); } }
     void Sync()
     {
-        var data = service.Snapshot;
-        observed[0] = displayed[0] = data.fishCoins;
-        observed[1] = displayed[1] = data.tickets;
-        observed[2] = displayed[2] = data.experience;
+        observed[0] = displayed[0] = service.FishCoins;
+        observed[1] = displayed[1] = service.Tickets;
+        observed[2] = displayed[2] = service.Experience;
         Array.Clear(pending, 0, 3); Array.Clear(pulse, 0, 3); Array.Clear(stacked, 0, 3);
         foreach (var feedback in targetFeedback) if (feedback) feedback.ResetRewardPulse();
         foreach (var f in flights) { f.active = false; f.icon.gameObject.SetActive(false); }
@@ -117,8 +116,7 @@ public sealed class RewardFlightUI : MonoBehaviour
     Sprite Icon(int kind) => kind == 0 ? fishTarget.sprite : kind == 1 ? ticketTarget.sprite : experienceIcon;
     void Changed()
     {
-        var data = service.Snapshot;
-        int[] totals = { data.fishCoins, data.tickets, data.experience };
+        int[] totals = { service.FishCoins, service.Tickets, service.Experience };
         var origin = Time.unscaledTime - pointerTime < .8f ? pointerOrigin : surface.rect.center + new Vector2(0, -40);
         for (int kind = 0; kind < 3; kind++)
         {
@@ -205,12 +203,25 @@ public sealed class RewardFlightUI : MonoBehaviour
         }
     }
     void LateUpdate() { if (initialized) PaintValues(); }
+    private readonly int[] painted = { -1, -1, -1 };
+    private string fishText, ticketText, levelText, experienceText;
+    private int levelExperience, levelRequirement;
     void PaintValues()
     {
         if (!fishValue || !ticketValue || !catStatus) return;
-        fishValue.text = displayed[0].ToString(); ticketValue.text = displayed[1].ToString();
-        TaskService.CatLevel(displayed[2], out int level, out int xp, out int required);
-        catStatus.level.text = "LV " + level; catStatus.experience.text = $"{xp} / {required}";
-        catStatus.experienceBar.maxValue = required; catStatus.experienceBar.SetValueWithoutNotify(xp);
+        if (painted[0] != displayed[0]) { painted[0] = displayed[0]; fishText = displayed[0].ToString(); }
+        if (painted[1] != displayed[1]) { painted[1] = displayed[1]; ticketText = displayed[1].ToString(); }
+        // Other presenters share these labels. Reapply cached display values during flights.
+        if (fishValue.text != fishText) fishValue.text = fishText;
+        if (ticketValue.text != ticketText) ticketValue.text = ticketText;
+        if (painted[2] != displayed[2]) {
+            TaskService.CatLevel(displayed[2], out int level, out levelExperience, out levelRequirement);
+            painted[2] = displayed[2];
+            levelText = "LV " + level; experienceText = $"{levelExperience} / {levelRequirement}";
+        }
+        if (catStatus.level.text != levelText) catStatus.level.text = levelText;
+        if (catStatus.experience.text != experienceText) catStatus.experience.text = experienceText;
+        if (catStatus.experienceBar.maxValue != levelRequirement) catStatus.experienceBar.maxValue = levelRequirement;
+        if (catStatus.experienceBar.value != levelExperience) catStatus.experienceBar.SetValueWithoutNotify(levelExperience);
     }
 }

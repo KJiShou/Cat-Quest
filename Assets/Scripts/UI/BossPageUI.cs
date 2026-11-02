@@ -72,7 +72,7 @@ public sealed class BossPageUI : MonoBehaviour
         stageButton.onClick.AddListener(ShowStages);
         closeStages.onClick.AddListener(()=>stagePicker.SetActive(false));
         for(int i=0;i<stageChoices.Length;i++){int id=i+1;stageChoices[i].onClick.AddListener(()=>SelectStage(id,0));}
-        masterChoice.onClick.AddListener(()=>{int n=service.Snapshot.masterStage;SelectStage(1+(n-1)%3,n);});
+        masterChoice.onClick.AddListener(()=>{int n=service.MasterStage;SelectStage(1+(n-1)%3,n);});
         confirm.onClick.AddListener(Confirm);
         cancel.onClick.AddListener(()=>{confirmation.SetActive(false);if(UnityEngine.EventSystems.EventSystem.current)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(action.gameObject);});
         foreach(var button in resultContinue)button.onClick.AddListener(CloseResult);
@@ -93,7 +93,7 @@ public sealed class BossPageUI : MonoBehaviour
     {
         // Keep the completed stage visible until its result is dismissed.
         if(service==null||master<=0||attempt!=null)return false;
-        int next=service.Snapshot.masterStage;
+        int next=service.MasterStage;
         if(next==master)return false;
         SelectStage(1+(next-1)%3,next);
         return true;
@@ -107,9 +107,9 @@ public sealed class BossPageUI : MonoBehaviour
     public void ShowStages() { if(resultAwaitingConfirmation||returningFromResult||IsBattling||victoryResultAt>0)return; RefreshStages(); stagePicker.SetActive(true); }
     void RefreshStages()
     {
-        var data=service.Snapshot;
+        int stageNumber=service.MasterStage;
         for(int i=0;i<3;i++){
-            int id=i+1;var p=data.bossProgress.Single(x=>x.bossId==id);
+            int id=i+1;var p=service.BossMastery(id);
             string gate=service.BattleEntryError(id);
             if(gate=="Earn a ticket through Focus.")gate=null;
             bool locked=gate!=null;
@@ -123,11 +123,11 @@ public sealed class BossPageUI : MonoBehaviour
             masteryValues[i].text=$"{progress}/5"+(p.pendingClaims>0?" · Claim":"");
             stageCaptions[i].text=$"Stage {id} · {(id==1?"Cyclope":id==2?"Orc":"Demon")}\n"+(gate??"");
         }
-        bool masterUnlocked=data.bossProgress.Single(p=>p.bossId==3).wins>0;
+        bool masterUnlocked=service.BossMastery(3).wins>0;
         masterChoice.interactable=masterUnlocked;masterLock.SetActive(!masterUnlocked);
-        masterCaption.text="Master "+data.masterStage;
+        masterCaption.text="Master "+stageNumber;
         if(masterDescription)masterDescription.text=masterUnlocked
-            ? (data.masterStage%3==1?"Cyclope":data.masterStage%3==2?"Orc":"Demon")+" · Stronger bosses each round"
+            ? (stageNumber%3==1?"Cyclope":stageNumber%3==2?"Orc":"Demon")+" · Stronger bosses each round"
             : "Defeat Demon to unlock";
         if(masterEntryLabel)masterEntryLabel.text=masterUnlocked?"Enter  >":"Locked";
     }
@@ -227,7 +227,7 @@ public sealed class BossPageUI : MonoBehaviour
         try { saved=service.ResolveBattle(attempt.id,outcome); }
         finally { if(rewardFlights)rewardFlights.SetRewardOrigin(null); }
         if(!saved){actors.Finish(BattleOutcome.Error);settlementPending=true;message.text=service.LastError;Refresh();return;}
-        var receipt=service.Snapshot.battles.Single(b=>b.id==attempt.id);
+        var receipt=service.BattleReceipt(attempt.id);
         if(receipt.outcome==BattleOutcome.Victory&&presentationDelay>0){
             actors.CelebrateVictory();victoryResultAt=Time.unscaledTime+presentationDelay;
             arena.ShowMasterAura(actors.Boss,actors.Cat,selected,false);

@@ -22,7 +22,7 @@ public sealed class MainMenuNavigation : MonoBehaviour
         if (page == MainMenuPage.Focus)
             return tasks.CanAccess(ProgressionFeature.Focus) || FocusRunner.EnsureInstance().Controller.Phase is FocusPhase.Focusing or FocusPhase.Saving or FocusPhase.Resting;
         if (page == MainMenuPage.Boss)
-            return tasks.CanAccess(ProgressionFeature.Boss) || tasks.Snapshot.battles.Exists(b => b.outcome == BattleOutcome.Running);
+            return tasks.CanAccess(ProgressionFeature.Boss) || tasks.HasActiveBattle;
         return page != MainMenuPage.Leaderboard || tasks.CanAccess(ProgressionFeature.Leaderboard);
     }
     private TaskService service;
@@ -57,7 +57,6 @@ public sealed class MainMenuNavigation : MonoBehaviour
             pages[i].SetActive(i==index);
             ((SidebarNavigationButton)buttons[i]).SetPageSelected(i==index);
         }
-        if(taskSystem.Service!=null && page==MainMenuPage.Tasks) taskSystem.Refresh();
         RefreshHeader(); PageChanged?.Invoke(page); return true;
     }
     private void Update()
@@ -68,7 +67,7 @@ public sealed class MainMenuNavigation : MonoBehaviour
     private void RefreshHeader()
     {
         if(service==null) return;
-        var data=service.Snapshot; fishCoins.text=data.fishCoins.ToString(); tickets.text=data.tickets.ToString();
+        fishCoins.text=service.FishCoins.ToString(); tickets.text=service.Tickets.ToString();
     }
     private void OnApplicationFocus(bool focus) { if(focus && service!=null) { service.RefreshDate(); RefreshHeader(); } }
     private void OnDestroy()

@@ -27,6 +27,22 @@ public sealed partial class TaskService
     public event Action Changed;
     public string LastError { get; private set; }
     public DateTime LocalNow => clock.LocalNow;
+    private PlayerData lastReadSource;
+    private int readVersion;
+    // Successful store writes replace Data atomically, including writes outside TaskService.
+    internal int ReadVersion
+    {
+        get
+        {
+            if (!ReferenceEquals(lastReadSource, store.Data)) { lastReadSource = store.Data; readVersion++; }
+            return readVersion;
+        }
+    }
+    internal string CompletionId(string taskId, string day) => store.Data.history.Find(h=>h.taskId==taskId && h.day==day && !h.revoked)?.id;
+    public int FishCoins => store.Data.fishCoins;
+    public int Tickets => store.Data.tickets;
+    public int Experience => store.Data.experience;
+    public List<QuestTag> TagCatalog => store.Data.tags.ConvertAll(t => new QuestTag { id = t.id, name = t.name, colorHex = t.colorHex });
     public PlayerData Snapshot => PlayerDataStore.Copy(store.Data);
     private readonly IPlayerDataStore store;
     private readonly ITaskClock clock;
@@ -280,8 +296,11 @@ public sealed partial class TaskService
     });
 
     public List<TaskView> Query(TaskTab tab, string search = "", TaskDifficulty? difficulty = null, IEnumerable<string> tagIds = null)
+        => QuerySnapshot(Snapshot, tab, search, difficulty, tagIds);
+
+    internal List<TaskView> QuerySnapshot(PlayerData data, TaskTab tab, string search = "", TaskDifficulty? difficulty = null, IEnumerable<string> tagIds = null)
     {
-        var data = Snapshot;
+        var today = Today;
         var selectedTags = (tagIds ?? Array.Empty<string>()).ToArray();
         var rows = new List<TaskView>();
         if (tab == TaskTab.History)
@@ -293,7 +312,7 @@ public sealed partial class TaskService
         else
             foreach (var task in data.tasks)
             {
-                var occurrence = data.occurrences.FirstOrDefault(o => o.taskId == task.id && o.day == OccurrenceDay(task, Today)) ?? new TaskOccurrence { taskId = task.id, day = OccurrenceDay(task, Today) };
+                var occurrence = data.occurrences.FirstOrDefault(o => o.taskId == task.id && o.day == OccurrenceDay(task, today)) ?? new TaskOccurrence { taskId = task.id, day = OccurrenceDay(task, today) };
                 bool show = tab == TaskTab.Daily ? task.daily
                     : tab == TaskTab.Todo ? !task.daily && !occurrence.completed
                     : tab == TaskTab.Tags ? !occurrence.completed && Eligible(task)

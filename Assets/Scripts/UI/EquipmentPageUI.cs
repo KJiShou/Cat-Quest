@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -20,6 +21,9 @@ public sealed class EquipmentPageUI : MonoBehaviour
     [SerializeField] RectTransform backpack,modal,confirmation,choices,gear;[SerializeField] Button[] slots=new Button[3];[SerializeField] Image[] slotImages=new Image[3];
     [SerializeField] Button[] filters=new Button[4]; int filter;
     EquipmentHoverTarget hoverSource;
+    readonly Dictionary<string, EquipmentInventoryItemUI> inventoryCells = new Dictionary<string, EquipmentInventoryItemUI>();
+    readonly List<GameObject> emptyCells = new List<GameObject>();
+    bool inventoryInitialized;
     string selected;int expectedLevel;Action confirmAction;
     public bool Ready=>service!=null;public string SelectedItem=>selected;
     public RectTransform TutorialSlots => gear;
@@ -40,7 +44,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
         confirmation.Find("Card/Confirm").GetComponent<Button>().onClick.AddListener(()=>confirmAction?.Invoke());
         confirmation.Find("Card/Cancel").GetComponent<Button>().onClick.AddListener(()=>{confirmation.gameObject.SetActive(false);if(itemDetail&&itemDetail.gameObject.activeSelf)itemDetail.FocusActions();});
         itemDetail.close.onClick.AddListener(()=>itemDetail.gameObject.SetActive(false));
-        itemDetail.equip.onClick.AddListener(()=>{if(service.Snapshot.equipment.Any(x=>x.id==selected))ToggleEquip();else ConfirmClaim();});
+        itemDetail.equip.onClick.AddListener(()=>{if(service.OwnsEquipment(selected))ToggleEquip();else ConfirmClaim();});
         itemDetail.upgrade.onClick.AddListener(Upgrade);
         itemDetail.gameObject.SetActive(false);modal.gameObject.SetActive(false);confirmation.gameObject.SetActive(false);
         if(claimsOnly)return;
@@ -63,19 +67,39 @@ public sealed class EquipmentPageUI : MonoBehaviour
         for(int i=0;i<3;i++){var id=EquipmentRules.Equipped(d,(EquipmentSlot)i);var item=d.equipment.FirstOrDefault(x=>x.id==id);slotImages[i].sprite=item==null?emptySlotIcons[i]:slotIcons[i];slotImages[i].color=item==null?new Color32(161,172,198,255):Color.white;slots[i].GetComponent<Image>().color=item==null?Pale:Color.Lerp(Grade(EquipmentRules.Find(id).Tier),Color.white,.75f);}
         sets.text=string.Join("  ",Enumerable.Range(1,3).Where(t=>s.SetPieces[t-1]>0).Select(t=>$"{EquipmentRules.BossName(t)} {s.SetPieces[t-1]}/3"));
         for(int i=0;i<filters.Length;i++){inventory.filterIcons[i].color=filter==i?new Color32(88,121,255,255):new Color32(193,201,208,255);inventory.filterFocus[i].SetActive(filter==i);}
-        foreach(Transform child in backpack){child.gameObject.SetActive(false);Destroy(child.gameObject);}
-        var items=d.equipment.Where(x=>filter==0||(filter==1&&EquipmentRules.Find(x.id).Slot==EquipmentSlot.Head)||(filter==2&&EquipmentRules.Find(x.id).Slot==EquipmentSlot.Weapon)||(filter==3&&EquipmentRules.Find(x.id).Slot==EquipmentSlot.Body)).OrderBy(x=>EquipmentRules.Find(x.id).Tier).ThenBy(x=>EquipmentRules.Find(x.id).Slot).ToArray();if(items.Length==0&&service.EquipmentUnlocked)notice.text=filter==0?"Earn equipment from Boss mastery.":"No equipment in this category.";
+        if (!inventoryInitialized) { TaskUIBuilder.Clear(backpack); inventoryInitialized=true; }
+        foreach(var existing in inventoryCells)
+            if(!service.OwnsEquipment(existing.Key) || !MatchesFilter(existing.Key))
+                existing.Value.gameObject.SetActive(false);
+        var items=d.equipment.Where(x=>MatchesFilter(x.id)).OrderBy(x=>EquipmentRules.Find(x.id).Tier).ThenBy(x=>EquipmentRules.Find(x.id).Slot).ToArray();if(items.Length==0&&service.EquipmentUnlocked)notice.text=filter==0?"Earn equipment from Boss mastery.":"No equipment in this category.";
         notice.gameObject.SetActive(!string.IsNullOrEmpty(notice.text));
+        int position=0;
         foreach(var item in items){
             var def=EquipmentRules.Find(item.id);string id=item.id;
-            var cell=Instantiate(inventory.itemTemplate,backpack);cell.name="Item_"+id;
+            if (!inventoryCells.TryGetValue(id, out var cell)) {
+                cell=Instantiate(inventory.itemTemplate,backpack); cell.name="Item_"+id;
+                cell.button.onClick.AddListener(()=>OpenItem(id)); cell.GetComponent<EquipmentHoverTarget>().Bind(this,id);
+                inventoryCells.Add(id,cell);
+            }
+            cell.transform.SetSiblingIndex(position++);
             cell.background.sprite=inventory.tierBackgrounds[def.Tier-1];cell.icon.sprite=slotIcons[(int)def.Slot];
             cell.level.text=item.level.ToString();cell.equipped.SetActive(EquipmentRules.Equipped(d,def.Slot)==id);
-            cell.button.onClick.AddListener(()=>OpenItem(id));cell.GetComponent<EquipmentHoverTarget>().Bind(this,id);cell.gameObject.SetActive(true);
+            cell.gameObject.SetActive(true);
         }
-        for(int n=items.Length;n<24;n++){var cell=Instantiate(inventory.emptyTemplate,backpack);cell.name="EmptySlot";cell.SetActive(true);}
+        while (emptyCells.Count < 24-items.Length) {
+            var cell=Instantiate(inventory.emptyTemplate,backpack); cell.name="EmptySlot"; emptyCells.Add(cell);
+        }
+        for(int i=0;i<emptyCells.Count;i++){
+            bool show=i<24-items.Length;
+            emptyCells[i].SetActive(show); if(show) emptyCells[i].transform.SetSiblingIndex(position++);
+        }
     }
-    public void OpenSlot(EquipmentSlot slot){var id=EquipmentRules.Equipped(service.Snapshot,slot);if(!string.IsNullOrEmpty(id))OpenItem(id);else {notice.text="Select an owned "+EquipmentRules.SlotName(slot)+" in the Backpack.";notice.gameObject.SetActive(true);}}
+    bool MatchesFilter(string id)
+    {
+        var slot=EquipmentRules.Find(id).Slot;
+        return filter==0 || (filter==1 && slot==EquipmentSlot.Head) || (filter==2 && slot==EquipmentSlot.Weapon) || (filter==3 && slot==EquipmentSlot.Body);
+    }
+    public void OpenSlot(EquipmentSlot slot){var id=service.EquippedItem(slot);if(!string.IsNullOrEmpty(id))OpenItem(id);else {notice.text="Select an owned "+EquipmentRules.SlotName(slot)+" in the Backpack.";notice.gameObject.SetActive(true);}}
     public void OpenClaim(int boss){
         if(!Ready)return;HideHover();itemDetail.gameObject.SetActive(false);modal.gameObject.SetActive(true);modal.SetAsLastSibling();choices.gameObject.SetActive(true);modalInfo.text="";modalTitle.text=EquipmentRules.BossName(boss)+" Set";
         claimView.Show(service.Snapshot,boss,service.EquipmentUnlocked);
@@ -87,7 +111,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
         bool reward=source&&source.masteryReward&&source.transform.IsChildOf(claimView.transform)&&modal.gameObject.activeSelf;
         if(!Ready||(!reward&&(claimsOnly||modal.gameObject.activeSelf))||!isActiveAndEnabled||confirmation.gameObject.activeSelf||
             (itemDetail.gameObject.activeSelf&&!itemDetail.IsHoverPreview))return;
-        if(string.IsNullOrEmpty(id)||(!reward&&!service.Snapshot.equipment.Any(x=>x.id==id))){HideHover();return;}
+        if(string.IsNullOrEmpty(id)||(!reward&&!service.OwnsEquipment(id))){HideHover();return;}
         hoverSource=source;ShowItem(id,true,position);
     }
     public void MoveHover(EquipmentHoverTarget source,Vector2 position)
@@ -155,7 +179,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
     void Result(bool success){if(success){confirmation.gameObject.SetActive(false);Refresh();OpenItem(selected);if(claimsOnly)OpenClaim(EquipmentRules.Find(selected).Tier);}else confirmInfo.text=service.LastError+"\nTry again or cancel.";}
     void ToggleEquip(){
         var def=EquipmentRules.Find(selected);string id=selected;
-        bool worn=EquipmentRules.Equipped(service.Snapshot,def.Slot)==id;
+        bool worn=service.EquippedItem(def.Slot)==id;
         bool success=worn?service.Unequip(def.Slot):service.Equip(id,def.Slot);
         if(success){Result(true);itemDetail.status.text=worn?"Unequipped.":"Equipped.";}
         else itemDetail.status.text=service.LastError;

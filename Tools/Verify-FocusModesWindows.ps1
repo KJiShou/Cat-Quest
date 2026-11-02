@@ -99,7 +99,7 @@ try {
  $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($registryPath)
  if($key){$existed=$true;try{foreach($name in $key.GetValueNames()){$backup+=@{name=$name;kind=$key.GetValueKind($name);value=$key.GetValue($name)}}}finally{$key.Dispose()}}
  WriteJson (Join-Path $folder 'context.json') @{utc=[DateTime]::UtcNow.ToString('O');executable=$exe;sha256=(Get-FileHash $exe).Hash;isolated=$true}
- WriteJson (Join-Path $folder 'test-save.json') @{version=5;username='Focus Test';settings=@{notificationsEnabled=$false;soundVolume=0;musicVolume=0}}
+ WriteJson (Join-Path $folder 'test-save.json') @{version=5;username='Focus Test';experience=100;tutorial=@{version=1;dismissed=$true;taskStep=4};settings=@{notificationsEnabled=$false;soundVolume=0;musicVolume=0}}
  $arguments='--focus-smoke --smoke-dir "'+$folder+'" -force-d3d11 -logFile "'+$folder+'/Player.log" -screen-fullscreen 0 -screen-width 1280 -screen-height 720'
  $main=Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory ([IO.Path]::GetDirectoryName($exe)) -WindowStyle Hidden -PassThru
  $resultPath=Join-Path $folder 'smoke-result.json'
@@ -113,7 +113,7 @@ try {
  Check ($window -ne [IntPtr]::Zero) 'actual companion window'
  $r=Command @{action='advance';seconds=14400}
  $view=WaitFor $viewPath {param($v)$v.timer -like '4:00:*'} 'four-hour count-up'
- Check ($r.phase -eq 'Focusing' -and $r.exp -eq 0 -and $r.fish -eq 72) 'four-hour stopwatch remains active with capped preview'
+ Check ($r.phase -eq 'Focusing' -and $r.exp -eq 100 -and $r.fish -eq 39) 'four-hour stopwatch remains active with capped preview'
  ResizeWindow $window 420 300
  $view=WaitFor $viewPath {param($v)$v.width -eq 420 -and $v.height -eq 300} 'normal size'
  if($canMovePointer){[FocusNative]::SetCursorPos(250,250)|Out-Null};Start-Sleep -Milliseconds 700;Capture $window 'companion-normal'
@@ -134,16 +134,16 @@ try {
  $saveLock=[IO.File]::Open((Join-Path $folder 'test-save.json.tmp'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
  HostCommand $r end
  $r=WaitFor $resultPath {param($v)$v.phase -eq 'Saving'} 'failed save'
- Check ($r.exp -eq 0 -and $r.coins -eq 0) 'save failure grants nothing'
+ Check ($r.exp -eq 100 -and $r.coins -eq 0) 'save failure grants nothing'
  Command @{action='screenshot';screenshot='main-save-failure.png'}|Out-Null
  $saveLock.Dispose();$saveLock=$null
  $request=[Guid]::NewGuid().ToString('N');HostCommand $r retry $r.ownerId $r.sessionId $request
  $r=WaitFor $resultPath {param($v)$v.phase -eq 'Finished'} 'retry finish'
- Check ($r.exp -eq 180 -and $r.coins -eq 72 -and $r.tickets -eq 4) 'stopwatch retry pays exactly three hours without Rest'
+ Check ($r.exp -eq 199 -and $r.coins -eq 39 -and $r.tickets -eq 3) 'stopwatch retry pays exactly three hours without Rest'
  HostCommand $r retry $r.ownerId $r.sessionId $request;HostCommand $r end
- Check ((ReadJson $resultPath).exp -eq 180) 'duplicate retry/end cannot pay twice'
+ Check ((ReadJson $resultPath).exp -eq 199) 'duplicate retry/end cannot pay twice'
  $r=Command @{action='configure';mode=2;focusMinutes=180};$r=Command @{action='start'};$r=Command @{action='advance';seconds=10800}
- Check ($r.phase -eq 'Finished' -and $r.exp -eq 360 -and $r.coins -eq 144 -and $r.tickets -eq 4) 'countdown shares six-hour daily cap and skips Rest'
+ Check ($r.phase -eq 'Finished' -and $r.exp -eq 232 -and $r.coins -eq 67 -and $r.tickets -eq 3) 'countdown shares four-hour daily cap and skips Rest'
  $r=Command @{action='configure';mode=1};$r=Command @{action='start'};$r=Command @{action='advance';seconds=60}
  $request=[Guid]::NewGuid().ToString('N');HostCommand $r start $r.ownerId $r.sessionId $request;HostCommand $r start $r.ownerId $r.sessionId $request
  Check ((ReadJson $resultPath).sessionId -eq $r.sessionId) 'duplicate start cannot replace active session'
@@ -159,7 +159,7 @@ try {
  Check ($child.WaitForExit(6000)) 'native close exits companion'
  $r=ReadJson $resultPath;Check ($r.phase -eq 'Focusing') 'closing companion preserves main Focus'
  $r=Command @{action='end'}
- Check ($r.phase -eq 'Finished' -and $r.exp -eq 360 -and $r.coins -eq 144) 'third session remains usable without extra rewards'
+ Check ($r.phase -eq 'Finished' -and $r.exp -eq 232 -and $r.coins -eq 67) 'third session remains usable without extra rewards'
  WriteJson (Join-Path $folder 'final-state.json') $r
 } catch { $failure=$_.ToString(); Write-Output "FAIL: $failure" }
 finally {

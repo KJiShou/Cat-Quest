@@ -19,6 +19,8 @@ public sealed class CompanionHost : MonoBehaviour
     Process process;
     float nextPublish;
     bool updateShutdown;
+    int auraVersion = -1, auraTier, auraPieces;
+    void PublishIfOpen() { if (IsOpen) Publish(); }
     readonly HashSet<string> handled = new HashSet<string>();
     public static CompanionHost Ensure()
     {
@@ -32,10 +34,8 @@ public sealed class CompanionHost : MonoBehaviour
         DirectoryPath=Path.Combine(Application.temporaryCachePath,"Companion",OwnerId);
         Directory.CreateDirectory(DirectoryPath);
         Enabled=IsUnlocked && PlayerPrefs.GetInt("PetWidgetEnabled",0)==1;
-        focus.Changed+=OnChanged;
-        Publish();
+        focus.Changed+=PublishIfOpen;
     }
-    void OnChanged() { Publish(); if(!updateShutdown && Enabled && focus.Phase==FocusPhase.Focusing && !IsOpen) Open(); }
     public void SetEnabled(bool enabled)
     {
         if(enabled && !IsUnlocked) { Error=GameDataManager.Instance.Tasks.AccessMessage(ProgressionFeature.Focus); return; }
@@ -85,8 +85,9 @@ public sealed class CompanionHost : MonoBehaviour
     public void CancelUpdateShutdown() { updateShutdown=false; }
     void Update()
     {
-        if(Time.unscaledTime<nextPublish) return;
+        if(process==null || Time.unscaledTime<nextPublish) return;
         nextPublish=Time.unscaledTime+.25f;
+        if(process.HasExited) { process.Dispose(); process=null; if(!updateShutdown) { Enabled=false; PlayerPrefs.SetInt("PetWidgetEnabled",0); } return; }
         foreach(string path in Directory.GetFiles(DirectoryPath,"command-*.json"))
         {
             var command=CompanionProtocol.Read<CompanionCommand>(path);
@@ -94,7 +95,6 @@ public sealed class CompanionHost : MonoBehaviour
             try { File.Delete(path); } catch(IOException) { continue; }
             Execute(command);
         }
-        if(process!=null && process.HasExited) { process.Dispose(); process=null; if(!updateShutdown) { Enabled=false; PlayerPrefs.SetInt("PetWidgetEnabled",0); } }
         Publish();
     }
     public bool Execute(CompanionCommand command)
@@ -114,7 +114,11 @@ public sealed class CompanionHost : MonoBehaviour
     void Publish()
     {
         if(focus==null) return;
-        CharacterEquipmentAura.Select(GameDataManager.Instance.Tasks.EquipmentStats.SetPieces, out int auraTier, out int auraPieces);
+        var service = GameDataManager.Instance.Tasks;
+        if (auraVersion != service.ReadVersion) {
+            CharacterEquipmentAura.Select(service.EquipmentStats.SetPieces, out auraTier, out auraPieces);
+            auraVersion = service.ReadVersion;
+        }
         try { CompanionProtocol.Write(Path.Combine(DirectoryPath,"companion-session.json"),new CompanionState {
             equipmentAuraTier=auraTier,equipmentAuraPieces=auraPieces,
             ownerId=OwnerId,sessionId=focus.SessionId ?? "",heartbeatUtcTicks=DateTime.UtcNow.Ticks,
@@ -124,7 +128,7 @@ public sealed class CompanionHost : MonoBehaviour
     }
     void OnDestroy()
     {
-        if(focus!=null) focus.Changed-=OnChanged;
+        if(focus!=null) focus.Changed-=PublishIfOpen;
         CloseWindow();
         if(Instance==this) Instance=null;
         // Keep the last display state so a surviving companion detects a stale heartbeat.

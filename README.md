@@ -8,7 +8,7 @@ Cat Quest is a Windows desktop productivity application built with Unity and C# 
 
 Tasks and progress are saved locally. You can create and complete tasks without an account, AI connection or network access. Optional ChatGPT assistance helps you plan. An optional Google/Firebase connection lets you share selected statistics on a leaderboard.
 
-> **Release:** [Download Cat Quest v1.2 for Windows x64](https://github.com/KJiShou/Cat-Quest/releases/tag/v1.2). Extract the entire ZIP and run `CatQuest/CatQuest.exe`, keeping all accompanying files together. This student project remains under active development. This repository contains the Unity source project and is not distributed under an open-source license.
+> **Release:** [Download the latest Cat Quest release for Windows x64](https://github.com/KJiShou/Cat-Quest/releases/latest). Extract the entire ZIP and run `CatQuest.exe`, keeping all accompanying files together. This student project remains under active development. This repository contains the Unity source project and is not distributed under an open-source license.
 
 ![Cat Quest Dashboard showing the cat, task overview and daily rewards](docs/images/dashboard.png)
 

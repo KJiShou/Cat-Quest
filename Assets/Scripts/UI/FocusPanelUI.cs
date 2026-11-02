@@ -37,8 +37,8 @@ public sealed class FocusPanelUI : MonoBehaviour
     public FocusController Controller => focus;
     private FocusController focus;
     private int displayedSecond = -1;
-    private string savedNoticeSession;
-    private double savedNoticeUntil;
+    private string noticeSession, lastNotice;
+    private double noticeUntil;
     private void OnEnable()
     {
         if(cancel&&!cancelLayoutCached){var slot=(RectTransform)cancel.transform.parent;cancelAnchorMin=slot.anchorMin;cancelAnchorMax=slot.anchorMax;cancelLayoutCached=true;}
@@ -97,9 +97,9 @@ public sealed class FocusPanelUI : MonoBehaviour
     }
     private void Update()
     {
-        if (savedNoticeUntil > 0 && Time.realtimeSinceStartupAsDouble >= savedNoticeUntil)
+        if (noticeUntil > 0 && Time.realtimeSinceStartupAsDouble >= noticeUntil)
         {
-            savedNoticeUntil = 0;
+            noticeUntil = 0;
             RefreshSummary();
         }
         if (focus != null && displayedSecond != FocusController.DisplaySecond(focus.DisplaySeconds, focus.CountsUp)) { RefreshTime(); RefreshSummary(); }
@@ -200,14 +200,15 @@ public sealed class FocusPanelUI : MonoBehaviour
         var ui = new TaskUIBuilder(settingsFont, settingsSprite);
         AddTag(ui, null);
         var service = GameDataManager.EnsureInstance().Tasks;
+        var catalog = service.TagCatalog;
         if (Ready)
         {
-            focus.Options.tagIds.RemoveAll(id => !service.Snapshot.tags.Any(t => t.id == id));
-            focus.Options.tagNames = service.Snapshot.tags.Where(t => focus.Options.tagIds.Contains(t.id)).Select(t => t.name).ToList();
+            focus.Options.tagIds.RemoveAll(id => !catalog.Any(t => t.id == id));
+            focus.Options.tagNames = catalog.Where(t => focus.Options.tagIds.Contains(t.id)).Select(t => t.name).ToList();
         }
         string query = questSearch ? questSearch.text.Trim() : "";
         int matches = 0;
-        foreach (var tag in service.Snapshot.tags.Where(t => query.Length == 0 || t.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
+        foreach (var tag in catalog.Where(t => query.Length == 0 || t.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
         { AddTag(ui, tag); matches++; }
         if (matches == 0) { var empty = ui.Text(questList, query.Length == 0 ? "Create tags in Tasks" : "No matching tags", 16); TaskUIBuilder.Height(empty.rectTransform, 40); }
         var scroll = questList.GetComponentInParent<ScrollRect>(); if (scroll) scroll.verticalNormalizedPosition = 1;
@@ -224,7 +225,7 @@ public sealed class FocusPanelUI : MonoBehaviour
             options.questId = options.questTitle = options.occurrenceDay = null;
             if (tag == null) options.tagIds.Clear();
             else { options.tagIds.Clear(); options.tagIds.Add(tag.id); }
-            var catalog = GameDataManager.EnsureInstance().Tasks.Snapshot.tags;
+            var catalog = GameDataManager.EnsureInstance().Tasks.TagCatalog;
             options.tagIds.RemoveAll(id => !catalog.Any(t => t.id == id));
             options.tagNames = catalog.Where(t => options.tagIds.Contains(t.id)).Select(t => t.name).ToList();
             focus.Configure(options);
@@ -247,12 +248,6 @@ public sealed class FocusPanelUI : MonoBehaviour
     private void RefreshSummary()
     {
         if (quickStart || focus == null) return;
-        // One brief notice per finished session; page reopens and refreshes must not restart it.
-        if (focus.Phase == FocusPhase.Finished && focus.LastResult != null && savedNoticeSession != focus.SessionId)
-        {
-            savedNoticeSession = focus.SessionId;
-            savedNoticeUntil = Time.realtimeSinceStartupAsDouble + 3;
-        }
         if (message) message.gameObject.SetActive(focus.Phase == FocusPhase.Saving && !string.IsNullOrEmpty(focus.Message));
         if (pomodoroMode) { pomodoroMode.SetIsOnWithoutNotify(focus.Options.mode == FocusTimerMode.Pomodoro); pomodoroMode.interactable = Ready; }
         if (stopwatchMode) { stopwatchMode.SetIsOnWithoutNotify(focus.Options.mode == FocusTimerMode.Stopwatch); stopwatchMode.interactable = Ready; }
@@ -281,7 +276,7 @@ public sealed class FocusPanelUI : MonoBehaviour
         SetDurationButton(restIncrease, Ready && focus.Options.restMinutes < 60);
         focusDurationLabel.text = focus.Options.focusMinutes + " min";
         restDurationLabel.text = focus.Options.restMinutes + " min";
-        var catalog = GameDataManager.EnsureInstance().Tasks.Snapshot.tags;
+        var catalog = GameDataManager.EnsureInstance().Tasks.TagCatalog;
         if (questList) foreach (var button in questList.GetComponentsInChildren<Button>())
         {
             bool selected = focus.Options.tagIds.Contains(button.name) || (button.name == "NoTags" && focus.Options.tagIds.Count == 0);
@@ -324,18 +319,25 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (ticketAllowanceBar) { ticketAllowanceBar.maxValue = TaskService.FocusTicketCap; ticketAllowanceBar.SetValueWithoutNotify(day.focusTickets); }
         if (rewardAllowanceLabel) rewardAllowanceLabel.text = $"Reward time today   {day.focusMinutes} / {dailyLimit} min";
         if (ticketAllowanceLabel) ticketAllowanceLabel.text = $"Boss Tickets today   {day.focusTickets} / {TaskService.FocusTicketCap}";
-        if (allowance) allowance.text = (day.focusMinutes >= dailyLimit ? "Daily EXP / Fish limit reached. Timer still available."
+        string notice = (day.focusMinutes >= dailyLimit ? "Daily EXP / Fish limit reached. Timer still available."
                 : focus.ElapsedSeconds >= sessionLimit * 60d && focus.CountsUp ? (focus.Phase == FocusPhase.Focusing ? "Session reward limit reached. Timer continues." : $"Session rewards limited to {sessionLimit} min.")
                 : "");
         // The authored scene intentionally unbinds the old sky message. Keep result feedback
         // in this serialized settings card instead of overriding the scene's sky composition.
-        if (allowance && focus.Phase == FocusPhase.Saving)
-            allowance.text = "Focus not saved. Retry to save your result.";
-        else if (allowance && focus.Phase == FocusPhase.Finished && focus.LastResult != null
-            && Time.realtimeSinceStartupAsDouble < savedNoticeUntil)
-            allowance.text = "Focus saved." + (string.IsNullOrEmpty(allowance.text) ? "" : "\n" + allowance.text);
-        else if (allowance && focus.Phase == FocusPhase.Interrupted)
-            allowance.text = "Session ended without rewards.";
+        if (focus.Phase == FocusPhase.Saving)
+            notice = "Focus not saved. Retry to save your result.";
+        else if (focus.Phase == FocusPhase.Finished && focus.LastResult != null)
+            notice = "Focus saved." + (string.IsNullOrEmpty(notice) ? "" : "\n" + notice);
+        else if (focus.Phase == FocusPhase.Interrupted)
+            notice = "Session ended without rewards.";
+
+        if (notice != lastNotice || noticeSession != focus.SessionId)
+        {
+            lastNotice = notice;
+            noticeSession = focus.SessionId;
+            noticeUntil = string.IsNullOrEmpty(notice) ? 0 : Time.realtimeSinceStartupAsDouble + 4;
+        }
+        if (allowance) allowance.text = Time.realtimeSinceStartupAsDouble < noticeUntil ? notice : "";
         if(allowanceNotice)allowanceNotice.SetActive(allowance&&!string.IsNullOrEmpty(allowance.text));
     }
     private static void Style(Button button, bool enabled, bool selected)

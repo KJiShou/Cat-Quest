@@ -36,6 +36,13 @@ public sealed class TaskCalendarUI : MonoBehaviour
     TaskSystemUI owner;
     TaskDetailsPresenter details;
     TaskCalendarResult result;
+    TaskListViewport drawerRows;
+    DateTime boundMonth, boundToday;
+    int boundVersion = -1, boundSlots = -1;
+    TaskDifficulty? boundDifficulty;
+    string boundSearch;
+    bool boundCompleted;
+    readonly HashSet<string> boundTags = new HashSet<string>();
     TaskDifficulty? difficulty;
     readonly HashSet<string> tags = new HashSet<string>();
     CalendarTaskItem selected;
@@ -96,12 +103,21 @@ public sealed class TaskCalendarUI : MonoBehaviour
         refreshing = true;
         try
         {
-            var catalog = Service.Snapshot.tags;
+            var catalog = Service.TagCatalog;
             tags.RemoveWhere(id => !catalog.Any(t => t.id == id));
             int leading = ((int)Month.DayOfWeek + 6) % 7;
             var first = Month.AddDays(-Math.Min(leading, (Month - DateTime.MinValue).Days));
             var last = first.AddDays(Math.Min(41, (DateTime.MaxValue.Date - first).Days));
-            result = Service.QueryCalendar(first, last, search.text, difficulty, tags, showCompleted.isOn);
+            var localDay = Service.LocalNow.Date;
+            bool changed = result == null || boundVersion != Service.ReadVersion || boundToday != localDay ||
+                boundMonth != Month || boundDifficulty != difficulty || boundSearch != search.text ||
+                boundCompleted != showCompleted.isOn || !boundTags.SetEquals(tags);
+            if (changed) {
+                result = Service.QueryCalendar(first, last, search.text, difficulty, tags, showCompleted.isOn);
+                boundVersion = Service.ReadVersion; boundToday = localDay; boundMonth = Month;
+                boundDifficulty = difficulty; boundSearch = search.text; boundCompleted = showCompleted.isOn;
+                boundTags.Clear(); boundTags.UnionWith(tags);
+            }
             jumpPicker.LoadValue(SelectedDate);
             monthLabel.text = Month.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
             bool isToday = SelectedDate == Service.LocalNow.Date;
@@ -112,14 +128,19 @@ public sealed class TaskCalendarUI : MonoBehaviour
             noDateLabel.text = "No Date · " + result.noDate.Count;
             filterLabel.text = "Filter" + (difficulty.HasValue || tags.Count > 0 ? " · On" : "");
             clear.gameObject.SetActive(HasFilters);
-            var dates = result.days.Keys.ToArray();
-            for (int i = 0; i < days.Length; i++)
-            {
-                days[i].gameObject.SetActive(i < dates.Length);
-                if (i < dates.Length) days[i].Bind(this, dates[i], result.days[dates[i]], Month.Month, Math.Max(0, slots));
+            if (changed || boundSlots != slots) {
+                boundSlots = slots;
+                int i = 0;
+                foreach (var day in result.days.Values) {
+                    days[i].gameObject.SetActive(true); days[i++].Bind(this, day.date, day, Month.Month, Math.Max(0, slots));
+                }
+                for (; i < days.Length; i++) days[i].gameObject.SetActive(false);
+            } else {
+                foreach (var cell in days)
+                    if (cell.gameObject.activeSelf) cell.selection.gameObject.SetActive(cell.Date == SelectedDate);
             }
             if (DrawerOpen && !owner.IsEditing) RenderDrawer();
-            if (owner.IsEditing) owner.editor.RefreshCatalog(Service.Snapshot.tags);
+            if (owner.IsEditing) owner.editor.RefreshCatalog(Service.TagCatalog);
         }
         finally { refreshing = false; }
     }
@@ -174,40 +195,54 @@ public sealed class TaskCalendarUI : MonoBehaviour
                 Service, _ => owner.CalendarEdit(item), _ => Complete(item), owner.CalendarDelete, message => owner.Notify(message, true), preview);
             return;
         }
-        TaskUIBuilder.Clear(rows);
+        if (drawerRows == null) {
+            TaskUIBuilder.Clear(rows);
+            drawerRows = new TaskListViewport(rows);
+        }
+        drawerRows.Begin();
         emptyLabel.gameObject.SetActive(items.Count == 0);
         emptyLabel.text = HasFilters ? "No matching tasks. Use Clear to reset filters." : "No tasks scheduled. Use + Add Task to get started.";
         bool? lastDaily = null;
         foreach (var item in items)
         {
             if (!noDate && lastDaily != item.view.task.daily) {
-                var heading = Instantiate(emptyLabel, rows); heading.gameObject.SetActive(true);
-                heading.text = item.view.task.daily ? "Daily" : "Todo"; TaskUIBuilder.Height(heading.rectTransform, 36);
+                string label = item.view.task.daily ? "Daily" : "Todo";
+                drawerRows.Add("heading/"+label, "heading", 36, ()=>Instantiate(emptyLabel,rows).gameObject,
+                    go=>{ go.GetComponent<TMP_Text>().text=label; TaskUIBuilder.Height((RectTransform)go.transform,36); });
                 lastDaily = item.view.task.daily;
             }
-            var row = Instantiate(rowTemplate, rows); row.SetActive(true); row.name = "CalendarTask_" + item.view.task.id;
-            var title = TaskUIBuilder.Find(row.transform, "TaskName").GetComponent<TMP_Text>(); title.text = item.view.task.title;
-            var schedule = TaskUIBuilder.Find(row.transform, "DateTime").GetComponent<TMP_Text>();
-            schedule.text = item.kind == CalendarTaskKind.Preview ? "Daily · Preview" : item.view.Completed ? "Completed" : item.view.task.daily ? "Daily · Today" : Service.IsOverdue(item.view) ? "Overdue" : "Todo";
-            schedule.text += " / " + TaskService.DifficultyName(item.view.task.difficulty);
-            TaskSystemUI.SpaceSchedule(schedule);
-            schedule.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 28);
-            schedule.color = Service.IsOverdue(item.view) ? TaskUIBuilder.Overdue : TaskUIBuilder.ScheduleInk;
-            var tick = TaskUIBuilder.Find(row.transform, "Tick"); tick.gameObject.SetActive(item.view.Completed);
-            var check = tick.parent.GetComponent<Button>(); check.onClick.RemoveAllListeners();
-            check.interactable = item.kind != CalendarTaskKind.Preview && (!item.view.Completed || Service.CanUndoCompletion(item.view.history?.id));
-            check.onClick.AddListener(() => { if (item.view.Completed) owner.CalendarUndo(item.view.history.id); else Complete(item); });
-            var button = row.GetComponent<Button>(); button.onClick.RemoveAllListeners(); button.onClick.AddListener(() => OpenItem(item));
+            var rowRect=(RectTransform)rowTemplate.transform;
+            float height=LayoutUtility.GetPreferredHeight(rowRect);
+            drawerRows.Add("task/"+item.Key, "task", height>0 ? height : rowRect.rect.height,
+                ()=>Instantiate(rowTemplate,rows), row=>BindDrawerRow(row,item));
         }
         if (!noDate && SelectedDate < Service.LocalNow.Date && items.Count > 0)
         {
-            var label = Instantiate(emptyLabel, rows); label.gameObject.SetActive(true);
             int missed = result.days.TryGetValue(SelectedDate, out var day) ? day.missed : 0;
-            label.text = "Daily: saved records only." + (missed > 0 ? " " + missed + " missed." : "") + (HasFilters ? " Missed totals are hidden while filtering." : "");
-            TaskUIBuilder.Height(label.rectTransform, 64);
+            string footer = "Daily: saved records only." + (missed > 0 ? " " + missed + " missed." : "") + (HasFilters ? " Missed totals are hidden while filtering." : "");
+            drawerRows.Add("footer","footer",64,()=>Instantiate(emptyLabel,rows).gameObject,
+                go=>{ go.GetComponent<TMP_Text>().text=footer; TaskUIBuilder.Height((RectTransform)go.transform,64); });
         }
         if (items.Count == 0 && !noDate && SelectedDate < Service.LocalNow.Date) emptyLabel.text += " Daily: saved records only." + (result.days.TryGetValue(SelectedDate, out var past) && past.missed > 0 ? " " + past.missed + " missed." : "");
+        drawerRows.Update(true);
         Canvas.ForceUpdateCanvases(); rowScroll.verticalNormalizedPosition = savedScroll;
+    }
+    void BindDrawerRow(GameObject row, CalendarTaskItem item)
+    {
+        row.name = "CalendarTask_" + item.view.task.id;
+        var bindings=TaskRowBindings.For(row);
+        var title=bindings.title; title.text = item.view.task.title;
+        var schedule=bindings.schedule;
+        schedule.text = item.kind == CalendarTaskKind.Preview ? "Daily · Preview" : item.view.Completed ? "Completed" : item.view.task.daily ? "Daily · Today" : Service.IsOverdue(item.view) ? "Overdue" : "Todo";
+        schedule.text += " / " + TaskService.DifficultyName(item.view.task.difficulty);
+        TaskSystemUI.SpaceSchedule(schedule);
+        schedule.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 28);
+        schedule.color = Service.IsOverdue(item.view) ? TaskUIBuilder.Overdue : TaskUIBuilder.ScheduleInk;
+        var tick=bindings.tick; tick.gameObject.SetActive(item.view.Completed);
+        var check = tick.parent.GetComponent<Button>(); check.onClick.RemoveAllListeners();
+        check.interactable = item.kind != CalendarTaskKind.Preview && (!item.view.Completed || Service.CanUndoCompletion(item.view.history?.id));
+        check.onClick.AddListener(() => { if (item.view.Completed) owner.CalendarUndo(item.view.history.id); else Complete(item); });
+        var button = row.GetComponent<Button>(); button.onClick.RemoveAllListeners(); button.onClick.AddListener(() => OpenItem(item));
     }
     void Complete(CalendarTaskItem item)
     {
@@ -270,6 +305,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
     {
         if (!initialized || !Active) return;
         Layout(); details.RefreshLayout();
+        if (DrawerOpen && rowScroll.gameObject.activeInHierarchy) drawerRows?.Update();
     }
     void Layout()
     {

@@ -3,6 +3,10 @@ using System.Linq;
 
 public sealed partial class TaskService
 {
+    public bool HasActiveBattle => store.Data.battles.Exists(b => b.outcome == BattleOutcome.Running);
+    internal BossProgress BossMastery(int id) => PlayerDataStore.Copy(store.Data.bossProgress.Single(p=>p.bossId==id));
+    internal BattleAttempt BattleReceipt(string id) => PlayerDataStore.Copy(store.Data.battles.Single(b=>b.id==id));
+    public int MasterStage => store.Data.masterStage;
     public CombatStats CatStats => EquipmentStats.Final;
     public string BattleEntryError(int bossId,int masterStage=0)
     {

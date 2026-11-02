@@ -35,9 +35,23 @@ public sealed class FocusController : IFocusPresentation
         : Phase == FocusPhase.Ready || Phase == FocusPhase.Finished || Phase == FocusPhase.Interrupted ? FocusSeconds
         : Math.Max(0, FocusSeconds - ElapsedSeconds);
     public FocusSession LastResult { get; private set; }
-    public int SpectatorFishCount => Phase == FocusPhase.Focusing || Phase == FocusPhase.Saving
-        ? service.PreviewFocusFish(ElapsedSeconds)
-        : Phase == FocusPhase.Resting || Phase == FocusPhase.Finished ? LastResult?.fishCoins ?? 0 : 0;
+    private int fishMinute = -1, fishReadVersion = -1, fishCount;
+    private DateTime fishDate;
+    public int SpectatorFishCount
+    {
+        get
+        {
+            if (Phase != FocusPhase.Focusing && Phase != FocusPhase.Saving)
+                return Phase == FocusPhase.Resting || Phase == FocusPhase.Finished ? LastResult?.fishCoins ?? 0 : 0;
+            int minute = (int)(Math.Min(ElapsedSeconds, TaskService.FocusSessionMinuteCap * 60d) / 60);
+            var today = service.LocalNow.Date;
+            if (fishMinute != minute || fishReadVersion != service.ReadVersion || fishDate != today) {
+                fishCount = service.PreviewFocusFish(ElapsedSeconds);
+                fishMinute = minute; fishReadVersion = service.ReadVersion; fishDate = today;
+            }
+            return fishCount;
+        }
+    }
     private readonly TaskService service;
     private string sessionId;
     private double restElapsed;
@@ -49,7 +63,7 @@ public sealed class FocusController : IFocusPresentation
         if (Phase == FocusPhase.Focusing || Phase == FocusPhase.Saving || Phase == FocusPhase.Resting) return false;
         if (!service.BeginFocus(options, out sessionId)) { Message = service.LastError; Changed?.Invoke(); return false; }
         Options = options.Copy();
-        var receipt = service.Snapshot.focusSessions.First(s => s.id == sessionId);
+        var receipt = service.FocusReceipt(sessionId);
         Options.questTitle = receipt.questTitle; Options.occurrenceDay = receipt.occurrenceDay;
         Options.tagIds = receipt.tagIds.ToList(); Options.tagNames = receipt.tagNames.ToList();
         Phase = FocusPhase.Focusing; ElapsedSeconds = 0; restElapsed = 0; LastResult = null;
@@ -85,7 +99,7 @@ public sealed class FocusController : IFocusPresentation
         if (Phase != FocusPhase.Saving) return false;
         bool saved = cancel ? service.CancelFocus(sessionId, invalid) : service.FinishFocus(sessionId, ElapsedSeconds, early);
         if (!saved) { Message = service.LastError + " Retry to save this result."; Changed?.Invoke(); return false; }
-        LastResult = service.Snapshot.focusSessions.First(s => s.id == sessionId);
+        LastResult = service.FocusReceipt(sessionId);
         if (cancel)
         {
             Phase = FocusPhase.Interrupted;

@@ -72,6 +72,7 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
 
 [Serializable] public class RewardDay
 {
+    public RewardDay Copy() => (RewardDay)MemberwiseClone();
     public string day;
     public int taskExperience;
     public int taskFishCoins;

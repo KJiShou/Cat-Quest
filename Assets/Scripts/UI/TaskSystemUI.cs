@@ -31,7 +31,9 @@ public partial class TaskSystemUI : MonoBehaviour
     public RectTransform TutorialTaskTarget(string id)
     {
         var row = listContent.Cast<Transform>().FirstOrDefault(t => t.gameObject.activeInHierarchy && t.name == "Task_" + id);
-        return row ? row as RectTransform : null;
+        if (row) return row as RectTransform;
+        var revealed = isActiveAndEnabled && (calendar == null || !calendar.Active) ? rows?.RevealTask(id) : null;
+        return revealed ? revealed.transform as RectTransform : null;
     }
     public RectTransform TutorialCompletionTarget(string id)
     {
@@ -47,6 +49,9 @@ public partial class TaskSystemUI : MonoBehaviour
     public TaskTab CurrentTab { get; private set; }
     public string SelectedKey { get; private set; }
     private TaskUIBuilder ui;
+    private TaskListViewport rows;
+    private GameObject addRow;
+    private string rowGroup;
     private TaskDifficulty? difficultyFilter;
     private readonly HashSet<string> tagFilters = new HashSet<string>();
     private List<TaskView> visible = new List<TaskView>();
@@ -56,14 +61,12 @@ public partial class TaskSystemUI : MonoBehaviour
     private bool committingQuick;
     private bool pendingRefresh;
     private bool refocusQuick;
-    private bool suppressQuickBlur;
     private TaskConfirmDialog confirmation;
     private TaskResultNotice resultNotice;
     public TaskFilterDialog filterDialogTemplate;
     private TaskFilterDialog filters;
     private float nextClockCheck;
     private bool editing;
-    private readonly List<(TMP_Text label, TaskView view)> scheduleLabels = new List<(TMP_Text, TaskView)>();
     private readonly List<RaycastResult> outsideClickHits = new List<RaycastResult>();
     private string outsideClickSelection;
 
@@ -73,6 +76,8 @@ public partial class TaskSystemUI : MonoBehaviour
         var tabs=tabBar.GetComponent<TaskTabsLayout>() ?? tabBar.gameObject.AddComponent<TaskTabsLayout>();
         tabs.owner=this;tabs.Apply();
         ui = new TaskUIBuilder(font, roundedSprite);
+        TaskUIBuilder.Clear(listContent);
+        rows = new TaskListViewport(listContent);
         var manager = GameDataManager.EnsureInstance();
         Service = manager.Tasks;
         Service.Changed += Refresh;
@@ -97,8 +102,7 @@ public partial class TaskSystemUI : MonoBehaviour
         BuildDetails(); BuildModal();
         editor.gameObject.SetActive(false); detailsRoot.gameObject.SetActive(false);
         CurrentTab = Service.Settings.DefaultTaskTab;
-        calendar?.Initialize(this);
-        Refresh();
+        if (calendar) calendar.Initialize(this); else Refresh();
         if (!string.IsNullOrEmpty(manager.LoadNotice)) Notify(manager.LoadNotice, true);
         else if (!string.IsNullOrEmpty(Service.LastError)) Notify(Service.LastError, true);
     }
@@ -116,14 +120,12 @@ public partial class TaskSystemUI : MonoBehaviour
         {
             nextClockCheck = Time.unscaledTime + 1;
             if (!Service.RefreshDate()) Notify(Service.LastError,true);
-            foreach (var item in scheduleLabels)
-                if (item.label) item.label.color = Service.IsOverdue(item.view) ? TaskUIBuilder.Overdue : TaskUIBuilder.ScheduleInk;
             details.RefreshScheduleColor(Service);
         }
     }
     private void OnEnable()
     {
-        if(Service!=null) { Service.RefreshDate(); if (calendar && calendar.Active) Refresh(); else SelectTab(Service.Settings.DefaultTaskTab); }
+        if(Service!=null) { Service.RefreshDate(); Service.Changed += Refresh; if (calendar && calendar.Active) Refresh(); else SelectTab(Service.Settings.DefaultTaskTab); }
     }
     public bool PrepareToLeavePage()
     {
@@ -131,7 +133,7 @@ public partial class TaskSystemUI : MonoBehaviour
         CancelDraft(); CloseModal(); confirmation?.Dismiss();
         return true;
     }
-    private void OnApplicationFocus(bool focus) { if (focus && Service != null) { Service.RefreshDate(); Refresh(); } }
+    private void OnApplicationFocus(bool focus) { if (focus && isActiveAndEnabled && Service != null) { Service.RefreshDate(); Refresh(); } }
     private void OnDestroy() { if (Service != null) Service.Changed -= Refresh; if(filters) Destroy(filters.gameObject); if(resultNotice) Destroy(resultNotice.gameObject); if(confirmation?.Root) Destroy(confirmation.Root); }
 
     private void BuildDetails()
@@ -141,6 +143,7 @@ public partial class TaskSystemUI : MonoBehaviour
     private void LateUpdate()
     {
         // Let the clicked control handle its event before expanding the list underneath it.
+        if (calendar == null || !calendar.Active) rows?.Update();
         if(outsideClickSelection!=null)
         {
             string selection=outsideClickSelection; outsideClickSelection=null;
@@ -174,7 +177,7 @@ public partial class TaskSystemUI : MonoBehaviour
         else resultNotice.Show(message);
     }
     private void CloseModal() { if(filters) filters.Dismiss(); }
-    private void OnDisable() { CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
+    private void OnDisable() { if (Service != null) Service.Changed -= Refresh; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
     private void Confirm(string title,string message,Action accepted,string confirmLabel="Confirm")
     {
         CloseModal(); confirmation.Show(title,message,accepted,confirmLabel);
@@ -194,7 +197,12 @@ public partial class TaskSystemUI : MonoBehaviour
         tagFilters.RemoveWhere(id=>!data.tags.Any(t=>t.id==id));
         for(int i=0;i<5;i++)
         {
-            int count=i==(int)TaskTab.Tags ? data.tags.Count : (i == (int)TaskTab.Todo ? QueryTodo().Count : Service.Query((TaskTab)i).Count);
+            int count = (TaskTab)i switch {
+                TaskTab.Tags => data.tags.Count,
+                TaskTab.History => data.history.Count(h=>!h.revoked),
+                TaskTab.Todo => QueryTodo(data).Count,
+                _ => Service.QuerySnapshot(data,(TaskTab)i).Count
+            };
             bool active=i==(int)CurrentTab;
             Color color=active ? TaskUIBuilder.Blue : new Color32(121,143,173,255);
             tabCounts[i].text=count.ToString(); tabCounts[i].color=Color.white;
@@ -207,22 +215,27 @@ public partial class TaskSystemUI : MonoBehaviour
         }
         fishCoins.text=data.fishCoins.ToString(); tickets.text=data.tickets.ToString();
         listHeading.text=new[]{"Today's Tasks","Daily Tasks","Todo","Tags","History"}[(int)CurrentTab];
-        visible=CurrentTab == TaskTab.Todo ? QueryTodo(search.text,difficultyFilter,tagFilters) : Service.Query(CurrentTab,search.text,difficultyFilter,tagFilters);
-        scheduleLabels.Clear();
-        suppressQuickBlur=true;
-        if(quickInput) quickInput.transform.parent.SetParent(transform,false);
-        TaskUIBuilder.Clear(listContent);
-        if(CurrentTab!=TaskTab.History && !quickInput)
-        {
-            var add=Instantiate(addTaskTemplate,listContent); add.name="AddTask"; add.SetActive(true);
-            var button=add.GetComponent<Button>() ?? add.AddComponent<Button>(); button.onClick.RemoveAllListeners(); button.onClick.AddListener(BeginAdd);
+        visible=CurrentTab == TaskTab.Todo ? QueryTodo(data,search.text,difficultyFilter,tagFilters) : Service.QuerySnapshot(data,CurrentTab,search.text,difficultyFilter,tagFilters);
+        rowGroup = "";
+        if (!addRow) {
+            addRow = Instantiate(addTaskTemplate, listContent); addRow.name = "AddTask";
+            var button = addRow.GetComponent<Button>() ?? addRow.AddComponent<Button>();
+            button.onClick.RemoveAllListeners(); button.onClick.AddListener(BeginAdd);
         }
-        if(quickInput) { quickInput.transform.parent.SetParent(listContent,false); quickInput.transform.parent.SetSiblingIndex(0); }
-        if(visible.Count==0 && !quickInput) ui.Text(listContent,CurrentTab==TaskTab.History ? "No completed tasks yet." : "No tasks here. Add a task or adjust your filters.",20,new Color32(123,145,171,255));
+        bool showAdd = CurrentTab != TaskTab.History && !quickInput;
+        addRow.SetActive(showAdd);
+        if (quickInput) quickInput.transform.parent.SetAsFirstSibling();
+        else if (showAdd) addRow.transform.SetAsFirstSibling();
+        rows.Begin(quickInput || showAdd ? 1 : 0, quickInput ? 80 : showAdd ? LayoutUtility.GetPreferredHeight((RectTransform)addRow.transform) : 0);
+        if(visible.Count==0 && !quickInput) {
+            string message = CurrentTab==TaskTab.History ? "No completed tasks yet." : "No tasks here. Add a task or adjust your filters.";
+            rows.Add("empty","empty",28,()=>ui.Text(listContent,message,20,new Color32(123,145,171,255)).gameObject,
+                go=>go.GetComponent<TMP_Text>().text=message);
+        }
         if(CurrentTab==TaskTab.Todo) RenderDateGroups();
         else if(CurrentTab==TaskTab.Tags) RenderTagGroups(data.tags);
         else foreach(var row in visible) RenderRow(row);
-        suppressQuickBlur=false;
+        rows.Update(true);
         var selected=visible.FirstOrDefault(v=>v.Key==SelectedKey);
         if(selected==null) SelectedKey=null;
         if(editing) editor.RefreshCatalog(data.tags); else RenderDetails(selected);
@@ -230,27 +243,33 @@ public partial class TaskSystemUI : MonoBehaviour
     }
     private void RenderRow(TaskView view)
     {
-        var row=Instantiate(taskRowTemplate,listContent); row.name="Task_"+view.Key; row.SetActive(true);
+        rows.Add("task/"+rowGroup+"/"+view.Key, "task", 80, ()=>Instantiate(taskRowTemplate,listContent), row=>BindTaskRow(row,view));
+    }
+    private void BindTaskRow(GameObject row, TaskView view)
+    {
+        row.name="Task_"+view.Key; row.SetActive(true);
         var rect=row.GetComponent<RectTransform>(); TaskUIBuilder.Height(rect,80); TaskUIBuilder.Flex(rect);
-        var title=TaskUIBuilder.Find(row.transform,"TaskName").GetComponent<TMP_Text>(); title.text=view.task.title;
+        var bindings=TaskRowBindings.For(row);
+        var title=bindings.title; title.text=view.task.title;
         title.textWrappingMode=TextWrappingModes.NoWrap; title.overflowMode=TextOverflowModes.Ellipsis;
         TaskUIBuilder.Flex(title.transform.parent);
-        var date=TaskUIBuilder.Find(row.transform,"DateTime").GetComponent<TMP_Text>(); date.text=ScheduleText(view);
+        var date=bindings.schedule; date.text=ScheduleText(view);
         date.color=Service.IsOverdue(view) ? TaskUIBuilder.Overdue : TaskUIBuilder.ScheduleInk;
-        scheduleLabels.Add((date,view));
         SpaceSchedule(date);
-        var difficulty=TaskUIBuilder.Find(row.transform,"Normal_Difficulty");
+        var difficulty=bindings.difficulty;
         TaskUIBuilder.DifficultyBadge(difficulty,view.task.difficulty,editor.difficultySprites);
         var reward=Service.PreviewReward(view);
         // DashboardTask's authored second numeric label belongs to the EXP icon.
-        foreach(var text in row.GetComponentsInChildren<TMP_Text>(true)) {
-            if(text.name=="FishNum") text.text=reward.fishCoins.ToString();
-            else if(text.name=="FishNum (1)") text.text=reward.experience.ToString();
-        }
-        var tags=TaskUIBuilder.Find(row.transform,"Tags");
+        if (bindings.fish) bindings.fish.text=reward.fishCoins.ToString();
+        if (bindings.experience) bindings.experience.text=reward.experience.ToString();
+        var tags=bindings.tags;
+        var secondTag = tags.parent.Find("Tag_1");
+        var moreTags = tags.parent.Find("MoreTags");
+        if(secondTag) secondTag.gameObject.SetActive(view.tagNames.Count > 1);
+        if(moreTags) moreTags.gameObject.SetActive(view.tagNames.Count > 2);
         for (int i=0;i<Math.Min(2,view.tagNames.Count);i++)
         {
-            var chip=i==0 ? tags.gameObject : Instantiate(tags.gameObject,tags.parent);
+            var chip=i==0 ? tags.gameObject : secondTag ? secondTag.gameObject : Instantiate(tags.gameObject,tags.parent);
             chip.SetActive(true);
             if(i>0) { chip.name="Tag_"+i; chip.transform.SetSiblingIndex(tags.GetSiblingIndex()+i); }
             TaskUIBuilder.LayoutTag(chip,view.tagNames[i],15,28);
@@ -261,21 +280,20 @@ public partial class TaskSystemUI : MonoBehaviour
         }
         if(view.tagNames.Count>2)
         {
-            var extra=Instantiate(tags.gameObject,tags.parent); extra.name="MoreTags";
+            var extra=moreTags ? moreTags.gameObject : Instantiate(tags.gameObject,tags.parent); extra.name="MoreTags";
             extra.SetActive(true);
             extra.transform.SetSiblingIndex(tags.GetSiblingIndex()+2);
             TaskUIBuilder.LayoutTag(extra,"+"+(view.tagNames.Count-2),15,28);
             TagColors.Apply(extra,TagColors.DefaultHex,tagTintSprite);
         }
         tags.gameObject.SetActive(view.tagNames.Count>0);
-        var tick=TaskUIBuilder.Find(row.transform,"Tick"); if(tick) tick.gameObject.SetActive(view.Completed);
+        var tick=bindings.tick; if(tick) tick.gameObject.SetActive(view.Completed);
         var checkbox=tick.parent.GetComponent<Button>() ?? tick.parent.gameObject.AddComponent<Button>();
         checkbox.targetGraphic=tick.parent.GetComponent<Image>(); checkbox.onClick.RemoveAllListeners();
         tick.GetComponent<Image>().raycastTarget=false;
         if(view.Completed)
         {
-            string historyId=view.IsHistory ? view.history.id : Service.Snapshot.history
-                .FirstOrDefault(h=>h.taskId==view.task.id && h.day==view.occurrence.day && !h.revoked)?.id;
+            string historyId=view.IsHistory ? view.history.id : Service.CompletionId(view.task.id,view.occurrence.day);
             checkbox.interactable=Service.CanUndoCompletion(historyId);
             checkbox.onClick.AddListener(()=>
             {
@@ -370,7 +388,7 @@ public partial class TaskSystemUI : MonoBehaviour
         quickInput.onSubmit.RemoveAllListeners(); quickInput.onDeselect.RemoveAllListeners();
         quickInput.onSubmit.AddListener(_=>CommitQuickAdd(true));
         quickInput.onDeselect.AddListener(_=> {
-            if(suppressQuickBlur || refocusQuick) return;
+            if(refocusQuick) return;
             if(quickInput && quickInput.wasCanceled) CancelQuickAdd();
             else if(!PointerOverAdd()) CommitQuickAdd();
         });
@@ -414,7 +432,7 @@ public partial class TaskSystemUI : MonoBehaviour
     private void OpenDraft(QuestTask task,IEnumerable<string> done,string title)
     {
         editing=true; detailsRoot.gameObject.SetActive(false); editor.gameObject.SetActive(true);
-        editor.LoadDraft(PlayerDataStore.Copy(task),Service.Snapshot.tags,done);
+        editor.LoadDraft(PlayerDataStore.Copy(task),Service.TagCatalog,done);
         editor.transform.Find("Header/Heading").GetComponent<TMP_Text>().text=title;
         editor.transform.Find("Footer/Actions/SaveChangesButton").GetComponentInChildren<TMP_Text>().text=string.IsNullOrEmpty(task.id) ? "Add Task" : "Save Changes";
     }
@@ -434,10 +452,10 @@ public partial class TaskSystemUI : MonoBehaviour
         if (calendar && calendar.Active) calendar.EndEdit();
         else if(Service!=null) RenderDetails(visible.FirstOrDefault(v=>v.Key==SelectedKey));
     }
-    private List<TaskView> QueryTodo(string text = "", TaskDifficulty? difficulty = null, IEnumerable<string> tags = null)
+    private List<TaskView> QueryTodo(PlayerData data, string text = "", TaskDifficulty? difficulty = null, IEnumerable<string> tags = null)
     {
-        return Service.Query(TaskTab.Todo,text,difficulty,tags)
-            .Concat(Service.Query(TaskTab.Daily,text,difficulty,tags).Where(view => !view.Completed)).ToList();
+        return Service.QuerySnapshot(data,TaskTab.Todo,text,difficulty,tags)
+            .Concat(Service.QuerySnapshot(data,TaskTab.Daily,text,difficulty,tags).Where(view => !view.Completed)).ToList();
     }
     private void RenderDateGroups()
     {
@@ -463,19 +481,27 @@ public partial class TaskSystemUI : MonoBehaviour
     }
     private void RenderTagHeading(string id,string caption,int count,string colorHex=null)
     {
-        var row=ui.Row(listContent,"TagGroup_"+id,42,10);
-        var source=detailsRoot.Find("ScrollRect/Content/Tags/Title/Icon");
-        var icon=Instantiate(source.gameObject,row); icon.SetActive(true);
-        var iconSize=TaskUIBuilder.Height(icon.GetComponent<RectTransform>(),26);
-        iconSize.minWidth=iconSize.preferredWidth=26; iconSize.flexibleWidth=0;
-        foreach(var button in icon.GetComponents<Button>()) { button.onClick.RemoveAllListeners(); button.enabled=false; }
-        if(colorHex!=null) icon.GetComponent<Image>().color=TagColors.Background(colorHex);
-        ui.Text(row,caption+" ("+count+")",22,TaskUIBuilder.Ink);
+        rowGroup = id;
+        rows.Add("heading/"+id, "heading", 42, () => {
+            var header=ui.Row(listContent,"Group heading",42,10);
+            var source=detailsRoot.Find("ScrollRect/Content/Tags/Title/Icon");
+            var icon=Instantiate(source.gameObject,header); icon.SetActive(true);
+            var size=TaskUIBuilder.Height(icon.GetComponent<RectTransform>(),26);
+            size.minWidth=size.preferredWidth=26; size.flexibleWidth=0;
+            foreach(var button in icon.GetComponents<Button>()) { button.onClick.RemoveAllListeners(); button.enabled=false; }
+            ui.Text(header,"",22,TaskUIBuilder.Ink);
+            return header.gameObject;
+        }, header => {
+            header.name="TagGroup_"+id;
+            var icon=header.transform.GetChild(0).GetComponent<Image>();
+            icon.color=colorHex!=null ? TagColors.Background(colorHex) : detailsRoot.Find("ScrollRect/Content/Tags/Title/Icon").GetComponent<Image>().color;
+            header.GetComponentInChildren<TMP_Text>().text=caption+" ("+count+")";
+        });
     }
     private void ShowFilters()
     {
         if(!CommitQuickAdd()) return;
-        filters.Show(difficultyFilter,tagFilters,Service.Snapshot.tags,(difficulty,tags)=> {
+        filters.Show(difficultyFilter,tagFilters,Service.TagCatalog,(difficulty,tags)=> {
             difficultyFilter=difficulty; tagFilters.Clear(); tagFilters.UnionWith(tags); Refresh();
         });
     }

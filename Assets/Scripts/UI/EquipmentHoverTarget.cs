@@ -17,7 +17,7 @@ public sealed class EquipmentHoverTarget : MonoBehaviour, IPointerEnterHandler, 
     public void OnPointerEnter(PointerEventData data)
     {
         if(!owner||!owner.Ready||!button||(!masteryReward&&!button.IsInteractable()))return;
-        string id=equippedSlot?EquipmentRules.Equipped(GameDataManager.Instance.Tasks.Snapshot,slot):itemId;
+        string id=equippedSlot?GameDataManager.Instance.Tasks.EquippedItem(slot):itemId;
         owner.ShowHover(this,id,data.position);
     }
     public void OnPointerMove(PointerEventData data){if(owner)owner.MoveHover(this,data.position);}

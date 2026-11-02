@@ -424,6 +424,26 @@ public static class TaskTabsVerification
         owner.CancelDraft();
         Check(owner.Service.Delete(shortTask),"Could not remove isolated detail task.");
         Check(owner.Service.Delete(layoutTask),"Could not remove isolated layout task.");
+        context = "Long list scrolling and recycled input bindings";
+        Check(manager.SavePath.Contains("TaskTabsVerification"),"Long-list fixture requires an isolated save.");
+        for (int i = 0; i < 100; i++)
+            manager.PlayerData.tasks.Add(new QuestTask { id="scroll-"+i.ToString("D3"),title="Viewport task "+i.ToString("D3") });
+        manager.SaveData();
+        owner.SelectTab(TaskTab.Todo);
+        var scroll = owner.listContent.GetComponentInParent<ScrollRect>();
+        scroll.verticalNormalizedPosition = 1; yield return .5;
+        int activeRows = owner.listContent.Cast<Transform>().Count(t=>t.gameObject.activeInHierarchy && t.name.StartsWith("Task_"));
+        Check(activeRows > 0 && activeRows < 45,"Large list must bind only its viewport and overscan.");
+        scroll.verticalNormalizedPosition = 0; yield return .5;
+        var last = owner.listContent.Find("Task_scroll-099");
+        Check(last && last.gameObject.activeInHierarchy,"The last task is unreachable after scrolling.");
+        last.GetComponent<Button>().onClick.Invoke(); yield return .2;
+        Check(owner.SelectedKey=="scroll-099","A recycled row selected an earlier task.");
+        scroll.verticalNormalizedPosition = 1; yield return .3;
+        var anchor = owner.TutorialTaskTarget("scroll-099");
+        Check(anchor && anchor.gameObject.activeInHierarchy,"Tutorial could not reveal an offscreen task.");
+        owner.search.text="Viewport task 001"; yield return .2;
+        Check(owner.listContent.Find("Task_scroll-001") && !owner.listContent.Find("Task_scroll-099"),"Filtered rows retained stale bindings.");
     }
     static void DetailsLayout(TaskSystemUI owner)
     {

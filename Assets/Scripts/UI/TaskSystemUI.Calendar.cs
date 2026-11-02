@@ -12,7 +12,7 @@ public partial class TaskSystemUI
     public bool IsEditing => editing;
     public bool HasTaskModal => (confirmation != null && confirmation.Root.activeInHierarchy) || (filters && filters.gameObject.activeInHierarchy);
     public void ShowCalendarFilters(TaskDifficulty? difficulty, IEnumerable<string> tags, Action<TaskDifficulty?, HashSet<string>> apply)
-        => filters.Show(difficulty, tags, Service.Snapshot.tags, apply);
+        => filters.Show(difficulty, tags, Service.TagCatalog, apply);
     public void CalendarDraft(QuestTask task, IEnumerable<string> done, bool preview = false)
     {
         OpenDraft(task, done, preview ? "Edit daily task" : string.IsNullOrEmpty(task.id) ? "Add Task" : "Edit Task");

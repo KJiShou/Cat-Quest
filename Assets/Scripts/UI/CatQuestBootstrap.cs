@@ -11,6 +11,9 @@ public sealed class CatQuestBootstrap : MonoBehaviour
         if(CompanionProtocol.HasArgument("--companion")) Instantiate(companionPrefab);
         else
         {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            Application.targetFrameRate = Application.isFocused ? 60 : 30;
+#endif
             AppUpdateController.Ensure();
             if(CompanionProtocol.HasArgument("--focus-smoke")) { var probe=new GameObject("FocusBuildSmoke"); DontDestroyOnLoad(probe); probe.AddComponent<FocusBuildSmoke>(); }
             if(AccountBuildSmoke.Enabled) { var probe=new GameObject("AccountBuildSmoke"); DontDestroyOnLoad(probe); probe.AddComponent<AccountBuildSmoke>(); }

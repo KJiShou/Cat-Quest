@@ -20,6 +20,7 @@ public class DashboardTasksUI : MonoBehaviour
 
     private TaskService service;
     private TaskUIBuilder ui;
+    private TaskListViewport rows;
 
     private TaskConfirmDialog confirmation;
 
@@ -87,6 +88,10 @@ public class DashboardTasksUI : MonoBehaviour
             quickAddInput.onDeselect.AddListener(LeaveTaskInput);
         }
         service = GameDataManager.EnsureInstance().Tasks;
+        if (rows == null) {
+            TaskUIBuilder.Clear(taskScroll.content);
+            rows = new TaskListViewport(taskScroll.content);
+        }
         ui = new TaskUIBuilder(
             taskManager.font,
             taskManager.roundedSprite);
@@ -120,6 +125,7 @@ public class DashboardTasksUI : MonoBehaviour
             if (!quickAddInput.isFocused) PrepareToLeavePage();
         }
         if (pendingRefresh) Refresh();
+        rows?.Update();
     }
 
     public void Refresh()
@@ -128,13 +134,14 @@ public class DashboardTasksUI : MonoBehaviour
         if (savingTask) { pendingRefresh = true; return; }
         pendingRefresh = false;
         var content = taskScroll.content;
-        TaskUIBuilder.Clear(content);
+        rows.Begin();
+        var snapshot = service.Snapshot;
 
-        var daily = service.Query(TaskTab.Daily)
+        var daily = service.QuerySnapshot(snapshot, TaskTab.Daily)
             .Where(view => service.Eligible(view.task))
             .ToArray();
 
-        var today = service.Query(TaskTab.Today)
+        var today = service.QuerySnapshot(snapshot, TaskTab.Today)
             .Where(view => !view.task.daily)
             .ToArray();
 
@@ -144,11 +151,12 @@ public class DashboardTasksUI : MonoBehaviour
         RenderGroup(content, "Today's Tasks", today,
             "No tasks due today.");
 
-        var upcoming = service.Query(TaskTab.Todo)
+        var upcoming = service.QuerySnapshot(snapshot, TaskTab.Todo)
             .Where(view => !view.task.scheduled || (TaskService.TryDate(view.task.date, out var date) && date.Date > service.LocalNow.Date));
         foreach (var group in upcoming.GroupBy(view => TaskDateGroups.Classify(view.task, service.LocalNow)).OrderBy(group => group.Key))
             RenderGroup(content, TaskDateGroups.Caption(group.Key), group.ToArray(), "");
 
+        rows.Update(true);
         LayoutRebuilder.MarkLayoutForRebuild(content);
     }
 
@@ -158,30 +166,22 @@ public class DashboardTasksUI : MonoBehaviour
         TaskView[] tasks,
         string emptyMessage)
     {
-        var title = ui.Text(content, heading, 22);
-        title.fontStyle = FontStyles.Bold;
-        title.color = new Color32(62, 120, 168, 255);
-        title.margin = new Vector4(12, 0, 0, 0);
-        TaskUIBuilder.Height(title.rectTransform, 38);
-
-        foreach (var task in tasks)
-        {
-            var row = Instantiate(rowPrefab, content);
-            row.gameObject.SetActive(true);
-
-            row.Bind(
-                task,
-                taskManager.editor.difficultySprites,
-                OpenTask,
-                RequestComplete,
-                service.PreviewReward(task));
+        rows.Add("heading/"+heading, "heading", 38, () => {
+            var title=ui.Text(content, "", 22);
+            title.fontStyle=FontStyles.Bold; title.color=new Color32(62,120,168,255);
+            title.margin=new Vector4(12,0,0,0); TaskUIBuilder.Height(title.rectTransform,38);
+            return title.gameObject;
+        }, go=>go.GetComponent<TMP_Text>().text=heading);
+        var rect=(RectTransform)rowPrefab.transform;
+        float height=LayoutUtility.GetPreferredHeight(rect);
+        if (height<=0) height=rect.rect.height;
+        foreach (var task in tasks) {
+            rows.Add("task/"+task.Key, "task", height, ()=>Instantiate(rowPrefab,content).gameObject,
+                go=>go.GetComponent<DashboardTaskRow>().Bind(task,taskManager.editor.difficultySprites,OpenTask,RequestComplete,service.PreviewReward(task)));
         }
-
-        if (tasks.Length == 0)
-        {
-            var empty = ui.Text(content, emptyMessage, 18,
-                new Color32(121, 143, 173, 255));
-            empty.margin = title.margin;
+        if (tasks.Length == 0) {
+            rows.Add("empty/"+heading, "empty", 26, ()=>ui.Text(content,"",18,new Color32(121,143,173,255)).gameObject,
+                go=>{ var label=go.GetComponent<TMP_Text>(); label.text=emptyMessage; label.margin=new Vector4(12,0,0,0); });
         }
     }
 

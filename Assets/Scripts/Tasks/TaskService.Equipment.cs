@@ -4,6 +4,8 @@ using System.Linq;
 public sealed partial class TaskService
 {
     public bool EquipmentUnlocked=>store.Data.equipmentUnlocked||store.Data.rewardDays.Any(r=>r.questsClaimed||r.focusClaimed);
+    public string EquippedItem(EquipmentSlot slot) => EquipmentRules.Equipped(store.Data,slot);
+    public bool OwnsEquipment(string id) => store.Data.equipment.Exists(item=>item.id==id);
     public EquipmentStats EquipmentStats=>EquipmentRules.Calculate(store.Data);
     string EquipmentAccessError()=>!EquipmentUnlocked?"Claim your first Daily Reward to unlock equipment.":store.Data.battles.Any(b=>b.outcome==BattleOutcome.Running)?"Finish the current battle before changing equipment.":null;
     public string ClaimEquipmentError(string itemId)

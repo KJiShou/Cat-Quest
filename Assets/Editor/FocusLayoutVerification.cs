@@ -125,6 +125,7 @@ public static class FocusLayoutVerification
         SessionState.SetBool(Flag+".before",request=="before");
         SessionState.SetBool(Flag+".lateOnly",request=="late");
         SessionState.SetBool(Flag+".tagsOnly",request=="tags");
+        SessionState.SetBool(Flag+".noticeOnly",request=="notice");
         File.Delete("Temp/verify-focus-layout.request");
         string folder=Folder+"/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+(Before?"-before":"-after");Directory.CreateDirectory(folder);
         SessionState.SetString(Flag+".folder",folder);
@@ -223,6 +224,58 @@ public static class FocusLayoutVerification
         var service = GameDataManager.Instance.Tasks;
         var focus = FocusRunner.EnsureInstance().Controller;
         Check(GameDataManager.Instance.SavePath.Contains("FocusLayoutVerification"), "Verification must use isolated save");
+        if (SessionState.GetBool(Flag+".noticeOnly", false))
+        {
+            if (step == 0)
+            {
+                UnityEngine.Object.FindFirstObjectByType<TutorialController>().Skip();
+                var player = GameDataManager.Instance.PlayerData;
+                player.experience = 100;
+                var today = service.TodayRewards;
+                player.rewardDays.RemoveAll(day => day.day == today.day);
+                today.focusMinutes = service.FocusDailyMinuteLimit;
+                today.focusTickets = TaskService.FocusTicketCap;
+                player.rewardDays.Add(today);
+                GameDataManager.Instance.SaveData();
+                Check(nav.ShowPage(MainMenuPage.Focus), "Cannot open unlocked Focus page");
+                panel.stopwatchMode.isOn = true;
+            }
+            if (step == 1 || step == 6)
+            {
+                Click(panel.start);
+                Check(focus.Phase == FocusPhase.Focusing, "Start Focus did not begin a session");
+            }
+            if (step == 2 || step == 7)
+            {
+                Click(panel.cancel);
+                Check(focus.Phase == FocusPhase.Interrupted && panel.allowanceNotice.activeInHierarchy,
+                    "Cancelled session should display its notice");
+            }
+            if (step == 3 || step == 8)
+            {
+                Check(panel.start.GetComponentInChildren<TMPro.TMP_Text>().color == TaskUIBuilder.Ink,
+                    "Start Focus label color was overridden");
+                Capture("cancel-notice-" + (step == 3 ? "1920" : "1280"));
+            }
+            if (step == 4 || step == 9)
+            {
+                Check(!panel.allowanceNotice.activeSelf, "Cancelled session notice did not expire");
+                nav.ShowPage(MainMenuPage.Dashboard);
+                nav.ShowPage(MainMenuPage.Focus);
+                Check(!panel.allowanceNotice.activeSelf, "Reopening Focus replayed the expired notice");
+                Capture("cancel-expired-" + (step == 4 ? "1920" : "1280"));
+            }
+            if (step == 5) Resolution(1280,720);
+            if (step == 10)
+            {
+                File.WriteAllText(FolderNow+"/result.txt", "PASS: Stopwatch cancellation, button ink, notice expiry and page reopen at both sizes.");
+                EditorApplication.isPlaying = false;
+                return;
+            }
+            step++;
+            next = EditorApplication.timeSinceStartup + (step == 4 || step == 9 ? 5 : .4);
+            return;
+        }
         if (Before)
         {
             if(step==0)nav.ShowPage(MainMenuPage.Focus);
@@ -330,13 +383,14 @@ public static class FocusLayoutVerification
         if(step==14)Capture("countdown-ready-1920");
         if(step==15){panel.start.onClick.Invoke();for(int i=0;i<10800;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==360,"Mixed mode cap incorrect");Capture("countdown-saved-1920");}
         if(step==16){
-            Check(!panel.allowance.text.Contains("Focus saved.") && panel.allowance.text.Contains("Daily EXP / Fish limit reached."), "Expiry cleared daily cap notice or retained success notice");
+            Check(!panel.allowanceNotice.activeSelf && panel.rewardAllowanceBar.value == 360, "Capped session notice did not expire or cap progress disappeared");
             Capture("saved-notice-expired-1920");
         }
         if(step==17){panel.stopwatchMode.isOn=true;panel.start.onClick.Invoke();for(int i=0;i<3600;i++)focus.Advance(1);}
         if(step==18)Capture("stopwatch-capped-1920");
         if(step==19){panel.cancel.onClick.Invoke();Check(focus.Phase==FocusPhase.Interrupted && service.TodayRewards.focusMinutes==360,"Cancel changed allowance");}
         if(step==20){
+            Check(!panel.allowanceNotice.activeSelf, "Interrupted notice did not expire");
             panel.start.onClick.Invoke();for(int i=0;i<300;i++)focus.Advance(1);
             saveLock=File.Open(GameDataManager.Instance.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
             panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Saving,"Locked save did not enter retry state");
@@ -474,6 +528,6 @@ public static class FocusLayoutVerification
                 "Lv.30 Focus preview, amount caps, End Early, task reward preview and overflow checks; captures at 1920x1080 and 1280x720. Full runs also exercise raycast-routed mouse events, modal Continue, controls and unscaled feedback at both sizes; see interactions.txt and motion.csv. Visual review is separate.");
             EditorApplication.isPlaying = false; return;
         }
-        step++; next = EditorApplication.timeSinceStartup + (step==12 || step==16 ? 4 : step>=25 && step<=32 ? .15 : 1);
+        step++; next = EditorApplication.timeSinceStartup + (step==12 || step==16 || step==20 ? 5 : step>=25 && step<=32 ? .15 : 1);
     }
 }

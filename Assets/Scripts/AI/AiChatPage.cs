@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,7 +23,11 @@ public sealed class AiChatPage : MonoBehaviour
     ChatGptClient client;
     AiChatSession session;
     AiTaskDraft editing;
-    int rendered = -1;
+    readonly List<AiChatMessage> renderedMessages = new List<AiChatMessage>();
+    readonly Dictionary<AiTaskDraft, (AiChatDraftCard card, string state, QuestTask task)> draftCards =
+        new Dictionary<AiTaskDraft, (AiChatDraftCard, string, QuestTask)>();
+    bool backfilling;
+    int nextMessage;
     bool requestedModels;
     void Awake()
     {
@@ -79,7 +84,7 @@ public sealed class AiChatPage : MonoBehaviour
         }
         if (session != client.Chat) {
             if (session != null) session.Changed -= Refresh;
-            session = client.Chat; if (session != null) session.Changed += Refresh; rendered = -1;
+            session = client.Chat; if (session != null) session.Changed += Refresh;
         }
         bool ready = client.Enabled && session != null && session.Loaded;
         bool busy = session != null && session.Busy;
@@ -91,26 +96,51 @@ public sealed class AiChatPage : MonoBehaviour
         stop.gameObject.SetActive(busy); retry.gameObject.SetActive(!busy && session != null && session.CanRetry);
         retry.interactable = ready; clear.interactable = session != null;
         if (session == null) return;
-        // Changes to draft states redraw cards, while text entry never rebuilds the conversation.
-        int signature = session.History.messages.Count;
-        foreach (var m in session.History.messages) foreach (var d in m.drafts) signature = unchecked(signature * 31 + d.state.GetHashCode());
-        if (rendered == signature) return; rendered = signature;
-        foreach (Transform child in content) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-        empty.gameObject.SetActive(session.History.messages.Count == 0 && !string.IsNullOrWhiteSpace(empty.text));
-        foreach (var message in session.History.messages) {
-            var row = Instantiate(messageTemplate, content); row.text.font=status.font; row.gameObject.SetActive(true); row.Bind(message);
+        var messages = session.History.messages;
+        bool reset = renderedMessages.Count > messages.Count;
+        for (int i = 0; !reset && i < renderedMessages.Count; i++)
+            reset = !ReferenceEquals(renderedMessages[i], messages[i]);
+        if (reset) {
+            foreach (Transform child in content) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
+            renderedMessages.Clear(); draftCards.Clear(); nextMessage = 0;
+        }
+        empty.gameObject.SetActive(messages.Count == 0 && !string.IsNullOrWhiteSpace(empty.text));
+        bool added = renderedMessages.Count < messages.Count;
+        for (int i=renderedMessages.Count; i<messages.Count; i++) renderedMessages.Add(messages[i]);
+        if (added || reset) AppendBatch();
+        foreach (var message in messages)
             foreach (var draft in message.drafts) {
-                var card = Instantiate(draftTemplate, content); card.summary.font=status.font; card.gameObject.SetActive(true);
-                card.Bind(draft, () => OpenDraft(draft), () => session.Dismiss(draft));
+                if (!draftCards.TryGetValue(draft, out var previous)) continue;
+                if (previous.state == draft.state && previous.task == draft.task) continue;
+                BindCard(previous.card, draft);
+            }
+    }
+    void BindCard(AiChatDraftCard card, AiTaskDraft draft)
+    {
+        card.Bind(draft, () => OpenDraft(draft), () => session.Dismiss(draft));
+        draftCards[draft] = (card, draft.state, draft.task);
+    }
+    void AppendBatch()
+    {
+        int end = Math.Min(nextMessage + 8, renderedMessages.Count);
+        while (nextMessage < end) {
+            var message = renderedMessages[nextMessage++];
+            var row = Instantiate(messageTemplate, content);
+            row.text.font = status.font; row.gameObject.SetActive(true); row.Bind(message);
+            foreach (var draft in message.drafts) {
+                var card = Instantiate(draftTemplate, content);
+                card.summary.font = status.font; card.gameObject.SetActive(true); BindCard(card,draft);
             }
         }
-        Canvas.ForceUpdateCanvases(); scroll.verticalNormalizedPosition = 0;
+        backfilling = nextMessage < renderedMessages.Count;
+        if (!backfilling) { Canvas.ForceUpdateCanvases(); scroll.verticalNormalizedPosition = 0; }
     }
+    void LateUpdate() { if (backfilling && session != null) AppendBatch(); }
     public void OpenDraft(AiTaskDraft draft)
     {
         if (draft.state != "pending") return;
         editing = draft; editorOverlay.transform.SetAsLastSibling(); editorOverlay.SetActive(true); editor.gameObject.SetActive(true);
-        editor.LoadDraft(PlayerDataStore.Copy(draft.task), GameDataManager.EnsureInstance().Tasks.Snapshot.tags, draft.completed);
+        editor.LoadDraft(PlayerDataStore.Copy(draft.task), GameDataManager.EnsureInstance().Tasks.TagCatalog, draft.completed);
         editor.transform.Find("Header/Heading").GetComponent<TMP_Text>().text = string.IsNullOrEmpty(draft.targetId) ? "Review New Task" : "Review Task Changes";
         saveDraft.GetComponentInChildren<TMP_Text>().text = "Confirm & Save";
         if(reviewStatus) { reviewStatus.text=""; reviewStatus.gameObject.SetActive(false); }

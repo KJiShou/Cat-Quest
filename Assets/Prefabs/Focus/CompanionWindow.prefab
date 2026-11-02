@@ -3283,7 +3283,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5f165a2b437335449ad8b33a776facea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FocusScenePreview
-  stagePrefab: {fileID: 6793440318233551396, guid: a2fea6b7c94c18442aef504362ff0fd7, type: 3}
+  stagePrefab: {fileID: 0}
+  stageResource: Stages/FocusPageStage
   framingOffset: {x: 0, y: -1.3}
   targetHeight: 540
   minimumOrthographicSize: 6.8

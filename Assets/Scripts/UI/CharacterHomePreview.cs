@@ -20,6 +20,7 @@ public sealed class CharacterHomePreview : MonoBehaviour
     [Min(.1f)] public float backgroundOrthographicSize = 6.7f;
     private GameObject ownedStage;
     private Image placeholder;
+    private RectTransform layoutImage, layoutStage;
     private RawImage view;
     private RenderTexture texture;
     private RenderTexture originalTarget;
@@ -31,8 +32,10 @@ public sealed class CharacterHomePreview : MonoBehaviour
     {
         view = GetComponent<RawImage>();
         view.raycastTarget = false;
+        layoutImage = transform.parent ? transform.parent.Find("Image") as RectTransform : null;
+        layoutStage = transform.parent ? transform.parent.Find("EquipmentStage") as RectTransform : null;
         SyncLayout();
-        placeholder = transform.parent ? transform.parent.Find("Image")?.GetComponent<Image>() : null;
+        placeholder = layoutImage ? layoutImage.GetComponent<Image>() : null;
         if (ownedStage) ownedStage.SetActive(true);
         if ((!previewCamera || !character) && characterPrefab && Application.isPlaying) CreatePreview();
         view.enabled = previewCamera && character;
@@ -72,19 +75,18 @@ public sealed class CharacterHomePreview : MonoBehaviour
     private void SyncLayout()
     {
         // The shared dashboard's character area also positions the scene's live preview.
-        var placeholder = transform.parent ? transform.parent.Find("Image") as RectTransform : null;
-        if (placeholder)
+        if (layoutImage)
         {
             var rect = view.rectTransform;
-            rect.anchorMin = placeholder.anchorMin; rect.anchorMax = placeholder.anchorMax;
-            rect.pivot = placeholder.pivot; rect.offsetMin = placeholder.offsetMin; rect.offsetMax = placeholder.offsetMax;
+            rect.anchorMin = layoutImage.anchorMin; rect.anchorMax = layoutImage.anchorMax;
+            rect.pivot = layoutImage.pivot; rect.offsetMin = layoutImage.offsetMin; rect.offsetMax = layoutImage.offsetMax;
         }
-        else if (transform.parent && transform.parent.Find("EquipmentStage") is RectTransform stage)
+        else if (layoutStage)
         {
             // CharacterHome replaces the prefab's sprite Image with this live preview.
             var rect = view.rectTransform;
-            rect.anchorMin = stage.anchorMin + new Vector2(.02f, .02f);
-            rect.anchorMax = stage.anchorMax - new Vector2(.02f, .01f);
+            rect.anchorMin = layoutStage.anchorMin + new Vector2(.02f, .02f);
+            rect.anchorMax = layoutStage.anchorMax - new Vector2(.02f, .01f);
             rect.offsetMin = rect.offsetMax = Vector2.zero;
         }
     }
@@ -96,9 +98,9 @@ public sealed class CharacterHomePreview : MonoBehaviour
         var rect = view.rectTransform.rect;
         if (rect.width <= 0 || rect.height <= 0) return;
         float aspect = rect.width / rect.height;
-        int height = 720;
-        int width = Mathf.Clamp(Mathf.RoundToInt(height * aspect), 64, 2048);
-        if (!texture || texture.width != width)
+        var pixels = PreviewPixels.For(view, 720);
+        int width = pixels.x, height = pixels.y;
+        if (!texture || texture.width != width || texture.height != height)
         {
             ReleaseTexture();
             texture = new RenderTexture(width, height, 24) { name = "Character Home Preview" };

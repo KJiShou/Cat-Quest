@@ -31,13 +31,14 @@ public sealed class AiChatDraftCard : MonoBehaviour
         }
         changes.gameObject.SetActive(changes.text.Length>0);
         foreach(Transform child in tags)Destroy(child.gameObject);
-        var catalog=GameDataManager.EnsureInstance().Tasks.Snapshot.tags;
+        var catalog=GameDataManager.EnsureInstance().Tasks.TagCatalog;
         foreach(var id in task.tagIds){var tag=catalog.FirstOrDefault(t=>t.id==id);if(tag==null)continue;
             var chip=Instantiate(tagTemplate,tags);chip.SetActive(true);TaskUIBuilder.LayoutTag(chip,tag.name);TagColors.Apply(chip,tag.colorHex,tagTintSprite);
             foreach(var button in chip.GetComponents<Button>())button.interactable=false;
         }
         tags.parent.gameObject.SetActive(task.tagIds.Count>0);
         review.interactable=dismiss.interactable=draft.state=="pending";
+        review.onClick.RemoveAllListeners(); dismiss.onClick.RemoveAllListeners();
         review.onClick.AddListener(()=>edit());dismiss.onClick.AddListener(()=>cancel());
     }
 }

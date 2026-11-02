@@ -5,6 +5,12 @@ using UnityEngine.UI;
 public sealed class FocusScenePreview : MonoBehaviour
 {
     public GameObject stagePrefab;
+    [SerializeField] string stageResource;
+    FocusTrainingBattle battle;
+    FocusFishSpectators fish;
+    ResourceRequest loading;
+    IFocusPresentation presentation;
+    bool showWhenReady;
     public Camera PreviewCamera { get; private set; }
     public GameObject Stage { get; private set; }
     public Vector2 framingOffset;
@@ -16,9 +22,10 @@ public sealed class FocusScenePreview : MonoBehaviour
     public float minimumOrthographicSize = 10, horizontalHalfWidth = 13;
     public void Bind(IFocusPresentation source)
     {
+        presentation = source;
         if (!Stage) return;
-        Stage.GetComponentInChildren<FocusTrainingBattle>().Presentation = source;
-        Stage.GetComponentInChildren<FocusFishSpectators>().Presentation = source;
+        battle.Presentation = source;
+        fish.Presentation = source;
         if (source is CompanionState state && equipmentAura)
             equipmentAura.SetRemote(state.connected ? state.equipmentAuraTier : 0, state.connected ? state.equipmentAuraPieces : 0);
     }
@@ -27,6 +34,28 @@ public sealed class FocusScenePreview : MonoBehaviour
     {
         view = GetComponent<RawImage>();
         view.raycastTarget = false;
+        if (!Stage && !stagePrefab && !string.IsNullOrEmpty(stageResource)) {
+            showWhenReady = view.enabled;
+            view.enabled = false;
+            loading = Resources.LoadAsync<StagePrefabResource>(stageResource);
+            loading.completed += StageLoaded;
+            return;
+        }
+        ShowStage();
+    }
+    void StageLoaded(AsyncOperation operation)
+    {
+        if (operation != loading) return;
+        loading.completed -= StageLoaded;
+        var entry = loading.asset as StagePrefabResource;
+        loading = null;
+        if (!entry || !entry.prefab) { Debug.LogError("Missing Focus stage " + stageResource); return; }
+        stagePrefab = entry.prefab;
+        view.enabled = showWhenReady;
+        ShowStage();
+    }
+    void ShowStage()
+    {
         if (!Stage && stagePrefab)
         {
             Stage = Instantiate(stagePrefab, new Vector3(10000, 10000, 0), Quaternion.identity);
@@ -34,9 +63,11 @@ public sealed class FocusScenePreview : MonoBehaviour
             equipmentAura = Stage.GetComponentInChildren<CharacterEquipmentAura>(true);
             PreviewCamera = Stage.GetComponentInChildren<Camera>(true);
             cameraHome = PreviewCamera.transform.position;
-            Stage.GetComponentInChildren<FocusFishSpectators>().viewportCamera = PreviewCamera;
+            battle = Stage.GetComponentInChildren<FocusTrainingBattle>();
+            fish = Stage.GetComponentInChildren<FocusFishSpectators>();
+            fish.viewportCamera = PreviewCamera;
         }
-        if (Stage) Stage.SetActive(true);
+        if (Stage) { Stage.SetActive(true); Bind(presentation); }
         UpdateTarget();
     }
 
@@ -47,25 +78,30 @@ public sealed class FocusScenePreview : MonoBehaviour
         var size = view.rectTransform.rect.size;
         if (size.x <= 0 || size.y <= 0) return;
         float aspect = size.x / size.y;
-        int height = targetHeight, width = Mathf.Clamp(Mathf.RoundToInt(height * aspect), 64, 2048);
-        if (!texture || texture.width != width)
+        var pixels = PreviewPixels.For(view, targetHeight);
+        if (!texture || texture.width != pixels.x || texture.height != pixels.y)
         {
             ReleaseTexture();
-            texture = new RenderTexture(width, height, 24) { name = "Focus Training View" };
+            texture = new RenderTexture(pixels.x, pixels.y, 24) { name = "Focus Training View" };
             texture.Create();
         }
-        view.texture = texture;
+        if (view.texture != texture) view.texture = texture;
         PreviewCamera.transform.position = cameraHome + new Vector3(framingOffset.x, framingOffset.y, 0);
-        PreviewCamera.targetTexture = texture;
-        PreviewCamera.aspect = aspect;
+        if (PreviewCamera.targetTexture != texture) PreviewCamera.targetTexture = texture;
+        if (!Mathf.Approximately(PreviewCamera.aspect, aspect)) PreviewCamera.aspect = aspect;
         PreviewCamera.orthographicSize = Mathf.Max(minimumOrthographicSize, horizontalHalfWidth / aspect);
         PreviewCamera.enabled = true;
     }
 
     void OnDisable()
     {
+        if (loading != null) {
+            loading.completed -= StageLoaded; loading = null;
+            view.enabled = showWhenReady;
+        }
         if (PreviewCamera) PreviewCamera.enabled = false;
         if (Stage) Stage.SetActive(false);
+        ReleaseTexture();
     }
     void OnDestroy()
     {

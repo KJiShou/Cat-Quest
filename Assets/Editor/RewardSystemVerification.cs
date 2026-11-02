@@ -42,12 +42,35 @@ public static class RewardSystemVerification
         Check(service.BeginFocus(out string id) && service.FinishFocus(id, seconds, early), service.LastError);
         return id;
     }
+    private static void VerifyRewardPreviewSnapshot()
+    {
+        var clock = new Clock();
+        var store = new Store();
+        var service = new TaskService(store, clock);
+        var legacy = new RewardDay { day = TaskService.DateKey(clock.LocalNow), taskExperience = 4, focusMinutes = 239 };
+        store.Data.rewardDays.Add(legacy);
+        var preview = service.TodayRewards;
+        Check(preview.firstTaskSettled && !legacy.rewardRulesInitialized, "Reading legacy rewards must not migrate the live save.");
+        preview.focusMinutes = 0;
+        Check(service.TodayRewards.focusMinutes == 239, "The caller mutated the cached allowance.");
+        Check(service.PreviewFocusRewards(300).fishCoins == 0, "Focus preview ignored the daily allowance.");
+        var next = service.Snapshot;
+        next.rewardDays[0].focusMinutes = 0;
+        store.fail = true;
+        Check(!store.TrySave(next, out _) && service.TodayRewards.focusMinutes == 239, "Failed persistence invalidated the allowance.");
+        store.fail = false;
+        Check(store.TrySave(next, out _) && service.PreviewFocusRewards(300).fishCoins == 1, "Committed allowance did not refresh.");
+        clock.now = clock.now.AddDays(1);
+        Check(service.TodayRewards.taskExperience == 0 && store.Data.rewardDays.Count == 1, "Browsing a new day must not write a reward record.");
+    }
+
     [MenuItem("Tools/Cat Quest/Verify Rewards and Focus")]
     public static void Run()
         => Run(CharacterHomeVerification.Run);
 
     internal static void Run(Action verifyCharacterHome)
     {
+        VerifyRewardPreviewSnapshot();
         try
         {
             VerifyTasksAndGoals(); VerifyLevelTasks(); VerifyFocus(); VerifyController(); VerifyMigration();

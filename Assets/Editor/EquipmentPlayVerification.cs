@@ -50,7 +50,7 @@ public static class EquipmentPlayVerification
         double[] bonus={c.hp-baseStats.hp,c.atk-baseStats.atk,c.def-baseStats.def,c.aspd-baseStats.aspd};
         for(int i=0;i<4;i++){
             string expectedBonus=i==3?$"+{bonus[i]:0.00}/s gear":$"+{bonus[i]:0.##} gear";
-            if(bonus[i]<=0)expectedBonus=$"<color=#7C8998>{expectedBonus}</color>";
+            if(bonus[i]<=0)expectedBonus="";
             Check(view.bonuses[i]&&view.bonuses[i].text==expectedBonus,"Equipment/set bonus "+i);
             Check(!view.values[i].transform.parent.GetComponent<Image>().enabled,"Stat track still visible");
             Check(!view.values[i].transform.parent.Find("Fill"),"Obsolete stat fill remains");
@@ -82,6 +82,7 @@ public static class EquipmentPlayVerification
         foreach(var t in prefab.GetComponentsInChildren<Transform>(true))Check(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject)==0,"Missing detail script: "+t.name);
         UnityEngine.SceneManagement.SceneManager.LoadScene("CharacterHome");yield return 2;
         Resolution(1920,1080);var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var manager=GameDataManager.EnsureInstance();var service=manager.Tasks;Check(manager.SavePath.Contains("EquipmentVerification"),"Must isolate saves");
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
         nav.ShowPage(MainMenuPage.CatHome);yield return 1;var page=nav.pages[4].GetComponent<EquipmentPageUI>();Check(page.Ready&&!service.EquipmentUnlocked,"Locked fresh state");Capture("equipment-empty-1920");Layout(page);yield return .4;
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);
@@ -185,7 +186,8 @@ public static class EquipmentPlayVerification
             var eventSystem=UnityEngine.EventSystems.EventSystem.current;
             var point=RectTransformUtility.WorldToScreenPoint(null,control.transform.position);
             var hits=new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();eventSystem.RaycastAll(new UnityEngine.EventSystems.PointerEventData(eventSystem){position=point},hits);
-            Check(hits.Count>0&&UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(hits[0].gameObject)==control.gameObject,"Inventory control raycast");
+            var handler=hits.Count>0 ? UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(hits[0].gameObject) : null;
+            Check(handler==control.gameObject,$"Inventory control {control.name} expected a click at {point}, hit {handler?.name ?? "none"}.");
             feedback.OnSelect(new UnityEngine.EventSystems.BaseEventData(eventSystem));yield return .15;
             feedback.OnSubmit(new UnityEngine.EventSystems.BaseEventData(eventSystem));bool submitted=false;float until=Time.realtimeSinceStartup+.3f;
             while(Time.realtimeSinceStartup<until){yield return .02;submitted|=feedback.DrawScale.y<1;}Check(submitted,"Inventory keyboard feedback");
@@ -261,8 +263,13 @@ public static class EquipmentPlayVerification
                 foreach(var slotButton in dashboard.slots){
                     var slotRect=(RectTransform)slotButton.transform;slotRect.GetWorldCorners(slotCorners);
                     Check(Mathf.Abs((slotCorners[2].x-slotCorners[0].x)-(slotCorners[2].y-slotCorners[0].y))<.5f,"Dashboard equipment slot must remain square: "+slotButton.name+" "+context);
-                    float effectOverflow=Mathf.Min(slotCorners[2].x-slotCorners[0].x,slotCorners[2].y-slotCorners[0].y)*.06f;
-                    Check(slotCorners[0].y-effectOverflow>powerCorners[2].y+4,"Power must not overlap equipment frame: "+context);
+                    float bottom=slotCorners[0].y;
+                    foreach(var graphic in slotButton.GetComponentsInChildren<Graphic>()) {
+                        var mesh=graphic.canvasRenderer.GetMesh();
+                        if(!graphic.enabled || !mesh)continue;
+                        foreach(var vertex in mesh.vertices) bottom=Mathf.Min(bottom,graphic.transform.TransformPoint(vertex).y);
+                    }
+                    Check(bottom>powerCorners[2].y+4,$"Power must not overlap the rendered equipment frame: {context}, gap={bottom-powerCorners[2].y:F2}.");
                 }
                 for(int i=0;i<3;i++)Check(dashboard.slots[i].GetComponent<Image>().color==Color.Lerp(new Color32(255,201,65,255),Color.white,.75f),"Dashboard equipped grade background");
                 Capture("dashboard-stats-"+context);yield return .2;
