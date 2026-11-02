@@ -7,7 +7,7 @@ public sealed class AppCursorSettings : ScriptableObject
     public Texture2D normal;
     [Tooltip("Pixel coordinates from the TOP LEFT of the imported texture; place on the fingertip.")]
     public Vector2 hotspot = new Vector2(2, 2);
-    [Tooltip("Optional cursor over enabled, interactable UI buttons. Empty keeps Normal.")]
+    [Tooltip("Optional cursor over enabled, interactable UI controls, including buttons and sliders. Empty keeps Normal.")]
     public Texture2D buttonHover;
     public Vector2 buttonHoverHotspot = new Vector2(9, 3);
     [Tooltip("Optional left-button-down artwork. Empty keeps the normal cursor.")]

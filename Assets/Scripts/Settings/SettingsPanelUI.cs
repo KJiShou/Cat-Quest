@@ -14,6 +14,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public Button aiButton, aiBack;
     public Toggle notifications, upload;
     public Slider sound, music;
+    public Button soundMute, musicMute;
     public SettingsSliderCommit soundCommit, musicCommit;
     public TMP_Text settingsStatus, soundValue, musicValue;
     public Button close, accountButton, tagsButton, tagsBack, accountBack, tagCancel;
@@ -41,6 +42,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     string editingTagId, deletingTagId, selectedColor = TagColors.DefaultHex;
     [NonSerialized] bool initialized, subscribed;
     bool refreshing, nameDirty;
+    float lastSoundVolume = 1f, lastMusicVolume = 1f;
     bool closeAiToOpener;
     bool closeAccountToOpener;
     LeaderboardKind selectedRanking;
@@ -72,6 +74,8 @@ public sealed class SettingsPanelUI : MonoBehaviour
         notifications.onValueChanged.AddListener(_ => { if (!refreshing) SaveSettings(); });
         sound.onValueChanged.AddListener(_ => PreviewVolumes(soundCommit));
         music.onValueChanged.AddListener(_ => PreviewVolumes(musicCommit));
+        soundMute.onClick.AddListener(ToggleSoundMute);
+        musicMute.onClick.AddListener(ToggleMusicMute);
         soundCommit.Commit += SaveSettings;
         musicCommit.Commit += SaveSettings;
         foreach (var toggle in new[] { showDashboardRanking, showDashboardTasks, showDashboardDailyRewards, showDashboardFocus, showDashboardCharacter })
@@ -253,9 +257,25 @@ public sealed class SettingsPanelUI : MonoBehaviour
     void PreviewVolumes(SettingsSliderCommit committer)
     {
         if (refreshing) return;
+        RememberVolumes();
         committer.MarkChanged();
         if (audioPlayer) audioPlayer.Preview(ReadSettings());
         RefreshVolumeLabels();
+    }
+    void RememberVolumes()
+    {
+        if (sound.value > 0) lastSoundVolume = sound.value;
+        if (music.value > 0) lastMusicVolume = music.value;
+    }
+    void ToggleSoundMute()
+    {
+        sound.value = sound.value > 0 ? 0 : lastSoundVolume;
+        SaveSettings();
+    }
+    void ToggleMusicMute()
+    {
+        music.value = music.value > 0 ? 0 : lastMusicVolume;
+        SaveSettings();
     }
     void RefreshVolumeLabels()
     {
@@ -286,6 +306,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         showDashboardCharacter.SetIsOnWithoutNotify(!saved.hideDashboardCharacter);
         notifications.SetIsOnWithoutNotify(saved.notificationsEnabled);
         sound.SetValueWithoutNotify(saved.soundVolume); music.SetValueWithoutNotify(saved.musicVolume);
+        RememberVolumes();
         // Native sliders do not notify visual adapters during programmatic initialization.
         sound.onValueChanged.Invoke(sound.value); music.onValueChanged.Invoke(music.value);
         refreshing = false;

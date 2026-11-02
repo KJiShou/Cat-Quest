@@ -8,6 +8,7 @@
 
 - **Notification** 控制 Windows 专注与休息结束提醒，立即保存。
 - **Sound/Music** 分别控制应用内音源 0–100%，零显示 Muted。拖动预览，释放、键盘取消选择、短暂键盘空闲或关闭时提交。失败提示并恢复已保存音量。
+- 点击 Sound/Music 左侧圆形图标立即静音／取消静音，互不影响。取消静音恢复本次应用运行期间最近的非零音量，关闭再打开设置仍保留；若启动时已经静音，首次恢复为 100%。静音音量沿用滑块的保存及失败回滚逻辑。
 - **Default task tab** 选择进入 Tasks 时显示 Today、Daily Tasks 或 Todo，立即保存，失败恢复已保存选项。旧存档和无效选项默认 Today，具体任务跳转优先于默认页。
 - **Dashboard leaderboard** 选择 Boss Stage、Tasks Completed、Focus Minutes、Power，立即保存并控制预览和 View All 目标，旧存档默认 Focus Minutes。
 - **Show on Dashboard** 独立控制 Tasks、Daily rewards、Focus、Leaderboard、Character，默认全显示。保存失败恢复，隐藏卡离开布局、空行收起，没有上方卡时快捷行保持紧凑，全隐藏显示设置提示。仅改变 Dashboard 表现，不停止计时或禁用侧栏功能，隐藏排名保留分类。

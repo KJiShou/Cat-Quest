@@ -39,7 +39,7 @@ public sealed class AppCursor : MonoBehaviour
             return;
         }
         bool down = mouse.leftButton.isPressed;
-        bool overButton = settings.buttonHover && IsOverButton(position);
+        bool overButton = settings.buttonHover && IsOverControl(position);
         var texture = down && settings.pressed ? settings.pressed :
             overButton ? settings.buttonHover : settings.normal;
         var hotspot = settings.HotspotFor(texture, down, overButton);
@@ -50,7 +50,7 @@ public sealed class AppCursor : MonoBehaviour
         applied = true;
     }
 
-    bool IsOverButton(Vector2 position)
+    bool IsOverControl(Vector2 position)
     {
         var eventSystem = EventSystem.current;
         if (!eventSystem || !eventSystem.isActiveAndEnabled) return false;
@@ -63,16 +63,17 @@ public sealed class AppCursor : MonoBehaviour
         pointer.position = position;
         hits.Clear();
         eventSystem.RaycastAll(pointer, hits);
-        // Use the same click-handler hierarchy as UI input. Never look through
+        // Sliders handle pointer-down/drag rather than pointer-click. Resolve the
+        // first pointer-down handler just as UI input does. Never look through
         // a blocking graphic or a child control to a button behind it.
         var target = hits.Count > 0 ? hits[0].gameObject : null;
         hits.Clear();
-        var handler = target ? ExecuteEvents.GetEventHandler<IPointerClickHandler>(target) : null;
+        var handler = target ? ExecuteEvents.GetEventHandler<IPointerDownHandler>(target) : null;
         var control = handler ? handler.GetComponent<Selectable>() : null;
         if (!control || !control.isActiveAndEnabled || !control.IsInteractable()) return false;
         if (control is TMPro.TMP_InputField text) return !text.readOnly;
         if (control is InputField legacyText) return !legacyText.readOnly;
-        return control is Button || control is Toggle || control is Dropdown || control is TMPro.TMP_Dropdown;
+        return control is Button || control is Slider || control is Toggle || control is Dropdown || control is TMPro.TMP_Dropdown;
     }
 
     void OnApplicationFocus(bool hasFocus)

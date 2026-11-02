@@ -37,6 +37,8 @@ public sealed class FocusPanelUI : MonoBehaviour
     public FocusController Controller => focus;
     private FocusController focus;
     private int displayedSecond = -1;
+    private string savedNoticeSession;
+    private double savedNoticeUntil;
     private void OnEnable()
     {
         if(cancel&&!cancelLayoutCached){var slot=(RectTransform)cancel.transform.parent;cancelAnchorMin=slot.anchorMin;cancelAnchorMax=slot.anchorMax;cancelLayoutCached=true;}
@@ -95,6 +97,11 @@ public sealed class FocusPanelUI : MonoBehaviour
     }
     private void Update()
     {
+        if (savedNoticeUntil > 0 && Time.realtimeSinceStartupAsDouble >= savedNoticeUntil)
+        {
+            savedNoticeUntil = 0;
+            RefreshSummary();
+        }
         if (focus != null && displayedSecond != FocusController.DisplaySecond(focus.DisplaySeconds, focus.CountsUp)) { RefreshTime(); RefreshSummary(); }
         if (questPopup && questPopup.gameObject.activeSelf)
         {
@@ -148,7 +155,7 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (message) message.text = focus.Message;
         bool ready = phase == FocusPhase.Ready || phase == FocusPhase.Finished || phase == FocusPhase.Interrupted;
         start.gameObject.SetActive(quickStart || ready);
-        start.GetComponentInChildren<TMP_Text>(true).text = quickStart && !ready ? "Open Focus" : phase == FocusPhase.Finished ? "Start Another Focus" : "Start Focus";
+        start.GetComponentInChildren<TMP_Text>(true).text = quickStart && !ready ? "Open Focus" : "Start Focus";
         if (endEarly) endEarly.gameObject.SetActive(phase == FocusPhase.Focusing && focus.Options.mode != FocusTimerMode.Pomodoro);
         if (endEarly) endEarly.GetComponentInChildren<TMP_Text>(true).text = focus.CountsUp ? "End Focus" : "End Focus Early";
         if (cancel) cancel.gameObject.SetActive(phase == FocusPhase.Focusing);
@@ -240,6 +247,12 @@ public sealed class FocusPanelUI : MonoBehaviour
     private void RefreshSummary()
     {
         if (quickStart || focus == null) return;
+        // One brief notice per finished session; page reopens and refreshes must not restart it.
+        if (focus.Phase == FocusPhase.Finished && focus.LastResult != null && savedNoticeSession != focus.SessionId)
+        {
+            savedNoticeSession = focus.SessionId;
+            savedNoticeUntil = Time.realtimeSinceStartupAsDouble + 3;
+        }
         if (message) message.gameObject.SetActive(focus.Phase == FocusPhase.Saving && !string.IsNullOrEmpty(focus.Message));
         if (pomodoroMode) { pomodoroMode.SetIsOnWithoutNotify(focus.Options.mode == FocusTimerMode.Pomodoro); pomodoroMode.interactable = Ready; }
         if (stopwatchMode) { stopwatchMode.SetIsOnWithoutNotify(focus.Options.mode == FocusTimerMode.Stopwatch); stopwatchMode.interactable = Ready; }
@@ -318,7 +331,8 @@ public sealed class FocusPanelUI : MonoBehaviour
         // in this serialized settings card instead of overriding the scene's sky composition.
         if (allowance && focus.Phase == FocusPhase.Saving)
             allowance.text = "Focus not saved. Retry to save your result.";
-        else if (allowance && focus.Phase == FocusPhase.Finished && focus.LastResult != null)
+        else if (allowance && focus.Phase == FocusPhase.Finished && focus.LastResult != null
+            && Time.realtimeSinceStartupAsDouble < savedNoticeUntil)
             allowance.text = "Focus saved." + (string.IsNullOrEmpty(allowance.text) ? "" : "\n" + allowance.text);
         else if (allowance && focus.Phase == FocusPhase.Interrupted)
             allowance.text = "Session ended without rewards.";

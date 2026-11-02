@@ -68,7 +68,7 @@ public static class SettingsPlayVerification
         {
             SessionState.SetBool(Flag + ".enteredPlay", true);
             evidence.Clear(); checks.Clear(); loggedError = null;
-            run = SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
+            run = SessionState.GetBool(Flag + ".mute", false) ? RunMute() : SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
         }
         if (state == PlayModeStateChange.EnteredEditMode)
         {
@@ -107,13 +107,14 @@ public static class SettingsPlayVerification
                 else
                 {
                     Check(evidence.All(path => File.Exists(path) && new FileInfo(path).Length > 100), "A requested screenshot is missing or empty.");
-                    Finish(SessionState.GetBool(Flag + ".appUpdates", false) ? "PASS: App Update bindings, state views, modal dismissal/focus, download continuity, button motion/reset at 1920x1080 and 1280x720. Network/install are verified separately." : SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
+                    Finish(SessionState.GetBool(Flag + ".mute", false) ? "PASS: Sound/Music mute, unmute, independent channels, reopen, keyboard submit, rapid repeated clicks, immediate persistence/reload at both resolutions." : SessionState.GetBool(Flag + ".appUpdates", false) ? "PASS: App Update bindings, state views, modal dismissal/focus, download continuity, button motion/reset at 1920x1080 and 1280x720. Network/install are verified separately." : SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
                 }
             }
             catch (Exception e) { Finish("FAIL at " + context + ": " + e); }
             return;
         }
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists(Request)) return;
+        SessionState.SetBool(Flag + ".mute", File.ReadAllText(Request).Trim() == "mute");
         SessionState.SetBool(Flag + ".taskDates", File.ReadAllText(Request).Trim().StartsWith("task-dates"));
         SessionState.SetBool(Flag + ".appUpdates", File.ReadAllText(Request).Trim() == "app-updates");
         SessionState.SetBool(Flag + ".beforeDates", File.ReadAllText(Request).Trim() == "task-dates-before");
@@ -549,8 +550,107 @@ public static class SettingsPlayVerification
         }
     }
 
+    static IEnumerator CheckMute(SettingsPanelUI ui, GameDataManager manager, SettingsLauncher launcher, string suffix)
+    {
+        var audio = SettingsAudio.EnsureInstance();
+        foreach (var muteButton in new[] { ui.soundMute, ui.musicMute })
+        {
+            bool isSound = muteButton == ui.soundMute;
+            var slider = isSound ? ui.sound : ui.music;
+            var other = isSound ? ui.music : ui.sound;
+            var source = isSound ? audio.soundSource : audio.musicSource;
+            float original = slider.value, otherVolume = other.value;
+            Check(muteButton && muteButton.GetComponent<JuicyButton>(), "Mute button/feedback binding missing.");
+            var feedback = muteButton.GetComponent<JuicyButton>();
+            var bounds = Bounds((RectTransform)muteButton.transform);
+            ExecuteEvents.Execute(muteButton.gameObject, Pointer(muteButton), ExecuteEvents.pointerEnterHandler);
+            yield return .15;
+            Check(feedback.DrawScale.y > 1.01f, "Mute hover feedback missing.");
+            Capture((isSound ? "sound" : "music") + "-hover-" + suffix); yield return .1;
+            ExecuteEvents.Execute(muteButton.gameObject, Pointer(muteButton), ExecuteEvents.pointerDownHandler);
+            yield return .15;
+            Check(feedback.DrawScale.y < .99f, "Mute press feedback missing.");
+            Capture((isSound ? "sound" : "music") + "-press-" + suffix); yield return .1;
+            ExecuteEvents.Execute(muteButton.gameObject, Pointer(muteButton), ExecuteEvents.pointerExitHandler);
+            feedback.SendMessage("OnApplicationFocus", false);
+            Reset(feedback, "Mute focus loss did not reset feedback.");
+            Stable(bounds, muteButton);
+            Click(muteButton);
+            Check(slider.value == 0 && source.volume == 0 && other.value == otherVolume, "Mute did not silence only the selected channel.");
+            var mutedReload = new PlayerDataStore(manager.SavePath).Data.settings;
+            Check((isSound ? mutedReload.soundVolume : mutedReload.musicVolume) == 0, "Mute was not saved immediately.");
+            Capture((isSound ? "sound" : "music") + "-muted-" + suffix); yield return .15;
+            ui.Close(); ui.Open(launcher.gameObject);
+            EventSystem.current.SetSelectedGameObject(muteButton.gameObject);
+            ExecuteEvents.Execute(muteButton.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+            Check(Mathf.Abs(slider.value - original) < .001f && Mathf.Abs(source.volume - original) < .001f, "Keyboard unmute/reopen did not restore the prior volume.");
+            for (int repeat = 0; repeat < 4; repeat++) Click(muteButton);
+            Check(Mathf.Abs(slider.value - original) < .001f && other.value == otherVolume, "Repeated mute toggles drifted or changed the other channel.");
+            yield return .3;
+        }
+
+    }
+    static IEnumerator RunMute()
+    {
+        var manager = GameDataManager.EnsureInstance();
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.json"), "Mute checks require an isolated save.");
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
+        yield return .2;
+        var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
+        foreach (var size in new[] { new Vector2Int(1920, 1080), new Vector2Int(1280, 720) })
+        {
+            string suffix = size.x + "x" + size.y;
+            context = "Mute controls " + suffix;
+            Resolution(size); yield return .5;
+            Click(launcher.GetComponent<Button>()); yield return .2;
+            var ui = UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();
+            ui.sound.value = .33f; ui.music.value = .25f;
+            ui.soundCommit.Flush(); ui.musicCommit.Flush();
+            Layout(ui, size); Capture("mute-before-" + suffix); yield return .15;
+            CheckAudioCursors(ui, launcher);
+            var muteChecks = CheckMute(ui, manager, launcher, suffix);
+            while (muteChecks.MoveNext()) yield return muteChecks.Current;
+            Layout(ui, size); Capture("mute-restored-" + suffix); yield return .15;
+            Click(ui.close); yield return .2;
+        }
+    }
+
+    static void CheckAudioCursors(SettingsPanelUI ui, SettingsLauncher launcher)
+    {
+        var cursor = UnityEngine.Object.FindFirstObjectByType<AppCursor>();
+        Check(cursor, "Shared application cursor is missing.");
+        var query = typeof(AppCursor).GetMethod("IsOverControl", BindingFlags.Instance | BindingFlags.NonPublic);
+        Check(query != null, "Cursor hit query is missing.");
+        bool Hover(Vector2 point) => (bool)query.Invoke(cursor, new object[] { point });
+        foreach (var control in new Selectable[] { ui.soundMute, ui.musicMute, ui.sound, ui.music, ui.notifications, ui.close })
+        {
+            var point = Bounds((RectTransform)control.transform).center;
+            Check(Hover(point), "Interactable control did not select the hover cursor: " + control.name);
+            control.interactable = false;
+            try { Check(!Hover(point), "Disabled control still selected the hover cursor: " + control.name); }
+            finally { control.interactable = true; }
+            Check(Hover(point), "Re-enabled control did not restore the hover cursor.");
+            if (control is Slider slider)
+            {
+                var handle = Bounds(slider.handleRect).center;
+                Check(Hover(handle), "Slider handle did not select the hover cursor.");
+                var pointer = Pointer(slider); pointer.position = handle;
+                ExecuteEvents.Execute(slider.gameObject, pointer, ExecuteEvents.pointerDownHandler);
+                Check(Hover(handle), "Held slider lost the hover cursor.");
+                ExecuteEvents.Execute(slider.gameObject, pointer, ExecuteEvents.pointerUpHandler);
+            }
+        }
+        Check(!Hover(Bounds((RectTransform)ui.settingsStatus.transform).center), "Noninteractive text selected the hover cursor.");
+        // The backdrop is itself a dismiss button and legitimately uses a hand.
+        // It must remain the input owner rather than exposing the gear beneath it.
+        Check(Hit(Bounds((RectTransform)launcher.transform).center) != launcher.gameObject, "Modal exposed the gear beneath it.");
+        checks.Add("Cursor raycasts: Sound/Music icon, track and handle; held slider, disabled/re-enabled controls, ordinary buttons/toggle, noninteractive text and modal occlusion passed at " + Screen.width + "x" + Screen.height + ". OS cursor appearance requires manual inspection.");
+    }
+
     static IEnumerator Run()
     {
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
+        yield return .2;
         var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
         Check(nav && nav.taskSystem && launcher && EventSystem.current, "CharacterHome Settings/navigation bindings missing.");
@@ -733,6 +833,9 @@ public static class SettingsPlayVerification
                 Check(Mathf.Abs(service.Settings.musicVolume - .41f) < .001f && Mathf.Abs(audio.musicSource.volume - .41f) < .001f, "Keyboard/deselect volume commit failed.");
                 var reloaded = new PlayerDataStore(manager.SavePath);
                 Check(Mathf.Abs(reloaded.Data.settings.soundVolume - .23f) < .001f && Mathf.Abs(reloaded.Data.settings.musicVolume - .41f) < .001f, "Settings controls did not persist through disk reload.");
+
+                var muteChecks = CheckMute(ui, manager, launcher, suffix);
+                while (muteChecks.MoveNext()) yield return muteChecks.Current;
 
                 EventSystem.current.SetSelectedGameObject(ui.tagsButton.gameObject);
                 ExecuteEvents.Execute(ui.tagsButton.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);

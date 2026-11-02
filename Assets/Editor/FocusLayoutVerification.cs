@@ -319,12 +319,21 @@ public static class FocusLayoutVerification
         if(step==9){panel.start.onClick.Invoke();for(int i=0;i<14400;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Focusing && panel.stopwatchMode.interactable==false,"Stopwatch limit/lock wrong");}
         if(step==10)Capture("stopwatch-four-hours-1280");
         if(step==11){panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Finished && focus.LastResult.experience==180,"Stopwatch saved incorrectly");Capture("stopwatch-saved-1280");}
-        if(step==12){panel.countdownMode.isOn=true;panel.focusDuration.value=180;Check(focus.Options.focusMinutes==180 && !panel.restDurationCard.activeSelf,"Countdown settings incorrect");Capture("countdown-ready-1280");}
-        if(step==13){Resolution(1920,1080);}
+        if(step==12){
+            Check(!panel.allowance.text.Contains("Focus saved."), "Saved notice did not expire while timer was stopped");
+            nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);
+            Check(!panel.allowance.text.Contains("Focus saved."), "Page reopen restarted saved notice");
+            Check(panel.start.GetComponentInChildren<TMPro.TMP_Text>().text=="Start Focus", "Finished action label incorrect");
+            Capture("saved-notice-expired-1280");
+        }
+        if(step==13){panel.countdownMode.isOn=true;panel.focusDuration.value=180;Check(focus.Options.focusMinutes==180 && !panel.restDurationCard.activeSelf,"Countdown settings incorrect");Resolution(1920,1080);}
         if(step==14)Capture("countdown-ready-1920");
         if(step==15){panel.start.onClick.Invoke();for(int i=0;i<10800;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==360,"Mixed mode cap incorrect");Capture("countdown-saved-1920");}
-        if(step==16){panel.stopwatchMode.isOn=true;Capture("stopwatch-ready-1920");}
-        if(step==17){panel.start.onClick.Invoke();for(int i=0;i<3600;i++)focus.Advance(1);}
+        if(step==16){
+            Check(!panel.allowance.text.Contains("Focus saved.") && panel.allowance.text.Contains("Daily EXP / Fish limit reached."), "Expiry cleared daily cap notice or retained success notice");
+            Capture("saved-notice-expired-1920");
+        }
+        if(step==17){panel.stopwatchMode.isOn=true;panel.start.onClick.Invoke();for(int i=0;i<3600;i++)focus.Advance(1);}
         if(step==18)Capture("stopwatch-capped-1920");
         if(step==19){panel.cancel.onClick.Invoke();Check(focus.Phase==FocusPhase.Interrupted && service.TodayRewards.focusMinutes==360,"Cancel changed allowance");}
         if(step==20){
@@ -465,6 +474,6 @@ public static class FocusLayoutVerification
                 "Lv.30 Focus preview, amount caps, End Early, task reward preview and overflow checks; captures at 1920x1080 and 1280x720. Full runs also exercise raycast-routed mouse events, modal Continue, controls and unscaled feedback at both sizes; see interactions.txt and motion.csv. Visual review is separate.");
             EditorApplication.isPlaying = false; return;
         }
-        step++; next = EditorApplication.timeSinceStartup + (step>=25 && step<=32 ? .15 : 1);
+        step++; next = EditorApplication.timeSinceStartup + (step==12 || step==16 ? 4 : step>=25 && step<=32 ? .15 : 1);
     }
 }
