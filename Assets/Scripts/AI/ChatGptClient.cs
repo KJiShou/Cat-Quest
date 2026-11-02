@@ -58,7 +58,8 @@ public sealed class ChatGptClient : MonoBehaviour
         Connection = new ChatGptConnection(verificationStorage ?? new ChatGptStorage(directory), verificationHttp ?? new ChatGptHttp());
         Chat = new AiChatSession(Connection, verificationStorage ?? new ChatGptStorage(directory), GameDataManager.EnsureInstance().Tasks);
 
-        StartOperation(Connection.Initialize(), () => { Chat.Load(); Ready = true; Status = Connection.Connected ? "ChatGPT connected. Open AI settings to load models." : "Connect ChatGPT to chat and plan tasks."; });
+        Status = "Loading AI settings...";
+        StartOperation(Connection.Initialize(), () => { Chat.Load(); Ready = true; Status = Connection.Connected ? string.Empty : "Connect ChatGPT to chat and plan tasks."; });
     }
     void StartOperation(Task task, Action completed = null)
     {
@@ -98,7 +99,7 @@ public sealed class ChatGptClient : MonoBehaviour
             browser = new ChatGptBrowserAuth(Connection.Host, Connection.ClientId);
             Status = "Finish authorization in your browser within two minutes. You can cancel or keep using tasks.";
             Application.OpenURL(browser.AuthorizationUrl);
-            StartOperation(SignIn(cancellation.Token), () => Status = "Connected. Open Chat to plan your tasks.");
+            StartOperation(SignIn(cancellation.Token), () => Status = string.Empty);
         }
         catch (Exception error) { Status = SafeError(error); browser?.Dispose(); browser = null; cancellation?.Dispose(); cancellation = null; Changed?.Invoke(); }
     }
@@ -112,17 +113,20 @@ public sealed class ChatGptClient : MonoBehaviour
     {
         if (!Ready || Busy || !Connection.Connected) return;
         cancellation = new CancellationTokenSource();
-        StartOperation(Connection.LoadModels(cancellation.Token), () => Status = "Using your ChatGPT plan. Manage usage in ChatGPT settings.");
+        Status = "Loading ChatGPT models...";
+        StartOperation(Connection.LoadModels(cancellation.Token), () => Status = string.Empty);
     }
     public void Preferences(string model, string language = null)
     {
         if (!Ready || Busy) return;
-        Chat?.Stop(); StartOperation(Connection.SavePreferences(model, language), () => Status = "Chat model updated.");
+        Status = "Saving AI settings...";
+        Chat?.Stop(); StartOperation(Connection.SavePreferences(model, language), () => Status = string.Empty);
     }
     public void Disconnect()
     {
         if (!Ready || Busy) return;
         Chat?.Stop(); cancellation = new CancellationTokenSource();
+        Status = "Disconnecting ChatGPT...";
         StartOperation(Connection.Disconnect(cancellation.Token), () => Status = "ChatGPT disconnected. Local tasks and progress are unchanged.");
     }
     public static string SafeError(Exception error) => error is ArgumentException ? error.Message :

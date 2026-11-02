@@ -9,6 +9,7 @@ public sealed class AiSettingsUI : MonoBehaviour
     public Button connect, disconnect, cancel, usage, reload;
     public TMP_Dropdown model, language;
     ChatGptClient client;
+    bool checkModelsOnOpen;
     void Awake()
     {
         connect.onClick.AddListener(() => client.Connect());
@@ -26,7 +27,7 @@ public sealed class AiSettingsUI : MonoBehaviour
     void OnEnable()
     {
         client = ChatGptClient.EnsureInstance(); client.Changed += Refresh;
-        if (client.Ready && client.Connection.Connected && client.Connection.Models.Count == 0) client.LoadModels();
+        checkModelsOnOpen = true;
         Refresh();
     }
     void OnDisable() { if (client) { client.Changed -= Refresh; client.CancelSignIn(); } }
@@ -34,8 +35,19 @@ public sealed class AiSettingsUI : MonoBehaviour
     {
         if (!client) return;
         var connection = client.Connection;
+        if (checkModelsOnOpen && client.Ready)
+        {
+            checkModelsOnOpen = false;
+            if (connection.Connected && !client.Busy && connection.Models.Count == 0)
+            {
+                client.LoadModels();
+                return;
+            }
+        }
+        privacy.gameObject.SetActive(client.Ready && !connection.Connected);
         identity.text = connection.Connected ? connection.Account : "Connect your ChatGPT plan";
         status.text = client.Status;
+        status.gameObject.SetActive(!string.IsNullOrEmpty(client.Status));
         modelLabel.text = "Model";
         connect.gameObject.SetActive(!connection.Connected); connect.interactable = client.Ready && !client.Busy;
         disconnect.gameObject.SetActive(connection.Connected); disconnect.interactable = !client.Busy;
@@ -43,7 +55,7 @@ public sealed class AiSettingsUI : MonoBehaviour
         language.SetValueWithoutNotify(connection.Language == "en" ? 1 : connection.Language == "zh" ? 2 : 0);
         language.interactable = client.Ready && !client.Busy;
         model.ClearOptions(); model.AddOptions(connection.Models.Count > 0 ? connection.Models.Select(m => m.name).ToList() :
-            new System.Collections.Generic.List<string> { "Connect ChatGPT to load models" });
+            new System.Collections.Generic.List<string> { connection.Connected ? (client.Busy ? "Loading models..." : "No models available") : "Connect ChatGPT to load models" });
         model.SetValueWithoutNotify(Mathf.Max(0, connection.Models.FindIndex(m => m.slug == connection.Model)));
         model.interactable = client.Ready && connection.Connected && !client.Busy && connection.Models.Count > 0;
         reload.interactable = client.Ready && connection.Connected && !client.Busy;

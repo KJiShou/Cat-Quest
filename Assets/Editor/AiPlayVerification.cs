@@ -126,7 +126,31 @@ public static class AiPlayVerification
         while (client.Busy) yield return .1;
         var fake = new UiHttp(); client.ConfigureForVerification(new UiStore(), fake);
         while (client.Busy) yield return .1;
-        client.LoadModels(); while (client.Busy) yield return .1;
+        context = "AI settings model loading";
+        var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
+        fake.modelResponse = new TaskCompletionSource<string>();
+        launcher.Open();
+        var loadingPanel = UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();
+        loadingPanel.OpenAI();
+        var ai = loadingPanel.GetComponentInChildren<AiSettingsUI>();
+        foreach (var size in new[] { new Vector2Int(1920, 1080), new Vector2Int(1280, 720) })
+        {
+            typeof(SettingsPlayVerification).GetMethod("Resolution", Hidden).Invoke(null, new object[] { size });
+            yield return .3;
+            Check(client.Busy && ai.status.isActiveAndEnabled && ai.status.text.Contains("Loading"), "Model loading feedback missing.");
+            Capture("settings-loading-" + size.x); yield return .2;
+        }
+        fake.modelResponse.SetResult(UiHttp.Models);
+        while (client.Busy) yield return .1;
+        Check(!ai.status.isActiveAndEnabled && !ai.privacy.isActiveAndEnabled && ai.model.IsInteractable(), "Connected settings did not settle.");
+        foreach (var size in new[] { new Vector2Int(1280, 720), new Vector2Int(1920, 1080) })
+        {
+            typeof(SettingsPlayVerification).GetMethod("Resolution", Hidden).Invoke(null, new object[] { size });
+            yield return .3;
+            Capture("settings-ready-" + size.x); yield return .2;
+        }
+        loadingPanel.Close();
+        yield return .2;
         GameDataManager.EnsureInstance().Tasks.SaveTag(null,"Chat verification",out var chatTag);
         page.SendText("Help me plan a short study session."); yield return .2;
         float waveBefore=page.status.textInfo.meshInfo[0].vertices[0].y; Capture("chat-thinking-before"); yield return .2;
@@ -183,7 +207,6 @@ public static class AiPlayVerification
         Check(nav.ShowPage(MainMenuPage.Chat), "Cannot reopen Chat."); yield return .2;
         Capture("chat-final"); yield return .2;
         context="settings and manual tasks after advice removal";
-        var launcher=UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
         foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720)}) {
             typeof(SettingsPlayVerification).GetMethod("Resolution",Hidden).Invoke(null,new object[]{size}); yield return .3;
             launcher.Open(); yield return .2;
@@ -230,10 +253,12 @@ public static class AiPlayVerification
     }
     sealed class UiHttp : IChatGptHttp
     {
+        public const string Models = "{\"models\":[{\"visibility\":\"list\",\"slug\":\"mock\"}]}";
+        public TaskCompletionSource<string> modelResponse;
         public TaskCompletionSource<string> pending; public int requests;
         public Task<string> Send(string url, string method, string body, string type, string bearer, bool stream, CancellationToken token)
         {
-            if (url.EndsWith("/models")) return Task.FromResult("{\"models\":[{\"visibility\":\"list\",\"slug\":\"mock\"}]}");
+            if (url.EndsWith("/models")) return modelResponse?.Task ?? Task.FromResult(Models);
             if (url.EndsWith("/responses")) { requests++; pending = new TaskCompletionSource<string>(); return pending.Task; }
             return Task.FromResult("");
         }
