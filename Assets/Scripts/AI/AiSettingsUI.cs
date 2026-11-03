@@ -10,8 +10,12 @@ public sealed class AiSettingsUI : MonoBehaviour
     public TMP_Dropdown model, language;
     ChatGptClient client;
     bool checkModelsOnOpen;
+    RectTransform popup;
+    float compactHeight;
     void Awake()
     {
+        popup = (RectTransform)identity.transform.parent;
+        compactHeight = popup.rect.height;
         connect.onClick.AddListener(() => client.Connect());
         disconnect.onClick.AddListener(() => client.Disconnect());
         cancel.onClick.AddListener(() => client.CancelSignIn());
@@ -48,6 +52,10 @@ public sealed class AiSettingsUI : MonoBehaviour
         identity.text = connection.Connected ? connection.Account : "Connect your ChatGPT plan";
         status.text = client.Status;
         status.gameObject.SetActive(!string.IsNullOrEmpty(client.Status));
+        // The heading is top-anchored and the controls are bottom-anchored.
+        // Expand only for messages currently displayed between them.
+        float height = compactHeight + MessageHeight(privacy) + MessageHeight(status);
+        popup.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
         modelLabel.text = "Model";
         connect.gameObject.SetActive(!connection.Connected); connect.interactable = client.Ready && !client.Busy;
         disconnect.gameObject.SetActive(connection.Connected); disconnect.interactable = !client.Busy;
@@ -60,5 +68,12 @@ public sealed class AiSettingsUI : MonoBehaviour
         model.interactable = client.Ready && connection.Connected && !client.Busy && connection.Models.Count > 0;
         reload.interactable = client.Ready && connection.Connected && !client.Busy;
         GetComponentInParent<SettingsPanelUI>().RefreshAiNavigation();
+    }
+    static float MessageHeight(TMP_Text message)
+    {
+        if (!message.gameObject.activeSelf) return 0;
+        float height = Mathf.Ceil(message.GetPreferredValues(message.text, message.rectTransform.rect.width, Mathf.Infinity).y);
+        message.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+        return height + 8f;
     }
 }

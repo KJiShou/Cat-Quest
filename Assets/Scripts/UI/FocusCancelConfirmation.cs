@@ -16,9 +16,12 @@ public sealed class FocusCancelConfirmation : MonoBehaviour
     Vector2 lastSize;
     public bool IsOpen => gameObject.activeSelf;
     void Awake(){confirm.onClick.AddListener(Confirm);keepFocusing.onClick.AddListener(Dismiss);backdrop.onClick.AddListener(Dismiss);}
-    public void Show(Action action)
+    public void Show(bool cancelSession, Action action)
     {
         if(IsOpen)return;
+        heading.text = cancelSession ? "Cancel Pomodoro?" : "End Focus?";
+        info.text = cancelSession ? "No rewards will be granted." : "Save your focus time and earned rewards.";
+        confirm.GetComponentInChildren<TMP_Text>(true).text = cancelSession ? "Cancel" : "End Focus";
         accepted=action;previousSelection=EventSystem.current?EventSystem.current.currentSelectedGameObject:null;
         gameObject.SetActive(true);transform.SetAsLastSibling();
         if(EventSystem.current)EventSystem.current.SetSelectedGameObject(keepFocusing.gameObject);

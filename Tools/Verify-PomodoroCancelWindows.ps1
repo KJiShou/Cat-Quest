@@ -70,9 +70,11 @@ function Command($value) {
  return WaitFor (Join-Path $folder 'smoke-result.json') {param($v)$true} 'command result'
 }
 function HostCommand($state,$action,$owner=$state.ownerId,$session=$state.sessionId,$request=[Guid]::NewGuid().ToString('N')) {
- $path=Join-Path $state.companionDirectory ('command-'+[Guid]::NewGuid().ToString('N')+'.json')
+ $path=Join-Path $state.companionDirectory 'pipe-command.request'
+ $before=(ReadJson $viewPath).ackCount
  WriteJson ($path+'.tmp') @{ownerId=$owner;sessionId=$session;requestId=$request;action=$action};[IO.File]::Move($path+'.tmp',$path)
- Start-Sleep -Milliseconds 500
+ $null=WaitFor $viewPath {param($v)$v.lastAck -eq $request -and $v.ackCount -gt $before} 'pipe command acknowledgement'
+ Start-Sleep -Milliseconds 300
 }
 function ClickAt($window,[int]$x,[int]$y) {
  $rect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$rect)|Out-Null
@@ -99,7 +101,7 @@ try {
  $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($registryPath)
  if($key){$existed=$true;try{foreach($name in $key.GetValueNames()){$backup+=@{name=$name;kind=$key.GetValueKind($name);value=$key.GetValue($name)}}}finally{$key.Dispose()}}
  WriteJson (Join-Path $folder 'context.json') @{utc=[DateTime]::UtcNow.ToString('O');executable=$exe;sha256=(Get-FileHash $exe).Hash;isolated=$true}
- WriteJson (Join-Path $folder 'test-save.json') @{version=5;username='Focus Test';settings=@{notificationsEnabled=$false;soundVolume=0;musicVolume=0}}
+ WriteJson (Join-Path $folder 'test-save.json') @{version=5;username='Focus Test';experience=100;tutorial=@{version=1;dismissed=$true;taskStep=4};settings=@{notificationsEnabled=$false;soundVolume=0;musicVolume=0}}
  $arguments='--focus-smoke --smoke-dir "'+$folder+'" -force-d3d11 -logFile "'+$folder+'/Player.log" -screen-fullscreen 0 -screen-width 1280 -screen-height 720'
  $main=Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory ([IO.Path]::GetDirectoryName($exe)) -WindowStyle Hidden -PassThru
  $resultPath=Join-Path $folder 'smoke-result.json'
@@ -129,9 +131,24 @@ try {
  HostCommand $r cancel 'wrong-owner';HostCommand $r cancel $r.ownerId 'stale-session';Check ((ReadJson $resultPath).phase -eq 'Focusing') 'wrong-owner and stale cancel rejected'
  [IO.File]::WriteAllText($uiRequest,'cancel',$utf8);$view=WaitFor $viewPath {param($v)$v.cancelPrompt} 'confirm for cancellation'
  [IO.File]::WriteAllText($uiRequest,'confirm-cancel',$utf8);$r=WaitFor $resultPath {param($v)$v.phase -eq 'Interrupted'} 'confirmed companion cancellation'
- Check ($r.exp -eq 0 -and $r.coins -eq 0 -and $r.tickets -eq 0) 'confirmed cancel grants no rewards or Rest'
- HostCommand $r cancel;Check ((ReadJson $resultPath).exp -eq 0) 'duplicate cancellation no rewards'
- $r=Command @{action='start'};$r=Command @{action='cancel'};$r=Command @{action='confirm-cancel'};Check ($r.phase -eq 'Interrupted' -and $r.exp -eq 0) 'main confirmed cancel'
+ Check ($r.exp -eq 100 -and $r.coins -eq 0 -and $r.tickets -eq 0) 'confirmed cancel grants no rewards or Rest'
+ HostCommand $r cancel;Check ((ReadJson $resultPath).exp -eq 100) 'duplicate cancellation no rewards'
+ $r=Command @{action='start'};$r=Command @{action='cancel'};$r=Command @{action='confirm-cancel'};Check ($r.phase -eq 'Interrupted' -and $r.exp -eq 100) 'main confirmed cancel'
+ foreach($mode in @(1,2)){
+  if($mode -eq 1){ResizeWindow $window 420 300}else{ResizeWindow $window 240 180}
+  $r=Command @{action='configure';mode=$mode;focusMinutes=25;restMinutes=5}
+  $r=Command @{action='start'}
+  $view=WaitFor $viewPath {param($v)$v.phase -eq 'Focusing'} 'companion sees active session'
+  [IO.File]::WriteAllText($uiRequest,'cancel',$utf8)
+  $view=WaitFor $viewPath {param($v)$v.cancelPrompt} 'companion End Focus confirmation'
+  Check ((ReadJson $resultPath).phase -eq 'Focusing') "mode $mode continues until confirmed"
+  [IO.File]::WriteAllText((Join-Path $r.companionDirectory 'capture.request'),'',$utf8)
+  Start-Sleep -Milliseconds 1000
+  Copy-Item -LiteralPath (Join-Path $r.companionDirectory 'companion-capture.png') -Destination (Join-Path $folder "companion-end-$mode.png")
+  [IO.File]::WriteAllText($uiRequest,'confirm-cancel',$utf8)
+  $r=WaitFor $resultPath {param($v)$v.phase -eq 'Finished'} 'companion confirmed End Focus'
+  $view=WaitFor $viewPath {param($v)$v.phase -eq 'Finished'} 'companion sees settled session'
+ }
  $r=Command @{action='configure';mode=0;focusMinutes=1;restMinutes=1};$r=Command @{action='start'};$r=Command @{action='cancel'};$r=Command @{action='advance';seconds=60}
  Check ($r.phase -eq 'Resting' -and !$r.cancelPrompt) 'completion closes stale prompt and starts Rest'
  $r=Command @{action='rest'};$r=Command @{action='start'};$r=Command @{action='confirm-cancel'};Check ($r.phase -eq 'Focusing') 'old confirmation cannot cancel new session'

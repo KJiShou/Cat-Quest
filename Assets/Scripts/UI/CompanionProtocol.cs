@@ -5,7 +5,8 @@ using UnityEngine;
 [Serializable] public sealed class CompanionState : IFocusPresentation
 {
     public string ownerId, sessionId, questTitle, message, playerName;
-    public long heartbeatUtcTicks;
+    public string requestId;
+    public bool accepted;
     public FocusPhase phase;
     public FocusTimerMode mode;
     public double elapsedSeconds;

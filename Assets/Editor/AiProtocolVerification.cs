@@ -65,8 +65,22 @@ public static class AiProtocolVerification
         Check(http.refreshes==1&&connection.Model=="first"&&connection.Models.Count==2,"Refresh serialization or model order changed.");
         Check(storage.records["connection.dpapi"].Contains("rotated"),"Rotated token not persisted.");
         AiChatProtocol.Parse(await connection.Chat(new object[]{new Dictionary<string,object>{["role"]="user",["content"]="Hello"}},CancellationToken.None));
+        string oldHost = connection.Host;
         await connection.Disconnect(CancellationToken.None);
-        Check(!connection.Connected&&connection.ClientId=="oaiapp_test"&&!storage.records["connection.dpapi"].Contains("rotated"),"Disconnect did not clear tokens/preserve registration.");
+        Check(!connection.Connected && connection.ClientId == null && connection.Host == oldHost &&
+            ChatGptJson.Object(storage.records["connection.dpapi"]).Count == 0, "Logout retained account credentials or registration.");
+        using var restarted = new ChatGptConnection(storage, http);
+        await restarted.Initialize();
+        Check(restarted.Host == connection.Host && restarted.ClientId == null, "Restart restored the old registration.");
+
+        storage.records["connection.dpapi"] = "{\"client_id\":\"oaiapp_test\",\"sub\":\"user-a\",\"email\":\"a@example.test\"}";
+        using var legacy = new ChatGptConnection(storage, http);
+        await legacy.Initialize();
+        Check(legacy.Host == restarted.Host && legacy.ClientId == null && legacy.Account != "a@example.test",
+            "Legacy logout still pins the original account.");
+        using var browser = new ChatGptBrowserAuth(legacy.Host, legacy.ClientId);
+        Check(browser.AuthorizationUrl.Contains("client_id=dynamic_agent_client") && browser.AuthorizationUrl.Contains("prompt=select_account"),
+            "Fresh login did not request registration and account selection.");
     }
     static async Task Transport()
     {

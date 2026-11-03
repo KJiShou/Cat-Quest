@@ -64,7 +64,7 @@ Play 流程恢复原环境、起始场景、Game View 选择和自定义数、�
 
 ## 可选 ChatGPT
 
-Settings → AI 独立于排行榜 Google 账号。Continue with ChatGPT 使用本机注册打开系统浏览器，关闭取消待登录，已建立连接继续可用。Disconnect ChatGPT 清本地 token 并尝试远端撤销，未确认撤销会明确提示。
+Settings → AI 独立于排行榜 Google 账号。Continue with ChatGPT 使用本机注册打开系统浏览器，关闭取消待登录，已建立连接继续可用。Disconnect ChatGPT 会清除本地令牌和账号注册信息，并尝试撤销远端会话。未确认撤销时会明确提示。再次选择 Continue with ChatGPT 即可在同一台电脑上授权其他账号。
 
 用户消息和所请求任务事实通过可用 ChatGPT 计划发送至 OpenAI，提议需确认，难度手动。选择账号支持模型，可打开 Manage usage。断连或额度不足仍可手动任务。聊天单独位于 `ai/chat.dpapi`，清空不删任务。
 

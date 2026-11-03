@@ -17,10 +17,14 @@ public sealed class CompanionHost : MonoBehaviour
     public bool IsUnlocked => GameDataManager.Instance.Tasks.CanAccess(ProgressionFeature.Focus);
     FocusController focus;
     Process process;
-    float nextPublish;
+    CompanionPipe pipe;
+    string pipeName, token;
+    bool authenticated, closing, dirty;
+    float nextHeartbeat;
+    CompanionState lastSnapshot;
     bool updateShutdown;
     int auraVersion = -1, auraTier, auraPieces;
-    void PublishIfOpen() { if (IsOpen) Publish(); }
+    void PublishIfOpen() { dirty = true; }
     readonly HashSet<string> handled = new HashSet<string>();
     public static CompanionHost Ensure()
     {
@@ -32,7 +36,7 @@ public sealed class CompanionHost : MonoBehaviour
         Instance=this; focus=GetComponent<FocusRunner>().Controller;
         OwnerId=Guid.NewGuid().ToString("N");
         DirectoryPath=Path.Combine(Application.temporaryCachePath,"Companion",OwnerId);
-        Directory.CreateDirectory(DirectoryPath);
+        if (CompanionProtocol.HasArgument("--focus-smoke")) Directory.CreateDirectory(DirectoryPath);
         Enabled=IsUnlocked && PlayerPrefs.GetInt("PetWidgetEnabled",0)==1;
         focus.Changed+=PublishIfOpen;
     }
@@ -55,14 +59,17 @@ public sealed class CompanionHost : MonoBehaviour
         if(!File.Exists(executable)) { Error="Build the Windows player first, then reopen Pet Widget."; return false; }
         try
         {
-            string closeRequest=Path.Combine(DirectoryPath,"close.request");
-            if(File.Exists(closeRequest)) File.Delete(closeRequest);
+            process?.Dispose(); process = null;
+            pipe?.Dispose();
+            pipeName = "CatQuest-" + Guid.NewGuid().ToString("N");
+            token = Guid.NewGuid().ToString("N");
+            closing = authenticated = false;
+            pipe = new CompanionPipe(pipeName, true);
             if(CompanionProtocol.HasArgument("--focus-smoke"))
             {
                 string previousView=Path.Combine(DirectoryPath,"companion-window.json");
                 if(File.Exists(previousView)) File.Delete(previousView);
             }
-            Publish();
             string verification=CompanionProtocol.HasArgument("--focus-smoke")?" --companion-smoke":"";
             // The Unity 6000.3.10 D3D12 backend crashes during this native tool
             // window's shutdown (D3D12Core.dll, 0xc0000005). Keep the main
@@ -71,31 +78,55 @@ public sealed class CompanionHost : MonoBehaviour
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
             graphicsBackend = " -force-d3d11";
 #endif
-            process=Process.Start(new ProcessStartInfo(executable,$"--companion{graphicsBackend} --companion-dir \"{DirectoryPath}\" --companion-owner {OwnerId}{verification} -screen-fullscreen 0 -screen-width 420 -screen-height 300") { UseShellExecute=false, CreateNoWindow=true, WindowStyle=ProcessWindowStyle.Hidden });
+            process=Process.Start(new ProcessStartInfo(executable,$"--companion{graphicsBackend} --companion-dir \"{DirectoryPath}\" --companion-owner {OwnerId} --companion-pipe {pipeName} --companion-token {token}{verification} -screen-fullscreen 0 -screen-width 420 -screen-height 300") { UseShellExecute=false, CreateNoWindow=true, WindowStyle=ProcessWindowStyle.Hidden });
             Error=null; return true;
         }
-        catch(Exception e) { Error="Could not open Pet Widget: "+e.Message; return false; }
+        catch(Exception e) { pipe?.Dispose(); Error="Could not open Pet Widget: "+e.Message; return false; }
     }
     public void CloseWindow()
     {
-        try { if(IsOpen) File.WriteAllText(Path.Combine(DirectoryPath,"close.request"),OwnerId); }
-        catch(IOException e) { Error=e.Message; }
+        closing = true;
+        if (authenticated) pipe?.Send("close");
+        if (IsOpen && !authenticated) process.CloseMainWindow();
     }
     public void BeginUpdateShutdown() { updateShutdown=true; CloseWindow(); }
     public void CancelUpdateShutdown() { updateShutdown=false; }
     void Update()
     {
-        if(process==null || Time.unscaledTime<nextPublish) return;
-        nextPublish=Time.unscaledTime+.25f;
-        if(process.HasExited) { process.Dispose(); process=null; if(!updateShutdown) { Enabled=false; PlayerPrefs.SetInt("PetWidgetEnabled",0); } return; }
-        foreach(string path in Directory.GetFiles(DirectoryPath,"command-*.json"))
-        {
-            var command=CompanionProtocol.Read<CompanionCommand>(path);
-            if(command==null) continue;
-            try { File.Delete(path); } catch(IOException) { continue; }
-            Execute(command);
+        if (process == null) return;
+        if (process.HasExited) {
+            pipe?.Dispose(); pipe = null; process.Dispose(); process = null;
+            if (!updateShutdown) { Enabled=false; PlayerPrefs.SetInt("PetWidgetEnabled",0); }
+            return;
         }
-        Publish();
+        if (pipe.Stopped) {
+            authenticated = false;
+            pipe = new CompanionPipe(pipeName, true);
+        }
+        while (pipe.Receive(out string frame)) {
+            if (!authenticated) {
+                if (frame != token) { pipe.Dispose(); return; }
+                authenticated = true;
+                dirty = true;
+                if (closing) pipe.Send("close");
+            } else if (!closing) {
+                CompanionCommand command;
+                try { command = JsonUtility.FromJson<CompanionCommand>(frame); }
+                catch (ArgumentException) { pipe.Dispose(); return; }
+                bool accepted = Execute(command);
+                Publish(command?.requestId, accepted);
+            }
+        }
+        if (!authenticated || closing) return;
+        if (dirty) Publish();
+        if (Time.unscaledTime >= nextHeartbeat) {
+            nextHeartbeat = Time.unscaledTime + 1;
+            RefreshAura();
+            if (lastSnapshot == null || lastSnapshot.playerName != GameDataManager.Instance.PlayerData.username
+                || lastSnapshot.equipmentAuraPieces != auraPieces || lastSnapshot.equipmentAuraTier != auraTier
+                || lastSnapshot.fishCount != focus.SpectatorFishCount) Publish();
+            else pipe.Send("pulse");
+        }
     }
     public bool Execute(CompanionCommand command)
     {
@@ -111,26 +142,32 @@ public sealed class CompanionHost : MonoBehaviour
         }
         return false;
     }
-    void Publish()
+    void RefreshAura()
     {
-        if(focus==null) return;
         var service = GameDataManager.Instance.Tasks;
         if (auraVersion != service.ReadVersion) {
             CharacterEquipmentAura.Select(service.EquipmentStats.SetPieces, out auraTier, out auraPieces);
             auraVersion = service.ReadVersion;
         }
-        try { CompanionProtocol.Write(Path.Combine(DirectoryPath,"companion-session.json"),new CompanionState {
+    }
+    void Publish(string requestId = null, bool accepted = false)
+    {
+        RefreshAura();
+        dirty = false;
+        lastSnapshot = new CompanionState {
+            requestId=requestId, accepted=accepted,
             equipmentAuraTier=auraTier,equipmentAuraPieces=auraPieces,
-            ownerId=OwnerId,sessionId=focus.SessionId ?? "",heartbeatUtcTicks=DateTime.UtcNow.Ticks,
+            ownerId=OwnerId,sessionId=focus.SessionId ?? "",
             phase=focus.Phase,mode=focus.Options.mode,elapsedSeconds=focus.ElapsedSeconds,remainingSeconds=focus.RemainingSeconds,fishCount=focus.SpectatorFishCount,
-            playerName=GameDataManager.Instance.PlayerData.username,questTitle=focus.Options.questTitle,focusMinutes=focus.Options.focusMinutes,restMinutes=focus.Options.restMinutes,message=focus.Message }); }
-        catch(IOException e) { Error="Pet Widget connection unavailable: "+e.Message; }
+            playerName=GameDataManager.Instance.PlayerData.username,questTitle=focus.Options.questTitle,focusMinutes=focus.Options.focusMinutes,restMinutes=focus.Options.restMinutes,message=focus.Message };
+        pipe.Send(JsonUtility.ToJson(lastSnapshot));
     }
     void OnDestroy()
     {
         if(focus!=null) focus.Changed-=PublishIfOpen;
-        CloseWindow();
+        if (IsOpen) process.CloseMainWindow();
+        pipe?.Dispose();
+        process?.Dispose();
         if(Instance==this) Instance=null;
-        // Keep the last display state so a surviving companion detects a stale heartbeat.
     }
 }

@@ -62,7 +62,7 @@ public static class FocusLayoutVerification
     }
     // Resolve the visible topmost hit, just as the EventSystem does. Never dispatch
     // straight to a covered control: that hides modal/overlay regressions.
-    static PointerEventData Pointer(Selectable control, Vector2 fraction)
+    internal static PointerEventData Pointer(Selectable control, Vector2 fraction)
     {
         Canvas.ForceUpdateCanvases();
         var rect = (RectTransform)control.transform;
@@ -71,7 +71,7 @@ public static class FocusLayoutVerification
         var local = new Vector2(Mathf.Lerp(rect.rect.xMin, rect.rect.xMax, fraction.x), Mathf.Lerp(rect.rect.yMin, rect.rect.yMax, fraction.y));
         return new PointerEventData(EventSystem.current) { position = RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(local)), button = PointerEventData.InputButton.Left };
     }
-    static GameObject Hit(Selectable control, PointerEventData pointer)
+    internal static GameObject Hit(Selectable control, PointerEventData pointer)
     {
         var hits = new System.Collections.Generic.List<RaycastResult>();
         EventSystem.current.RaycastAll(pointer, hits);
@@ -79,7 +79,7 @@ public static class FocusLayoutVerification
         Check(target == control.gameObject, "Blocked " + control.name + " at " + pointer.position + ": " + string.Join(" | ", hits.Select(h => AnimationUtility.CalculateTransformPath(h.gameObject.transform, null))));
         return target;
     }
-    static void Click(Selectable control)
+    internal static void Click(Selectable control)
     {
         var pointer = Pointer(control, new Vector2(.5f, .5f));
         var target = Hit(control, pointer);
@@ -238,7 +238,7 @@ public static class FocusLayoutVerification
                 player.rewardDays.Add(today);
                 GameDataManager.Instance.SaveData();
                 Check(nav.ShowPage(MainMenuPage.Focus), "Cannot open unlocked Focus page");
-                panel.stopwatchMode.isOn = true;
+                panel.pomodoroMode.isOn = true;
             }
             if (step == 1 || step == 6)
             {
@@ -247,7 +247,7 @@ public static class FocusLayoutVerification
             }
             if (step == 2 || step == 7)
             {
-                Click(panel.cancel);
+                Click(panel.cancel); Click(panel.cancelConfirmation.confirm);
                 Check(focus.Phase == FocusPhase.Interrupted && panel.allowanceNotice.activeInHierarchy,
                     "Cancelled session should display its notice");
             }
@@ -268,7 +268,7 @@ public static class FocusLayoutVerification
             if (step == 5) Resolution(1280,720);
             if (step == 10)
             {
-                File.WriteAllText(FolderNow+"/result.txt", "PASS: Stopwatch cancellation, button ink, notice expiry and page reopen at both sizes.");
+                File.WriteAllText(FolderNow+"/result.txt", "PASS: Pomodoro cancellation, button ink, notice expiry and page reopen at both sizes.");
                 EditorApplication.isPlaying = false;
                 return;
             }
@@ -371,7 +371,7 @@ public static class FocusLayoutVerification
         if(step==8){panel.stopwatchMode.isOn=true;Check(focus.CountsUp && !panel.focusDurationCard.activeSelf && !panel.restDurationCard.activeSelf && panel.rewards.text=="0","Stopwatch settings incorrect");Capture("stopwatch-ready-1280");}
         if(step==9){panel.start.onClick.Invoke();for(int i=0;i<14400;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Focusing && panel.stopwatchMode.interactable==false,"Stopwatch limit/lock wrong");}
         if(step==10)Capture("stopwatch-four-hours-1280");
-        if(step==11){panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Finished && focus.LastResult.experience==180,"Stopwatch saved incorrectly");Capture("stopwatch-saved-1280");}
+        if(step==11){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();Check(focus.Phase==FocusPhase.Finished && focus.LastResult.experience==180,"Stopwatch saved incorrectly");Capture("stopwatch-saved-1280");}
         if(step==12){
             Check(!panel.allowance.text.Contains("Focus saved."), "Saved notice did not expire while timer was stopped");
             nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);
@@ -388,12 +388,12 @@ public static class FocusLayoutVerification
         }
         if(step==17){panel.stopwatchMode.isOn=true;panel.start.onClick.Invoke();for(int i=0;i<3600;i++)focus.Advance(1);}
         if(step==18)Capture("stopwatch-capped-1920");
-        if(step==19){panel.cancel.onClick.Invoke();Check(focus.Phase==FocusPhase.Interrupted && service.TodayRewards.focusMinutes==360,"Cancel changed allowance");}
+        if(step==19){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==360,"Capped End Focus changed allowance");}
         if(step==20){
             Check(!panel.allowanceNotice.activeSelf, "Interrupted notice did not expire");
             panel.start.onClick.Invoke();for(int i=0;i<300;i++)focus.Advance(1);
             saveLock=File.Open(GameDataManager.Instance.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
-            panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Saving,"Locked save did not enter retry state");
+            panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();Check(focus.Phase==FocusPhase.Saving,"Locked save did not enter retry state");
         }
         if(step==21){Check(panel.allowance.gameObject.activeInHierarchy && panel.allowance.text.Contains("Retry") && panel.retry.gameObject.activeInHierarchy,"Save error/retry not visible");Capture("save-failure-1920");}
         if(step==22){saveLock.Dispose();saveLock=null;panel.retry.onClick.Invoke();Check(focus.Phase==FocusPhase.Finished,"Retry did not finish");}
@@ -442,7 +442,7 @@ public static class FocusLayoutVerification
             if(step==39){ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerExitHandler);EventSystem.current.SetSelectedGameObject(null);}
             if(step==40){for(int i=0;i<12;i++){Click(panel.pomodoroMode);Click(mode);}Check(mode.isOn&&!panel.pomodoroMode.isOn&&!panel.stopwatchMode.isOn,"Rapid input broke exclusive mode selection");}
             if(step==41){Click(panel.start);Click(panel.pomodoroMode);Check(focus.Options.mode==FocusTimerMode.Countdown&&!mode.interactable,"Locked mode changed");}
-            if(step==42){panel.cancel.onClick.Invoke();nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);}
+            if(step==42){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);}
             if(step==43){
                 Check(mode.isOn&&mode.interactable,"Mode did not survive page reopen");
                 foreach(var choice in new[]{panel.pomodoroMode,panel.stopwatchMode,panel.countdownMode}){

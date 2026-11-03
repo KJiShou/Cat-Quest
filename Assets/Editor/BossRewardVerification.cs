@@ -159,7 +159,7 @@ public static class BossRewardVerification
             panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;panel.Action();panel.Confirm();Check(panel.IsBattling,"Entry");yield return .2;
             int xp=service.Snapshot.experience;
             // The first run exercises skip, the second the ordinary simulation finish.
-            if(width==1920){panel.skipUI.Open();panel.skipUI.Confirm();}
+            if(width==1920)panel.skipUI.skip.onClick.Invoke();
             else {panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);}
             Check(service.Snapshot.experience==xp+10,"Repeat EXP");
             if(width==1280){

@@ -27,7 +27,11 @@ public sealed class ChatGptBrowserAuth : IDisposable
             ["resource"] = ChatGptConnection.Resource, ["state"] = State, ["nonce"] = Nonce,
             ["code_challenge_method"] = "S256", ["code_challenge"] = Challenge(Verifier)
         };
-        if (string.IsNullOrEmpty(existingClientId)) values["agent_name_hint"] = "Cat Quest";
+        if (string.IsNullOrEmpty(existingClientId))
+        {
+            values["agent_name_hint"] = "Cat Quest";
+            values["prompt"] = "select_account";
+        }
         AuthorizationUrl = ChatGptConnection.Issuer + "/api/accounts/authorize?" + ChatGptConnection.Form(values);
         stop.CancelAfter(TimeSpan.FromMinutes(2)); Completion = Receive();
     }

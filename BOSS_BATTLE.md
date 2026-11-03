@@ -24,22 +24,9 @@ Specification: `D:/Downloads/Cat Quest.pdf`, sections 4.5.4–4.5.5 (PDF pages 6
 
 The cat runs into sword range before combat. An attack clip plays one cycle per attack interval. Animation speed is `clip.length * ASPD`. Idle/run/death are not accelerated by ASPD. Red flashes and floating numbers indicate hits without interrupting the attack cadence. HP resets at entry. Navigation away explicitly stops combat. Closing the application refunds an unfinished battle.
 
-During battle, the upper-right Skip control opens the Yes/Later confirmation copied
-from `IntroStory.unity` (`StorySkipUI`'s button and `Skip Popup`). The copy is an editable
-`BattleSkip` subtree in Canvas, with a square button and centered icon. Its confirmation
-is parented directly to the root Canvas so the black dimmer covers the header and
-sidebar as well as the battle. The unused TV decoration (including its oval shadow)
-is hidden. The story scene is unchanged. Confirmation pauses
-simulation and character animators. Later, backdrop dismissal or Escape resumes.
-Yes advances the existing deterministic simulation to its result without rendering
-each hit, then uses the normal settlement and result UI. It does not guarantee a win,
-spend another ticket or bypass save failure/retry. Leaving the page retains the normal
-Stop behavior. The dialog keeps keyboard focus on its choices.
+During battle, the upper-right Skip button advances the current simulation directly to its result. Entry still requires ticket confirmation. Skip uses normal victory or defeat settlement, including save retry, and spends no additional ticket. Leaving an active battle still stops it.
 
-`Temp/verify-boss-skip.request` runs `BossSkipVerification` against isolated saves.
-It checks confirmation/pause/resume, deterministic win and defeat, repeated input,
-save failure/retry, dismissal and page closure, with screenshots and a story UI
-reference under `Library/BossSkipVerification/`.
+`Temp/verify-boss-skip.request` checks immediate victory and defeat, repeated input, save failure and retry, and page closure with an isolated save. Screenshots and results are under `Library/BossSkipVerification/`.
 
 `BossPageSetup` retains only BossBattle1 stage/preview synchronization (`Refresh Boss Scene`, also triggered when the source scene is saved). The legacy Canvas UI, combat controller and portrait generation path has been retired. Their saved assets remain editable and in use. Source character/monster assets and the user's scene are not modified. Monster demo animation behaviours are disabled only on instantiated combat actors.
 

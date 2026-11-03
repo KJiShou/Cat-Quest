@@ -11,9 +11,7 @@ public sealed class FocusPanelUI : MonoBehaviour
     public Slider progress;
     public Button start, endEarly, cancel, endRest, retry, dashboard;
     public FocusCancelConfirmation cancelConfirmation;
-    string cancellingSession;
-    Vector2 cancelAnchorMin,cancelAnchorMax;
-    bool cancelLayoutCached;
+    string confirmingSession;
     public MainMenuNavigation navigation;
     public bool quickStart;
     public Slider focusDuration, restDuration;
@@ -41,7 +39,6 @@ public sealed class FocusPanelUI : MonoBehaviour
     private double noticeUntil;
     private void OnEnable()
     {
-        if(cancel&&!cancelLayoutCached){var slot=(RectTransform)cancel.transform.parent;cancelAnchorMin=slot.anchorMin;cancelAnchorMax=slot.anchorMax;cancelLayoutCached=true;}
         focus = FocusRunner.EnsureInstance().Controller;
         focus.Changed += Refresh;
         GameDataManager.EnsureInstance().Tasks.Changed += RefreshQuests;
@@ -134,15 +131,18 @@ public sealed class FocusPanelUI : MonoBehaviour
         }
         focus.Start();
     }
-    private void EndEarly() { if(focus.Options.mode!=FocusTimerMode.Pomodoro)focus.EndEarly(); }
-    private void Cancel()
+    private void EndEarly() => ConfirmSessionAction(false);
+    private void Cancel() => ConfirmSessionAction(true);
+    private void ConfirmSessionAction(bool cancelSession)
     {
-        if(focus.Phase!=FocusPhase.Focusing)return;
-        if(focus.Options.mode!=FocusTimerMode.Pomodoro){focus.Cancel();return;}
-        if(!cancelConfirmation||cancelConfirmation.IsOpen)return;
-        cancellingSession=focus.SessionId;
-        string session=cancellingSession;
-        cancelConfirmation.Show(()=>{if(focus.Phase==FocusPhase.Focusing&&focus.SessionId==session)focus.Cancel();});
+        if (focus.Phase != FocusPhase.Focusing || !cancelConfirmation || cancelConfirmation.IsOpen) return;
+        if (cancelSession != (focus.Options.mode == FocusTimerMode.Pomodoro)) return;
+        string session = confirmingSession = focus.SessionId;
+        cancelConfirmation.Show(cancelSession, () => {
+            if (focus.Phase != FocusPhase.Focusing || focus.SessionId != session) return;
+            if (cancelSession) focus.Cancel();
+            else focus.EndEarly();
+        });
     }
     private void EndRest() { focus.EndRest(); }
     private void Retry() { focus.RetrySettlement(); }
@@ -150,16 +150,14 @@ public sealed class FocusPanelUI : MonoBehaviour
     private void Refresh()
     {
         var phase = focus.Phase;
-        if(cancelConfirmation&&cancelConfirmation.IsOpen&&(phase!=FocusPhase.Focusing||focus.SessionId!=cancellingSession))cancelConfirmation.Dismiss();
+        if(cancelConfirmation&&cancelConfirmation.IsOpen&&(phase!=FocusPhase.Focusing||focus.SessionId!=confirmingSession))cancelConfirmation.Dismiss();
         status.text = phase == FocusPhase.Focusing ? "Focus Training" : phase == FocusPhase.Resting ? "Rest" : "Focus Training";
         if (message) message.text = focus.Message;
         bool ready = phase == FocusPhase.Ready || phase == FocusPhase.Finished || phase == FocusPhase.Interrupted;
         start.gameObject.SetActive(quickStart || ready);
         start.GetComponentInChildren<TMP_Text>(true).text = quickStart && !ready ? "Open Focus" : "Start Focus";
         if (endEarly) endEarly.gameObject.SetActive(phase == FocusPhase.Focusing && focus.Options.mode != FocusTimerMode.Pomodoro);
-        if (endEarly) endEarly.GetComponentInChildren<TMP_Text>(true).text = focus.CountsUp ? "End Focus" : "End Focus Early";
-        if (cancel) cancel.gameObject.SetActive(phase == FocusPhase.Focusing);
-        if(cancel&&cancelLayoutCached){var slot=(RectTransform)cancel.transform.parent;float width=cancelAnchorMax.x-cancelAnchorMin.x;bool pomodoro=focus.Options.mode==FocusTimerMode.Pomodoro;slot.anchorMin=new Vector2(pomodoro?.5f-width/2:cancelAnchorMin.x,cancelAnchorMin.y);slot.anchorMax=new Vector2(pomodoro?.5f+width/2:cancelAnchorMax.x,cancelAnchorMax.y);}
+        if (cancel) cancel.gameObject.SetActive(phase == FocusPhase.Focusing && focus.Options.mode == FocusTimerMode.Pomodoro);
         if (endRest) endRest.gameObject.SetActive(phase == FocusPhase.Resting);
         if (retry) retry.gameObject.SetActive(phase == FocusPhase.Saving);
         RefreshTime();

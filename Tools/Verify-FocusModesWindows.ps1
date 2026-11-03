@@ -70,9 +70,11 @@ function Command($value) {
  return WaitFor (Join-Path $folder 'smoke-result.json') {param($v)$true} 'command result'
 }
 function HostCommand($state,$action,$owner=$state.ownerId,$session=$state.sessionId,$request=[Guid]::NewGuid().ToString('N')) {
- $path=Join-Path $state.companionDirectory ('command-'+[Guid]::NewGuid().ToString('N')+'.json')
+ $path=Join-Path $state.companionDirectory 'pipe-command.request'
+ $before=(ReadJson $viewPath).ackCount
  WriteJson ($path+'.tmp') @{ownerId=$owner;sessionId=$session;requestId=$request;action=$action};[IO.File]::Move($path+'.tmp',$path)
- Start-Sleep -Milliseconds 500
+ $null=WaitFor $viewPath {param($v)$v.lastAck -eq $request -and $v.ackCount -gt $before} 'pipe command acknowledgement'
+ Start-Sleep -Milliseconds 300
 }
 function ClickAt($window,[int]$x,[int]$y) {
  $rect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$rect)|Out-Null
@@ -114,6 +116,13 @@ try {
  $r=Command @{action='advance';seconds=14400}
  $view=WaitFor $viewPath {param($v)$v.timer -like '4:00:*'} 'four-hour count-up'
  Check ($r.phase -eq 'Focusing' -and $r.exp -eq 100 -and $r.fish -eq 39) 'four-hour stopwatch remains active with capped preview'
+ $steady=$view
+ Start-Sleep -Seconds 61
+ $view=ReadJson $viewPath;$r=ReadJson $resultPath
+ Check ($view.connected -and $view.snapshots -eq $steady.snapshots -and $view.timer -ne $steady.timer) 'local timer advances for a minute without another snapshot'
+ $skew=([TimeSpan]::Parse($view.timer)-[TimeSpan]::Parse($r.timer)).TotalSeconds
+ Check ([Math]::Abs($skew) -le 1) 'local timer within one display second of host'
+ Check (!(Test-Path (Join-Path $r.companionDirectory 'companion-session.json')) -and !(Get-ChildItem $r.companionDirectory -Filter 'command-*.json')) 'no legacy IPC files'
  ResizeWindow $window 420 300
  $view=WaitFor $viewPath {param($v)$v.width -eq 420 -and $v.height -eq 300} 'normal size'
  if($canMovePointer){[FocusNative]::SetCursorPos(250,250)|Out-Null};Start-Sleep -Milliseconds 700;Capture $window 'companion-normal'
@@ -142,6 +151,8 @@ try {
  Check ($r.exp -eq 199 -and $r.coins -eq 39 -and $r.tickets -eq 3) 'stopwatch retry pays exactly three hours without Rest'
  HostCommand $r retry $r.ownerId $r.sessionId $request;HostCommand $r end
  Check ((ReadJson $resultPath).exp -eq 199) 'duplicate retry/end cannot pay twice'
+ $saved=ReadJson (Join-Path $folder 'test-save.json')
+ Check ($saved.experience -eq 199 -and $saved.fishCoins -eq 39 -and $saved.tickets -eq 3) 'isolated save contains exactly one reward'
  $r=Command @{action='configure';mode=2;focusMinutes=180};$r=Command @{action='start'};$r=Command @{action='advance';seconds=10800}
  Check ($r.phase -eq 'Finished' -and $r.exp -eq 232 -and $r.coins -eq 67 -and $r.tickets -eq 3) 'countdown shares four-hour daily cap and skips Rest'
  $r=Command @{action='configure';mode=1};$r=Command @{action='start'};$r=Command @{action='advance';seconds=60}
@@ -154,11 +165,14 @@ try {
  Check ($view.timer -eq $timer -and !$view.training) 'heartbeat loss freezes timer and training'
  Capture $window 'companion-disconnected'
  [FocusNative]::NtResumeProcess($main.Handle)|Out-Null;$suspended=$false
- $view=WaitFor $viewPath {param($v)$v.connected} 'heartbeat reconnect'
- if($canMovePointer){ClickAt $window 215 18}else{[IO.File]::WriteAllText((Join-Path $r.companionDirectory 'close.request'),$r.ownerId)}
+ $view=WaitFor $viewPath {param($v)$v.connected -and $v.connections -gt $steady.connections} 'new pipe and snapshot after heartbeat loss'
+ Check ($view.phase -eq 'Focusing') 'reconnected window resumes active session'
+ if($canMovePointer){ClickAt $window 215 18}else{Command @{action='close-widget'}|Out-Null}
  Check ($child.WaitForExit(6000)) 'native close exits companion'
  $r=ReadJson $resultPath;Check ($r.phase -eq 'Focusing') 'closing companion preserves main Focus'
  $r=Command @{action='end'}
+ Check ($r.cancelPrompt -and $r.phase -eq 'Focusing') 'End Focus prompts before settlement'
+ $r=Command @{action='confirm-cancel'}
  Check ($r.phase -eq 'Finished' -and $r.exp -eq 232 -and $r.coins -eq 67) 'third session remains usable without extra rewards'
  WriteJson (Join-Path $folder 'final-state.json') $r
 } catch { $failure=$_.ToString(); Write-Output "FAIL: $failure" }

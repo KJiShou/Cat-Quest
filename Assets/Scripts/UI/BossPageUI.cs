@@ -194,7 +194,7 @@ public sealed class BossPageUI : MonoBehaviour
             EnsureActors();
             if(actors.Ready) {actors.ResetPose();resetPreview=false;returnToIdleAt=0;damageNumbers.Clear();Refresh();}
         }
-        if(attempt==null||settlementPending||(skipUI&&skipUI.IsConfirming))return;
+        if(attempt==null||settlementPending)return;
         try {
             if(approaching){if(actors.Run(Time.unscaledDeltaTime)){approaching=false;actors.StartCombat(attempt.cat,attempt.boss,attempt.equippedEquipment.FirstOrDefault(i=>EquipmentRules.Find(i.id)?.Slot==EquipmentSlot.Weapon)?.id);}return;}
             simulation.Advance(Time.unscaledDeltaTime,OnHit);
@@ -219,7 +219,6 @@ public sealed class BossPageUI : MonoBehaviour
     public void Settle(BattleOutcome outcome)
     {
         if(attempt==null)return;
-        if(skipUI)skipUI.Dismiss();
         pendingOutcome=outcome;
         float presentationDelay=outcome==BattleOutcome.Victory&&!skippedPresentation&&isActiveAndEnabled&&actors.Ready?BossBattleActors.VictoryDuration:0;
         bool saved;
@@ -343,7 +342,6 @@ public sealed class BossPageUI : MonoBehaviour
         CancelReturn();walkingOut=false;resultAwaitingConfirmation=false;
         victoryResultAt=0;
         SettingsAudio.Instance?.SetBattleMusic(false);
-        if(skipUI)skipUI.Dismiss();
         if(service!=null)service.Changed-=Refresh;
         if(!quitting&&attempt!=null)Settle(settlementPending?pendingOutcome:simulation!=null&&simulation.Outcome!=BattleOutcome.Running?simulation.Outcome:BattleOutcome.Stopped);
         if(resultPanels!=null)foreach(var panel in resultPanels)if(panel)panel.SetActive(false);

@@ -68,7 +68,7 @@ Tasks also offers **List / Calendar**. The month view shows scheduled Todo items
 | Count-up | Runs until you end it | Finishes without automatic Rest |
 | Countdown | Configurable from 1–180 minutes | Finishes without automatic Rest |
 
-Switching pages or working in another application does not stop the main timer. The current Pomodoro UI offers a confirmed **Cancel**, not an early-settlement button. Stopwatch **End Focus** and Countdown **End Focus Early** retain earned-time settlement. Underlying and historical End Early settlement remains supported and is distinct from cancellation. Cancel grants no rewards and does not start Rest. Invalid/interrupted sessions and Rest grant no EXP, Fish Coins or tickets.
+Switching pages or working in another application does not stop the main timer. The current Pomodoro UI offers a confirmed **Cancel**, not an early-settlement button. Stopwatch and Countdown offer **End Focus** with confirmation before settling earned time. Underlying and historical End Early settlement remains supported and is distinct from cancellation. Cancel grants no rewards and does not start Rest. Invalid/interrupted sessions and Rest grant no EXP, Fish Coins or tickets.
 
 If saving a completed session fails, settlement waits for **Retry Save**. Reward animations and the Companion never grant rewards independently of the main application's saved result.
 

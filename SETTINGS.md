@@ -69,8 +69,9 @@ Review fresh screenshots beside the reference and inspect the recorded motion fr
 Settings → **AI** is separate from the Google leaderboard account. **Continue with
 ChatGPT** opens the system browser using this installation's own OAuth registration.
 Closing AI settings cancels pending sign-in. An established connection remains
-available to task pages. **Disconnect ChatGPT** clears local tokens and attempts
+available to task pages. **Disconnect ChatGPT** clears the local tokens and account registration and attempts
 remote session revocation, with an explicit message when remote revocation is unconfirmed.
+Select **Continue with ChatGPT** again to authorize another account on the same installation.
 
 Chat sends user messages and relevant task information requested during the
 conversation to OpenAI using the user's eligible ChatGPT plan. Task proposals

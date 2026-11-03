@@ -61,8 +61,10 @@ public static class AiPlayVerification
         }
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode) return;
         bool before = File.Exists("Temp/capture-ai-before.request"), after = File.Exists("Temp/verify-ai-play.request");
-        if (!before && !after) return;
-        File.Delete(before ? "Temp/capture-ai-before.request" : "Temp/verify-ai-play.request");
+        bool settingsOnly = File.Exists("Temp/verify-ai-settings.request");
+        if (!before && !after && !settingsOnly) return;
+        SessionState.SetBool(Flag + ".settingsOnly", settingsOnly);
+        File.Delete(settingsOnly ? "Temp/verify-ai-settings.request" : before ? "Temp/capture-ai-before.request" : "Temp/verify-ai-play.request");
         folder = "Library/AiVerification/" + (before ? "Before-" : "Play-") + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
         Directory.CreateDirectory(folder);
         loggedError = null;
@@ -148,6 +150,56 @@ public static class AiPlayVerification
             typeof(SettingsPlayVerification).GetMethod("Resolution", Hidden).Invoke(null, new object[] { size });
             yield return .3;
             Capture("settings-ready-" + size.x); yield return .2;
+        }
+        if (SessionState.GetBool(Flag + ".settingsOnly", false))
+        {
+            context = "Compact AI settings";
+            var popup = (RectTransform)ai.identity.transform.parent;
+            float compactHeight = popup.rect.height;
+            foreach (var size in new[] { new Vector2Int(1920, 1080), new Vector2Int(1280, 720) })
+            {
+                typeof(SettingsPlayVerification).GetMethod("Resolution", Hidden).Invoke(null, new object[] { size });
+                yield return .3;
+                foreach (var dropdown in new[] { ai.language, ai.model })
+                {
+                    FocusLayoutVerification.Click(dropdown); yield return .3;
+                    Check(dropdown.transform.Find("Dropdown List"), "Dropdown could not be opened.");
+                    Capture(dropdown.name + "-open-" + size.x); yield return .15;
+                    dropdown.Hide(); yield return .3;
+                }
+                EventSystem.current.SetSelectedGameObject(loadingPanel.aiBack.gameObject);
+                ExecuteEvents.Execute(loadingPanel.aiBack.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+                Check(loadingPanel.CurrentView == "Settings", "Back did not return to Settings.");
+                yield return .3;
+                FocusLayoutVerification.Click(loadingPanel.aiButton); yield return .2;
+                Check(popup.rect.height == compactHeight, "Reopening added empty space.");
+            }
+            var disconnectFeedback = ai.disconnect.GetComponent<JuicyButton>();
+            var disconnectPointer = FocusLayoutVerification.Pointer(ai.disconnect, new Vector2(.5f,.5f));
+            var target = FocusLayoutVerification.Hit(ai.disconnect, disconnectPointer);
+            ExecuteEvents.Execute(target, disconnectPointer, ExecuteEvents.pointerEnterHandler); yield return .3;
+            Check(disconnectFeedback.DrawScale.y > 1, "Missing Disconnect hover feedback.");
+            ExecuteEvents.Execute(target, disconnectPointer, ExecuteEvents.pointerDownHandler); yield return .3;
+            Check(disconnectFeedback.DrawScale.y < 1, "Missing Disconnect press feedback.");
+            Capture("disconnect-pressed"); yield return .15;
+            ExecuteEvents.Execute(target, disconnectPointer, ExecuteEvents.pointerUpHandler);
+            ExecuteEvents.Execute(target, disconnectPointer, ExecuteEvents.pointerExitHandler); yield return .4;
+            Check(Vector2.Distance(disconnectFeedback.DrawScale, Vector2.one) < .02f, "Disconnect feedback did not settle.");
+            FocusLayoutVerification.Click(ai.disconnect);
+            while (client.Busy) yield return .1;
+            foreach (var size in new[] { new Vector2Int(1920, 1080), new Vector2Int(1280, 720) })
+            {
+                typeof(SettingsPlayVerification).GetMethod("Resolution", Hidden).Invoke(null, new object[] { size });
+                yield return .3;
+                Check(ai.privacy.gameObject.activeSelf && ai.status.gameObject.activeSelf && popup.rect.height > compactHeight, "Disconnected messages need space.");
+                Canvas.ForceUpdateCanvases();
+                var privacy = RectTransformUtility.CalculateRelativeRectTransformBounds(popup, ai.privacy.transform);
+                var status = RectTransformUtility.CalculateRelativeRectTransformBounds(popup, ai.status.transform);
+                Check(privacy.min.y > status.max.y && !ai.privacy.isTextOverflowing && !ai.status.isTextOverflowing, "Messages overlap or overflow.");
+                Capture("disconnected-" + size.x); yield return .2;
+            }
+            loadingPanel.Close();
+            yield break;
         }
         loadingPanel.Close();
         yield return .2;

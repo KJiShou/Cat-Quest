@@ -248,7 +248,7 @@ public static class DashboardRewardPlayVerification
                 var panel = nav.pages[2].GetComponent<FocusPanelUI>();
                 Click(panel.endRest);
                 Check(panel.start.gameObject.activeSelf && panel.start.GetComponentInChildren<TMP_Text>().text == "Start Focus", "Rest did not offer next actions.");
-                Click(panel.start); Click(panel.cancel);
+                Click(panel.start); Click(panel.cancel); Click(panel.cancelConfirmation.confirm);
                 Check(FocusRunner.EnsureInstance().Controller.Phase == FocusPhase.Interrupted && service.Snapshot.experience == 125, "Cancelled session rewarded or entered Rest.");
                 Click(nav.buttons[(int)MainMenuPage.Dashboard]);
                 Check(nav.CurrentPage == MainMenuPage.Dashboard, "Sidebar did not return to Dashboard.");

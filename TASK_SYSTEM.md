@@ -79,7 +79,7 @@ Each stage is claimable once daily. Bonuses scale/floor at claim level and do no
 
 ## Focus settlement
 
-Pomodoro uses 1–60 minute Focus/Rest selectors, default 25/5. Stopwatch counts up beyond three hours. Countdown accepts 1–180 minutes. Only Pomodoro enters Rest after successful settlement. The current Pomodoro UI offers confirmed Cancel, while Stopwatch End Focus and Countdown End Focus Early retain earned-time settlement. The underlying and historical End Early rules remain supported.
+Pomodoro uses 1–60 minute Focus/Rest selectors, default 25/5. Stopwatch counts up beyond three hours. Countdown accepts 1–180 minutes. Only Pomodoro enters Rest after successful settlement. The current Pomodoro UI offers confirmed Cancel, while Stopwatch and Countdown offer confirmed End Focus to settle earned time. The underlying and historical End Early rules remain supported.
 
 Currency bases are 0.5 EXP per complete minute and 1 Fish per complete 5 minutes, multiplied using the session-start level before flooring. Only the first 180 minutes per session and 240 minutes per day earn currency across all modes. Tickets use complete 25-minute intervals with a separate 3-per-day Focus cap. Short sessions are not joined for ticket/fish intervals. A valid 25-minute session can still meet the daily goal after currency limits are exhausted.
 

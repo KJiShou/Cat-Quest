@@ -122,10 +122,15 @@ function SelectControl($name) {
 function ResumeMain { if($suspended){[FocusNative]::NtResumeProcess($main.Handle)|Out-Null;$script:suspended=$false} }
 function BurstSubmit($name) {
  SelectControl $name
- $before=@(Get-ChildItem $r.companionDirectory -Filter 'command-*.json').Count
+ if($name -eq 'End'){
+  Tap 13
+  $null=WaitFor $viewPath {param($v)$v.cancelPrompt} 'end confirmation'
+  Tap 9
+ }
+ $before=(ReadJson $viewPath).sentCommands
  [FocusNative]::NtSuspendProcess($main.Handle)|Out-Null;$script:suspended=$true
  for($i=0;$i -lt 5;$i++){Tap 13 60}
- $after=@(Get-ChildItem $r.companionDirectory -Filter 'command-*.json').Count
+ $after=(ReadJson $viewPath).sentCommands
  Check (($after-$before) -eq 1) ("Five Enter presses queue one "+$name+" request")
  ResumeMain
 }

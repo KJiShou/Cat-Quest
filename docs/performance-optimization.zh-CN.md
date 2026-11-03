@@ -1,5 +1,7 @@
 # Cat Quest Windows 性能优化报告
 
+[English](performance-optimization.md) | [简体中文](performance-optimization.zh-CN.md)
+
 2026-11-02。以下编号对应原性能诊断的 15 项。最明显的三个变化是：首页纹理从 **3,256 MiB 降到 619 MiB**，144 条任务时切换 Todo 的最长操作帧从 **317 ms 降到 20 ms**，Focus 运行时的逐帧托管分配中位数从 **122 KiB 降到 0.20 KiB**。
 
 同平台 Development Build 目录实测由 **3,330 MiB 降到 985 MiB**，包含 Unity 运行库与开发构建文件，未使用 ZIP 压缩。

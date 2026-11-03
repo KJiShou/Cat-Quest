@@ -38,6 +38,9 @@ public sealed class ChatGptConnection : IDisposable
         }
         string credentials = storage.Read("connection.dpapi", true);
         if (credentials != null) session = ChatGptJson.Object(credentials);
+        // Older releases kept the original registration and account after logout.
+        if (!string.IsNullOrEmpty(ChatGptJson.Text(session, "sub")) && string.IsNullOrEmpty(ChatGptJson.Text(session, "refresh_token")))
+            ClearRegistration();
         string preferences = storage.Read("preferences.json", false);
         if (preferences != null)
         {
@@ -47,6 +50,12 @@ public sealed class ChatGptConnection : IDisposable
             Language = language == "en" || language == "zh" ? language : "auto";
         }
     });
+    void ClearRegistration()
+    {
+        storage.Write("connection.dpapi", "{}", true);
+        session.Clear();
+        Models.Clear();
+    }
     public static string Form(IDictionary<string, string> data) => string.Join("&", data.Select(p => Uri.EscapeDataString(p.Key) + "=" + Uri.EscapeDataString(p.Value ?? "")));
     Task<string> Get(string url, CancellationToken cancellation, string bearer = null) => http.Send(url, "GET", null, null, bearer, false, cancellation);
     Task<string> Post(string url, IDictionary<string, string> data, CancellationToken cancellation) =>
@@ -58,7 +67,7 @@ public sealed class ChatGptConnection : IDisposable
         var callback = await browser.Completion.ConfigureAwait(false);
         cancellation.ThrowIfCancellationRequested();
         string expectedSubject = ChatGptJson.Text(session, "sub"), expectedEmail = ChatGptJson.Text(session, "email");
-        // Persist registration even if token exchange fails; future authorization must reuse it.
+        // Persist the issued registration so failed token exchanges can be retried.
         var registration = new Dictionary<string, object> { ["client_id"] = callback["client_id"], ["sub"] = expectedSubject, ["email"] = expectedEmail };
         await Task.Run(() => storage.Write("connection.dpapi", ChatGptJson.Encode(registration), true), cancellation).ConfigureAwait(false);
         session = registration;
@@ -194,9 +203,7 @@ public sealed class ChatGptConnection : IDisposable
             catch (Exception) { revoked = false; }
             finally
             {
-                session = new Dictionary<string, object> { ["client_id"] = ChatGptJson.Text(prior, "client_id"),
-                    ["sub"] = ChatGptJson.Text(prior, "sub"), ["email"] = ChatGptJson.Text(prior, "email") };
-                Models = new List<ChatGptModel>(); storage.Write("connection.dpapi", ChatGptJson.Encode(session), true);
+                ClearRegistration();
             }
         }
         finally { tokenGate.Release(); }

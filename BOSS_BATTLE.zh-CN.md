@@ -24,7 +24,7 @@
 
 猫先跑到剑程再开战，攻击片段每间隔一轮，速度 `clip.length * ASPD`，Idle/Run/Death 不按 ASPD 加速。红闪和伤害数字不打断攻击节奏，入场重置 HP。离页明确 Stop，关闭应用则恢复未结束入场券。
 
-战斗右上 Skip 使用 IntroStory 的 `StorySkipUI` 按钮与 Skip Popup 的 Yes/Later 确认，保存在 Canvas 的可编辑 BattleSkip 子树。方按钮图标居中，确认放根 Canvas，全屏黑幕盖住顶栏和侧栏，闲置 TV 装饰含椭圆阴影隐藏，故事场景不改。确认期间暂停模拟和角色 Animator，Later、背景、Escape 恢复。Yes 将已有确定性模拟推进至结果，再正常结算，不保证获胜、不多扣券、不绕过保存重试。离页仍 Stop，键盘焦点限于选择。
+战斗右上角的 Skip 按钮直接将当前模拟推进至结果。入场仍需确认并消耗一张券。跳过战斗沿用正常胜负结算与保存重试流程，不额外扣券。战斗中离页仍会停止战斗。
 
 `BossPageSetup` 只保留 BossBattle1 场景预览同步，包括 Refresh Boss Scene 和源场景保存触发。旧 Canvas、控制器和头像生成路径已退役，保存资产仍可编辑。原角色、怪物和用户场景不改，只在战斗实例禁用怪物 demo 行为。
 

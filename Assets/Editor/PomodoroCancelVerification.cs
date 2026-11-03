@@ -68,6 +68,7 @@ public static class PomodoroCancelVerification
             return;
         }
         if (EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists("Temp/verify-pomodoro-cancel.request")) return;
+        SessionState.SetBool(Flag+".before",File.ReadAllText("Temp/verify-pomodoro-cancel.request").Trim()=="before");
         File.Delete("Temp/verify-pomodoro-cancel.request");
         string folder=Folder+"/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+"-after";Directory.CreateDirectory(folder);
         SessionState.SetString(Flag+".folder",folder);
@@ -83,9 +84,58 @@ public static class PomodoroCancelVerification
     }
     static System.Collections.IEnumerator Run(){
         var manager=GameDataManager.Instance;Check(manager.SavePath.Contains("PomodoroCancelVerification"),"Isolated save");var service=manager.Tasks;
-        var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();nav.ShowPage(MainMenuPage.Focus);var panel=nav.pages[(int)MainMenuPage.Focus].GetComponent<FocusPanelUI>();var focus=panel.Controller;
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>().Skip();
+        manager.PlayerData.experience=100;manager.SaveData();
+        var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();Check(nav.ShowPage(MainMenuPage.Focus),"Focus unlocked");var panel=nav.pages[(int)MainMenuPage.Focus].GetComponent<FocusPanelUI>();var focus=panel.Controller;
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);yield return .4;
+            var before=SessionState.GetBool(Flag+".before",false);
+            var startLabel=panel.start.GetComponentInChildren<TMPro.TMP_Text>(true);
+            Capture("start-"+width);yield return .2;
+            foreach(var mode in new[]{FocusTimerMode.Stopwatch,FocusTimerMode.Countdown,FocusTimerMode.Pomodoro})
+            {
+                focus.Configure(new FocusSessionOptions{mode=mode,focusMinutes=25,restMinutes=5});
+                panel.start.onClick.Invoke();yield return .3;
+                Capture(mode+"-"+width);yield return .2;
+                if(before){focus.Cancel();continue;}
+                bool pomodoro=mode==FocusTimerMode.Pomodoro;
+                Check(panel.cancel.gameObject.activeInHierarchy==pomodoro && panel.endEarly.gameObject.activeInHierarchy!=pomodoro,"Only the intended session action is visible");
+                var action=pomodoro?panel.cancel:panel.endEarly;
+                var label=action.GetComponentInChildren<TMPro.TMP_Text>();
+                Check(label.color==startLabel.color && label.text==(pomodoro?"Cancel":"End Focus"),"Session action label and ink");
+                var pointer=FocusLayoutVerification.Pointer(action,new Vector2(.5f,.5f));
+                var target=FocusLayoutVerification.Hit(action,pointer);
+                var feedback=action.GetComponent<JuicyButton>();
+                ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerEnterHandler);yield return .25;
+                Check(feedback.DrawScale.y>1.01f,"Hover feedback");
+                ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerDownHandler);yield return .25;
+                Check(feedback.DrawScale.y<.95f,"Press feedback");Capture(mode+"-press-"+width);yield return .1;
+                ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerUpHandler);
+                ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerExitHandler);
+                EventSystem.current.SetSelectedGameObject(null);yield return .35;
+                Check(Vector2.Distance(feedback.DrawScale,Vector2.one)<.02f,"Feedback resets");
+                if(pomodoro){focus.Cancel();continue;}
+                focus.Advance(1);
+                FocusLayoutVerification.Click(action);action.onClick.Invoke();
+                Check(panel.cancelConfirmation.IsOpen && focus.Phase==FocusPhase.Focusing,"End requires confirmation");
+                yield return .3;Capture(mode+"-prompt-"+width);yield return .2;
+                FocusLayoutVerification.Click(panel.cancelConfirmation.keepFocusing);
+                Check(!panel.cancelConfirmation.IsOpen && focus.Phase==FocusPhase.Focusing,"Keep focus continues");
+                EventSystem.current.SetSelectedGameObject(action.gameObject);
+                ExecuteEvents.Execute(action.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler);
+                Check(panel.cancelConfirmation.IsOpen,"Keyboard submit opens confirmation");yield return .2;
+                FocusLayoutVerification.Click(panel.cancelConfirmation.confirm);
+                Check(focus.Phase==FocusPhase.Finished,"Confirmed End settles");
+            }
+            var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_DemoScene_Panels/Light/Ranking.prefab");
+            var button=source.GetComponentsInChildren<Button>(true).Single(b=>b.name=="Button_Global");
+            var reference=UnityEngine.Object.Instantiate(button,panel.transform);
+            var rect=(RectTransform)reference.transform;
+            rect.anchorMin=rect.anchorMax=new Vector2(.5f,.2f);
+            rect.sizeDelta=new Vector2(320,80);rect.anchoredPosition=Vector2.zero;
+            Capture("ranking-reference-"+width);yield return .2;
+            UnityEngine.Object.Destroy(reference.gameObject);
+            if(before)continue;
             focus.Configure(new FocusSessionOptions{mode=FocusTimerMode.Pomodoro,focusMinutes=25,restMinutes=5});panel.start.onClick.Invoke();for(int i=0;i<300;i++)focus.Advance(1);
             Check(!panel.endEarly.gameObject.activeSelf&&panel.cancel.gameObject.activeSelf,"Pomodoro only Cancel");panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Focusing,"Hidden early command rejected");
             panel.cancel.onClick.Invoke();var dialog=panel.cancelConfirmation;Check(dialog.IsOpen&&focus.Phase==FocusPhase.Focusing,"Cancel requires confirmation");Check(EventSystem.current.currentSelectedGameObject==dialog.keepFocusing.gameObject,"Safe default focus");
@@ -95,10 +145,11 @@ public static class PomodoroCancelVerification
             if(width==1280){saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);dialog.Confirm();Check(focus.Phase==FocusPhase.Saving,"Cancel failure retries");saveLock.Dispose();saveLock=null;panel.retry.onClick.Invoke();}else dialog.confirm.onClick.Invoke();
             dialog.Confirm();Check(focus.Phase==FocusPhase.Interrupted&&service.Snapshot.experience==xp&&service.Snapshot.fishCoins==fish&&service.Snapshot.tickets==tickets,"Cancel no rewards/rest or duplicate");yield return .3;Capture("cancelled-"+width);yield return .1;
         }
+        if(SessionState.GetBool(Flag+".before",false))yield break;
         focus.Configure(new FocusSessionOptions{mode=FocusTimerMode.Pomodoro,focusMinutes=1,restMinutes=1});focus.Start();panel.cancel.onClick.Invoke();for(int i=0;i<60;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Resting&&!panel.cancelConfirmation.IsOpen,"Natural completion invalidates cancel");focus.EndRest();focus.Start();panel.cancelConfirmation.Confirm();Check(focus.Phase==FocusPhase.Focusing,"Stale confirm cannot cancel new session");panel.cancel.onClick.Invoke();nav.ShowPage(MainMenuPage.Tasks);Check(!panel.cancelConfirmation.IsOpen&&focus.Phase==FocusPhase.Focusing,"Page close dismisses only");focus.Cancel();
-        nav.ShowPage(MainMenuPage.Focus);foreach(var mode in new[]{FocusTimerMode.Stopwatch,FocusTimerMode.Countdown}){focus.Configure(new FocusSessionOptions{mode=mode,focusMinutes=25,restMinutes=5});focus.Start();Check(panel.endEarly.gameObject.activeSelf,"Other modes preserve End");focus.Advance(1);panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Finished,"Other modes settle");}
+        nav.ShowPage(MainMenuPage.Focus);
         var host=CompanionHost.Ensure();focus.Configure(new FocusSessionOptions{mode=FocusTimerMode.Pomodoro,focusMinutes=25,restMinutes=5});focus.Start();Check(!host.Execute(new CompanionCommand{ownerId=host.OwnerId,sessionId=focus.SessionId,requestId=Guid.NewGuid().ToString("N"),action="end"})&&focus.Phase==FocusPhase.Focusing,"Host rejects old Pomodoro early command");focus.Cancel();
-        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: Pomodoro only Cancel; confirmation/keep/backdrop; no reward/rest; failure/retry and duplicate; natural completion/stale session; page close; Stopwatch/Countdown unchanged; host rejects legacy end; 1920/1280 captures.");
+        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: Pomodoro only Cancel; confirmation/keep/backdrop; no reward/rest; failure/retry and duplicate; natural completion/stale session; page close; confirmed Stopwatch/Countdown End Focus; host rejects legacy end; 1920/1280 captures.");
     }
 }
 

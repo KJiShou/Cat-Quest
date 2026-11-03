@@ -9,7 +9,7 @@ using UnityEngine.EventSystems;
 public sealed class CompanionWindowUI : MonoBehaviour
 {
     [Serializable] public sealed class FeedbackState { public string name; public bool active,interactable; public float scaleX,scaleY,offset,x,y,width,height; }
-    [Serializable] public sealed class ViewState { public string selected; public bool keyboard; public FeedbackState[] feedback; public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha; }
+    [Serializable] public sealed class ViewState { public string lastAck; public bool lastAccepted; public int sentCommands,snapshots,connections,ackCount; public string selected; public bool keyboard; public FeedbackState[] feedback; public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha; }
     public FocusScenePreview preview;
     public TMP_Text timer,title;
     public RectTransform controls,header,sceneFrame,dragHandle,timerBacking;
@@ -17,13 +17,18 @@ public sealed class CompanionWindowUI : MonoBehaviour
     public CanvasGroup controlFade;
     public Button start,end,rest,retry,close,pin,minimize;
     public FocusCancelConfirmation cancelConfirmation;
-    string cancellingSession;
+    string confirmingSession;
     public Image pinIcon;
     public Sprite pinnedSprite,unpinnedSprite;
     string directory,owner,pendingAction;
-    FocusPhase pendingPhase;
+    string pendingRequest, pipeName, token, lastAck;
+    int sentCommands, snapshots, connections, ackCount;
+    bool lastAccepted;
+    CompanionPipe pipe;
+    double lastContact, reconnectAfter, snapshotReceivedAt;
+    static double Now => (double)System.Diagnostics.Stopwatch.GetTimestamp() / System.Diagnostics.Stopwatch.Frequency;
     CompanionState state=new CompanionState{connected=false};
-    float nextPoll,startup,pendingSince,reveal;
+    float startup,reveal;
     int lastWidth,lastHeight;
     bool configured,closing,keyboardNavigation;
     Button[] keyboardButtons;
@@ -33,7 +38,8 @@ public sealed class CompanionWindowUI : MonoBehaviour
     {
         Application.runInBackground=true;Application.targetFrameRate=30;
         directory=CompanionProtocol.Argument("--companion-dir");owner=CompanionProtocol.Argument("--companion-owner");
-        if(string.IsNullOrEmpty(directory)||string.IsNullOrEmpty(owner)){enabled=false;return;}
+        pipeName=CompanionProtocol.Argument("--companion-pipe"); token=CompanionProtocol.Argument("--companion-token");
+        if(string.IsNullOrEmpty(pipeName)||string.IsNullOrEmpty(token)||string.IsNullOrEmpty(owner)){enabled=false;return;}
         startup=Time.unscaledTime;
         start.onClick.AddListener(()=>Send("start"));end.onClick.AddListener(EndFocus);rest.onClick.AddListener(()=>Send("rest"));retry.onClick.AddListener(()=>Send("retry"));
         close.onClick.AddListener(CloseDisplay);
@@ -41,6 +47,7 @@ public sealed class CompanionWindowUI : MonoBehaviour
         minimize.onClick.AddListener(CompanionNativeWindow.Minimize);
         keyboardButtons=new[]{pin,minimize,close,start,end,rest,retry};
         if(EventSystem.current)pointerExit=new PointerEventData(EventSystem.current);
+        RefreshState();
         RefreshPin();
     }
     void Update()
@@ -48,16 +55,9 @@ public sealed class CompanionWindowUI : MonoBehaviour
         if(closing)return;
         if(!configured && Time.unscaledTime-startup>.4f) configured=CompanionNativeWindow.Configure();
         if(configured) CompanionNativeWindow.EnforceMinimum();
-        if(Time.unscaledTime>=nextPoll){
-            nextPoll=Time.unscaledTime+.2f;
-            if(File.Exists(Path.Combine(directory,"close.request"))){CloseDisplay();return;}
-            var incoming=CompanionProtocol.Read<CompanionState>(Path.Combine(directory,"companion-session.json"));
-            if(incoming!=null && incoming.ownerId==owner) state=incoming;
-            state.connected=(DateTime.UtcNow.Ticks-state.heartbeatUtcTicks)<TimeSpan.FromSeconds(3).Ticks;
-            preview.Bind(state);
-            if(pendingAction!=null && (state.phase!=pendingPhase || Time.unscaledTime-pendingSince>3 || !state.connected))pendingAction=null;
-            RefreshState();
-        }
+        UpdatePipe();
+        if (closing) return;
+        if (state.connected) RefreshTimer();
         var mouse=Mouse.current;var point=mouse!=null?mouse.position.ReadValue():new Vector2(-1,-1);
         bool inside=CompanionHover.IsInside();
 #if UNITY_EDITOR || !UNITY_STANDALONE_WIN
@@ -79,6 +79,59 @@ public sealed class CompanionWindowUI : MonoBehaviour
         if(lastWidth!=Screen.width || lastHeight!=Screen.height){ApplyLayout(IsCompact,inside);lastWidth=Screen.width;lastHeight=Screen.height;}
         if(CompanionProtocol.HasArgument("--companion-smoke"))WriteVerification();
     }
+    void UpdatePipe()
+    {
+        double now = Now;
+        if (pipe == null) {
+            if (now < reconnectAfter) return;
+            pipe = new CompanionPipe(pipeName, false);
+            pipe.Send(token);
+            lastContact = now;
+        }
+        while (pipe.Receive(out string frame)) {
+            if (frame == "close") { CloseDisplay(); return; }
+            lastContact = now;
+            if (frame == "pulse") continue;
+            var incoming = JsonUtility.FromJson<CompanionState>(frame);
+            if (incoming == null || incoming.ownerId != owner) { Disconnect(); return; }
+            if (!state.connected) connections++;
+            snapshots++;
+            snapshotReceivedAt = now;
+            state = incoming;
+            if (!string.IsNullOrEmpty(state.requestId)) {
+                ackCount++;
+                lastAck = state.requestId;
+                lastAccepted = state.accepted;
+                if (pendingRequest == lastAck) pendingAction = pendingRequest = null;
+            }
+            preview.Bind(state);
+            RefreshState();
+        }
+        if (pipe.Stopped || now - lastContact >= 3) Disconnect();
+    }
+    void Disconnect()
+    {
+        pipe?.Dispose(); pipe = null;
+        reconnectAfter = Now + .4;
+        state.connected = false;
+        pendingAction = pendingRequest = null;
+        preview.Bind(state);
+        RefreshState();
+    }
+    void OnDestroy() { pipe?.Dispose(); }
+    void RefreshTimer()
+    {
+        bool up = state.mode == FocusTimerMode.Stopwatch && state.phase != FocusPhase.Resting;
+        double delta = state.phase == FocusPhase.Focusing || state.phase == FocusPhase.Resting
+            ? Math.Max(0, Now - snapshotReceivedAt) : 0;
+        double elapsed = state.phase == FocusPhase.Ready || state.phase == FocusPhase.Interrupted ? 0 : state.elapsedSeconds + delta;
+        int second = FocusController.DisplaySecond(up ? elapsed : state.remainingSeconds - delta, up);
+        if (second != displayedSecond) {
+            displayedSecond = second;
+            timer.text = FocusController.FormatTime(second, up);
+        }
+    }
+    int displayedSecond = -1;
     void UpdateKeyboardNavigation()
     {
         var events=EventSystem.current;var keys=Keyboard.current;
@@ -124,24 +177,22 @@ public sealed class CompanionWindowUI : MonoBehaviour
     }
     void RefreshState()
     {
-        if(cancelConfirmation&&cancelConfirmation.IsOpen&&(!state.connected||state.phase!=FocusPhase.Focusing||state.sessionId!=cancellingSession))cancelConfirmation.Dismiss();
+        if(cancelConfirmation&&cancelConfirmation.IsOpen&&(!state.connected||state.phase!=FocusPhase.Focusing||state.sessionId!=confirmingSession))cancelConfirmation.Dismiss();
         title.text=string.IsNullOrWhiteSpace(state.playerName)?"Player":state.playerName.Trim();
-        bool countsUp=state.mode==FocusTimerMode.Stopwatch && state.phase!=FocusPhase.Resting;
-        double elapsed=state.phase==FocusPhase.Ready || state.phase==FocusPhase.Interrupted ? 0 : state.elapsedSeconds;
-        timer.text=FocusController.FormatTime(countsUp?elapsed:state.remainingSeconds,countsUp);
+        if (state.connected) RefreshTimer();
         timer.color=state.connected?new Color32(29,51,70,255):new Color32(146,91,44,255);
         bool ready=state.phase==FocusPhase.Ready || state.phase==FocusPhase.Finished || state.phase==FocusPhase.Interrupted;
         start.gameObject.SetActive(ready);end.gameObject.SetActive(state.phase==FocusPhase.Focusing);rest.gameObject.SetActive(state.phase==FocusPhase.Resting);retry.gameObject.SetActive(state.phase==FocusPhase.Saving);
         foreach(var b in new[]{start,end,rest,retry})b.interactable=state.connected && pendingAction==null;
-        SetCaption(start,pendingAction=="start"?"Starting...":"Start focus");SetCaption(end,pendingAction=="cancel"?"Cancelling...":state.mode==FocusTimerMode.Pomodoro?"Cancel":pendingAction=="end"?"Finishing...":countsUp?"End focus":"End focus early");SetCaption(rest,pendingAction=="rest"?"Finishing...":"Finish rest");SetCaption(retry,pendingAction=="retry"?"Saving...":"Retry save");
+        SetCaption(start,pendingAction=="start"?"Starting...":"Start focus");SetCaption(end,pendingAction=="cancel"?"Cancelling...":state.mode==FocusTimerMode.Pomodoro?"Cancel":pendingAction=="end"?"Finishing...":"End focus");SetCaption(rest,pendingAction=="rest"?"Finishing...":"Finish rest");SetCaption(retry,pendingAction=="retry"?"Saving...":"Retry save");
     }
     void EndFocus()
     {
         if(!state.connected||pendingAction!=null||state.phase!=FocusPhase.Focusing)return;
-        if(state.mode!=FocusTimerMode.Pomodoro){Send("end");return;}
+        bool cancelSession = state.mode == FocusTimerMode.Pomodoro;
         if(!cancelConfirmation||cancelConfirmation.IsOpen)return;
-        cancellingSession=state.sessionId;string session=cancellingSession;
-        cancelConfirmation.Show(()=>{if(state.connected&&state.phase==FocusPhase.Focusing&&state.sessionId==session)Send("cancel");});
+        confirmingSession=state.sessionId;string session=confirmingSession;
+        cancelConfirmation.Show(cancelSession, ()=>{if(state.connected&&state.phase==FocusPhase.Focusing&&state.sessionId==session)Send(cancelSession ? "cancel" : "end");});
     }
     void OnDisable(){if(cancelConfirmation)cancelConfirmation.Dismiss();}
     static void SetCaption(Button b,string text){b.GetComponentInChildren<TMP_Text>().text=text;}
@@ -172,8 +223,13 @@ public sealed class CompanionWindowUI : MonoBehaviour
     {
         if(!state.connected || pendingAction!=null)return;
         var command=new CompanionCommand{ownerId=owner,sessionId=state.sessionId,requestId=Guid.NewGuid().ToString("N"),action=action};
-        try{CompanionProtocol.Write(Path.Combine(directory,"command-"+command.requestId+".json"),command);pendingAction=action;pendingPhase=state.phase;pendingSince=Time.unscaledTime;RefreshState();}
-        catch(IOException){SetCaption(state.phase==FocusPhase.Focusing?end:state.phase==FocusPhase.Resting?rest:state.phase==FocusPhase.Saving?retry:start,"Try again");}
+        if (SendCommand(command)) { pendingAction=action; pendingRequest=command.requestId; RefreshState(); }
+    }
+    bool SendCommand(CompanionCommand command)
+    {
+        if (pipe == null || !pipe.Send(JsonUtility.ToJson(command))) return false;
+        sentCommands++;
+        return true;
     }
     static string SpriteName(FocusTrainingBattle battle,string child)
     {
@@ -197,7 +253,10 @@ public sealed class CompanionWindowUI : MonoBehaviour
         {
             var battle=preview.Stage?preview.Stage.GetComponentInChildren<FocusTrainingBattle>():null;
             var aura=preview.Stage?preview.Stage.GetComponentInChildren<CharacterEquipmentAura>():null;
-            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{selected=EventSystem.current&&EventSystem.current.currentSelectedGameObject?EventSystem.current.currentSelectedGameObject.name:"",keyboard=keyboardNavigation,feedback=FeedbackSnapshot(),auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
+            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{ackCount=ackCount,lastAck=lastAck,lastAccepted=lastAccepted,sentCommands=sentCommands,snapshots=snapshots,connections=connections,selected=EventSystem.current&&EventSystem.current.currentSelectedGameObject?EventSystem.current.currentSelectedGameObject.name:"",keyboard=keyboardNavigation,feedback=FeedbackSnapshot(),auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
+            string request = Path.Combine(directory,"pipe-command.request");
+            var command = CompanionProtocol.Read<CompanionCommand>(request);
+            if (command != null) { File.Delete(request); SendCommand(command); }
             string input=Path.Combine(directory,"companion-ui.request");
             if(File.Exists(input)){
                 string action=File.ReadAllText(input).Trim();File.Delete(input);
