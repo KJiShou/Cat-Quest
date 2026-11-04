@@ -16,7 +16,7 @@ public sealed partial class TaskService
             ((v.task.title ?? "") + " " + v.task.description).IndexOf(value.Trim(), StringComparison.OrdinalIgnoreCase) >= 0).ToList();
         if (scope == "id" && !string.IsNullOrWhiteSpace(value)) return rows.Where(v => v.task.id == value).ToList();
         if (scope == "date" && TryDate(value, out var date))
-            return rows.Where(v => v.task.daily ? TryDate(v.task.date, out var start) && start.Date <= date.Date :
+            return rows.Where(v => v.task.daily ? TaskRepeat.Matches(v.task, date) :
                 v.task.scheduled && v.task.date == DateKey(date)).ToList();
         throw new ArgumentException("Specify today, a date, a task name or a task ID.");
     }

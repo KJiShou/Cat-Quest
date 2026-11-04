@@ -13,6 +13,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
     public Button listMode, calendarMode, previous, next, today, monthButton, add, filter, clear, noDateButton;
     public Sprite selectedViewSprite, neutralButtonSprite, todayButtonSprite;
     public TMP_Text monthLabel, noDateLabel, filterLabel;
+    public TMP_Text noDateCount;
     public TMP_InputField search;
     public Toggle showCompleted;
     public GameObject listHeader, listBody;
@@ -38,7 +39,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
     TaskCalendarResult result;
     TaskListViewport drawerRows;
     DateTime boundMonth, boundToday;
-    int boundVersion = -1, boundSlots = -1;
+    int boundVersion = -1, boundCellHeight = -1;
     TaskDifficulty? boundDifficulty;
     string boundSearch;
     bool boundCompleted;
@@ -47,7 +48,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
     readonly HashSet<string> tags = new HashSet<string>();
     CalendarTaskItem selected;
     bool noDate, initialized, refreshing;
-    int slots = -1;
+    int cellHeight = -1;
     Vector2 lastSize;
     float savedScroll = 1;
     RectTransform editRect;
@@ -125,14 +126,19 @@ public sealed class TaskCalendarUI : MonoBehaviour
             today.image.color = isToday ? Color.white : new Color32(220,239,255,255);
             previous.interactable = Month.Year > 1 || Month.Month > 1;
             next.interactable = Month.Year < 9999 || Month.Month < 12;
-            noDateLabel.text = "No Date · " + result.noDate.Count;
+            noDateCount.text = result.noDate.Count.ToString();
+            float badgeWidth = Mathf.Max(26, noDateCount.GetPreferredValues(noDateCount.text).x + 12);
+            var badge = (RectTransform)noDateCount.transform.parent;
+            badge.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, badgeWidth);
+            noDateLabel.rectTransform.offsetMax = new Vector2(-badgeWidth - 16, noDateLabel.rectTransform.offsetMax.y);
+            noDateButton.GetComponent<LayoutElement>().preferredWidth = Mathf.Max(155, noDateLabel.preferredWidth + badgeWidth + 32);
             filterLabel.text = "Filter" + (difficulty.HasValue || tags.Count > 0 ? " · On" : "");
             clear.gameObject.SetActive(HasFilters);
-            if (changed || boundSlots != slots) {
-                boundSlots = slots;
+            if (changed || boundCellHeight != cellHeight) {
+                boundCellHeight = cellHeight;
                 int i = 0;
                 foreach (var day in result.days.Values) {
-                    days[i].gameObject.SetActive(true); days[i++].Bind(this, day.date, day, Month.Month, Math.Max(0, slots));
+                    days[i].gameObject.SetActive(true); days[i++].Bind(this, day.date, day, Month.Month, cellHeight);
                 }
                 for (; i < days.Length; i++) days[i].gameObject.SetActive(false);
             } else {
@@ -285,7 +291,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
     public void FollowSaved(QuestTask task, string id)
     {
         selected = null;
-        if (task.daily) SelectedDate = Service.LocalNow.Date > Date(task.date) ? Service.LocalNow.Date : Date(task.date);
+        if (task.daily) SelectedDate = TaskRepeat.Next(task, Service.LocalNow) ?? Date(task.date);
         else if (task.scheduled) SelectedDate = Date(task.date);
         noDate = !task.daily && !task.scheduled;
         Month = new DateTime(SelectedDate.Year, SelectedDate.Month, 1); Refresh();
@@ -321,8 +327,8 @@ public sealed class TaskCalendarUI : MonoBehaviour
         if ((size - lastSize).sqrMagnitude < .1f) return;
         lastSize = size;
         gridLayout.cellSize = new Vector2(Mathf.Max(1, (size.x - 12) / 7), Mathf.Max(1, (size.y - 10) / 6));
-        int newSlots = Mathf.Clamp(Mathf.FloorToInt((gridLayout.cellSize.y - 85) / 23), 0, 3);
-        if (newSlots != slots) { slots = newSlots; Refresh(); }
+        int newHeight = Mathf.FloorToInt(gridLayout.cellSize.y);
+        if (newHeight != cellHeight) { cellHeight = newHeight; Refresh(); }
     }
     void Update()
     {

@@ -12,6 +12,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public GameObject settingsPage, tagsPage, tagEditorPage, accountPage, confirmPage;
     public GameObject aiPage;
     public Button aiButton, aiBack;
+    public Button importBackup, exportBackup;
     public Toggle notifications, upload;
     public Slider sound, music;
     public Button soundMute, musicMute;
@@ -60,6 +61,8 @@ public sealed class SettingsPanelUI : MonoBehaviour
         account = AccountController.EnsureInstance();
         audioPlayer = SettingsAudio.EnsureInstance();
         close.onClick.AddListener(Close);
+        importBackup.onClick.AddListener(() => TransferBackup(false));
+        exportBackup.onClick.AddListener(() => TransferBackup(true));
         accountButton.onClick.AddListener(OpenAccount);
         if (aiButton) aiButton.onClick.AddListener(OpenAI);
         if (aiBack) aiBack.onClick.AddListener(BackToSettings);
@@ -282,6 +285,24 @@ public sealed class SettingsPanelUI : MonoBehaviour
         soundValue.text = sound.value <= 0 ? "Muted" : Mathf.RoundToInt(sound.value * 100) + "%";
         musicValue.text = music.value <= 0 ? "Muted" : Mathf.RoundToInt(music.value * 100) + "%";
     }
+    void TransferBackup(bool export)
+    {
+        try
+        {
+            if (!export && GameDataManager.Instance.TryGetComponent<FocusRunner>(out var runner) && runner.Controller.Phase == FocusPhase.Resting)
+                throw new InvalidOperationException("Finish Rest before importing a backup.");
+            if (!export && account.State.busy) throw new InvalidOperationException("Wait for the account operation to finish.");
+            string path = SaveFileDialog.Pick(export);
+            if (string.IsNullOrEmpty(path) || (!export && !SaveFileDialog.ConfirmImport(path))) return;
+            soundCommit.Flush(); musicCommit.Flush();
+            service.TransferBackup(path, export);
+            if (!export) { RefreshSettings(); audioPlayer.ApplySaved(); }
+            settingsStatus.color = settingsInk;
+            settingsStatus.text = export ? "Backup exported." : "Backup imported. Previous progress backed up.";
+        }
+        catch (Exception e) { settingsStatus.color = TaskUIBuilder.Overdue; settingsStatus.text = e.Message; }
+    }
+
     void SaveSettings()
     {
         soundCommit.Clear(); musicCommit.Clear();

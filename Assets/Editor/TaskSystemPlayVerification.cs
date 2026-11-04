@@ -124,7 +124,7 @@ public static class TaskSystemPlayVerification
                 Check(system.detailsRoot.gameObject.activeSelf,"Selecting a task did not open details.");
                 Check(system.detailsRoot.Find("ScrollRect/Content/Title/GameObject/Title").GetComponent<TMP_Text>().text=="UI integration task","Original info panel not populated.");
                 TaskUIBuilder.Find(system.detailsRoot,"Edit Button").GetComponentInChildren<Button>().onClick.Invoke(); var form=system.editor;
-                Check(form.gameObject.activeSelf && form.scheduleToggle.isOn,"Today add defaults failed.");
+                Check(form.gameObject.activeSelf && form.datePicker.HasDate,"Today add defaults failed.");
                 form.taskTitle.text="UI integration task";
                 Check(!form.timePicker.gameObject.activeSelf && !form.timePicker.overlay.activeSelf,"Date-only schedule still exposes time selection.");
                 form.datePicker.LoadValue(system.Service.LocalNow);
@@ -185,7 +185,7 @@ public static class TaskSystemPlayVerification
                 system.SelectTab(TaskTab.Daily); // Switching tabs submits using the originating defaults.
                 dailyId=system.Service.Snapshot.tasks.First(t=>t.daily).id; system.SelectTask(dailyId);
                 TaskUIBuilder.Find(system.detailsRoot,"Edit Button").GetComponentInChildren<Button>().onClick.Invoke();
-                Check(form.dailyToggle.isOn && form.scheduleToggle.isOn,"Daily add defaults failed.");
+                Check(form.dailyToggle.isOn && form.datePicker.HasDate,"Daily add defaults failed.");
                 form.taskTitle.text="UI daily task"; form.difficulty.value=(int)TaskDifficulty.Hard; system.SaveDraft(); dailyId=system.Service.Snapshot.tasks.First(t=>t.daily).id;
                 system.CompleteSelected(dailyId); system.CompleteSelected(dailyId);
                 Check(system.Service.Snapshot.fishCoins==25 && system.Service.Snapshot.history.Count==2,"Daily completion paid twice or wrong reward.");

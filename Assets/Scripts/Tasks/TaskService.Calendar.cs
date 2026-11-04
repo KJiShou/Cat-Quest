@@ -70,8 +70,7 @@ public sealed partial class TaskService
                 if (!view.Completed) Add(view, CalendarTaskKind.Task, task.scheduled && TryDate(task.date, out var due) ? due : (DateTime?)null);
                 continue;
             }
-            if (!TryDate(task.date, out var start)) continue;
-            foreach (var date in result.days.Keys.Where(d => d >= today && d >= start))
+            foreach (var date in result.days.Keys.Where(d => d >= today && TaskRepeat.Matches(task, d)))
             {
                 var view = Live(task, DateKey(date));
                 // Completed rows use the immutable receipt below, including today's Daily.

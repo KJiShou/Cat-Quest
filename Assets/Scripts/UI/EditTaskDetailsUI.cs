@@ -28,8 +28,12 @@ public class EditTaskDetailsUI : MonoBehaviour
     // Retained binding to the inactive authored control; schedules now use dates only.
     public TaskTimePicker timePicker;
     public TaskDatePicker datePicker;
+    public TMP_Dropdown repeatChoice, repeatUnit;
+    public TMP_InputField repeatInterval, repeatUntil;
+    public TMP_Dropdown repeatDays;
+    public GameObject customRepeatEndRow;
+    public GameObject customRepeatRow;
     public Toggle dailyToggle;
-    public Toggle scheduleToggle;
     private string editingId;
     private bool initialized;
     private readonly Dictionary<GameObject, string> rowIds = new Dictionary<GameObject, string>();
@@ -37,6 +41,7 @@ public class EditTaskDetailsUI : MonoBehaviour
     private readonly HashSet<string> selectedTagIds = new HashSet<string>();
     private List<QuestTag> tagCatalog = new List<QuestTag>();
 
+    private string weekdayLabel;
     private int legacyMinuteOfDay;
     private Coroutine pendingSubtaskScroll;
     private LayoutElement tagSelectionSize;
@@ -44,6 +49,8 @@ public class EditTaskDetailsUI : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (repeatDays.gameObject.activeInHierarchy && weekdayLabel != null && repeatDays.captionText.text != weekdayLabel)
+            repeatDays.captionText.text = weekdayLabel;
         if (submittedSubtask)
         {
             var submitted = submittedSubtask; submittedSubtask = null;
@@ -79,16 +86,56 @@ public class EditTaskDetailsUI : MonoBehaviour
         foreach (Transform row in subtaskContent) BindRemove(row.gameObject);
         RefreshTags();
         UpdateCount(description.text);
-        dailyToggle.onValueChanged.AddListener(_ => UpdateSchedule());
-        scheduleToggle.onValueChanged.AddListener(_ => UpdateSchedule());
+        dailyToggle.onValueChanged.AddListener(enabled => {
+            repeatChoice.SetValueWithoutNotify(enabled ? 1 : 0);
+            UpdateSchedule();
+        });
+        repeatChoice.onValueChanged.AddListener(choice => {
+            dailyToggle.SetIsOnWithoutNotify(choice != 0);
+            UpdateSchedule();
+        });
+        repeatDays.gameObject.AddComponent<TaskTagSelection>().BindMask(repeatDays);
+        repeatDays.onValueChanged.AddListener(UpdateWeekdayLabel);
+        repeatUnit.onValueChanged.AddListener(_ => UpdateSchedule());
+        datePicker.DateSelected += UpdateRepeatLabels;
+        datePicker.DateCleared += () =>
+        {
+            repeatChoice.SetValueWithoutNotify(0);
+            dailyToggle.SetIsOnWithoutNotify(false);
+            UpdateSchedule();
+        };
     }
 
     private void UpdateSchedule()
     {
-        if (dailyToggle.isOn) scheduleToggle.SetIsOnWithoutNotify(true);
-        scheduleToggle.interactable = !dailyToggle.isOn;
-        datePicker.dateButton.interactable = scheduleToggle.isOn;
-        datePicker.dateLabel.text = scheduleToggle.isOn ? datePicker.SelectedDate.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture) : "No schedule";
+        customRepeatRow.SetActive(repeatChoice.value == 6);
+        customRepeatEndRow.SetActive(customRepeatRow.activeSelf);
+        repeatDays.gameObject.SetActive(customRepeatRow.activeSelf && repeatUnit.value == (int)RepeatUnit.Weeks);
+        if (dailyToggle.isOn && !datePicker.HasDate) datePicker.LoadValue(datePicker.SelectedDate);
+        datePicker.noDateLabel.text = dailyToggle.isOn ? "No date · Turn off repeat" : "No date";
+    }
+
+    static readonly RepeatUnit[] Presets = { RepeatUnit.Days, RepeatUnit.Days, RepeatUnit.Weeks,
+        RepeatUnit.MonthlyWeekday, RepeatUnit.Years, RepeatUnit.Weekdays };
+
+    void UpdateWeekdayLabel(int mask)
+    {
+        var names = new List<string>();
+        for (int day = 0; day < 7; day++)
+            if ((mask & (1 << day)) != 0) names.Add(repeatDays.options[day].text);
+        weekdayLabel = names.Count == 0 ? "Select days" : names.Count == 7 ? "All days" : string.Join(", ", names);
+    }
+
+    void UpdateRepeatLabels(System.DateTime start)
+    {
+        var labels = new List<string> { "Does not repeat" };
+        for (int i = 1; i < Presets.Length; i++) labels.Add(TaskRepeat.Label(Presets[i], 1, start));
+        labels.Add("Custom repeat...");
+        int selected = repeatChoice.value;
+        repeatChoice.ClearOptions();
+        repeatChoice.AddOptions(labels);
+        repeatChoice.SetValueWithoutNotify(selected);
+        repeatChoice.RefreshShownValue();
     }
 
     public void LoadDraft(QuestTask task, List<QuestTag> tags, IEnumerable<string> completed)
@@ -98,8 +145,16 @@ public class EditTaskDetailsUI : MonoBehaviour
         selectedTagIds.UnionWith(task.tagIds);
         taskTitle.SetTextWithoutNotify(task.title ?? ""); description.SetTextWithoutNotify(task.description ?? ""); UpdateCount(description.text);
         difficulty.SetValueWithoutNotify((int)task.difficulty); UpdateDifficulty((int)task.difficulty);
-        dailyToggle.SetIsOnWithoutNotify(task.daily); scheduleToggle.SetIsOnWithoutNotify(task.scheduled || task.daily);
-        datePicker.LoadValue(TaskService.TryDate(task.date, out var date) ? date : System.DateTime.Today);
+        dailyToggle.SetIsOnWithoutNotify(task.daily);
+        datePicker.LoadValue(TaskService.TryDate(task.date, out var date) ? date : System.DateTime.Today, task.scheduled || task.daily);
+        UpdateRepeatLabels(datePicker.SelectedDate);
+        int preset = System.Array.IndexOf(Presets, task.repeatUnit, 1);
+        repeatChoice.SetValueWithoutNotify(!task.daily ? 0 : task.repeatInterval > 1 || task.repeatWeekdays != 0 || !string.IsNullOrEmpty(task.repeatUntil) || preset < 0 ? 6 : preset);
+        repeatUnit.SetValueWithoutNotify((int)task.repeatUnit < 4 ? (int)task.repeatUnit : 0);
+        repeatInterval.SetTextWithoutNotify(System.Math.Max(1, task.repeatInterval).ToString());
+        repeatDays.SetValueWithoutNotify(task.repeatWeekdays != 0 ? task.repeatWeekdays : 1 << (((int)datePicker.SelectedDate.DayOfWeek + 6) % 7));
+        UpdateWeekdayLabel(repeatDays.value);
+        repeatUntil.SetTextWithoutNotify(task.repeatUntil ?? "");
         legacyMinuteOfDay = task.minuteOfDay;
         UpdateSchedule();
         LoadTagCatalog(tags);
@@ -113,8 +168,17 @@ public class EditTaskDetailsUI : MonoBehaviour
     {
         completed = new List<string>();
         var task = new QuestTask { id = editingId, title = taskTitle.text, description = description.text,
-            difficulty = (TaskDifficulty)difficulty.value, daily = dailyToggle.isOn, scheduled = scheduleToggle.isOn,
+            difficulty = (TaskDifficulty)difficulty.value, daily = dailyToggle.isOn, scheduled = datePicker.HasDate,
             date = TaskService.DateKey(datePicker.SelectedDate), minuteOfDay = legacyMinuteOfDay };
+        if (task.daily)
+        {
+            bool custom = repeatChoice.value == 6;
+            task.repeatUnit = custom ? (RepeatUnit)repeatUnit.value : Presets[repeatChoice.value];
+            if (custom && task.repeatUnit == RepeatUnit.Weeks)
+                task.repeatWeekdays = repeatDays.value == 0 ? -1 : repeatDays.value;
+            if (custom) task.repeatUntil = repeatUntil.text.Trim();
+            task.repeatInterval = custom ? (int.TryParse(repeatInterval.text, out int n) && n > 0 ? n : -1) : 1;
+        }
         foreach (Transform row in subtaskContent)
         {
             if (!row.gameObject.activeSelf) continue;

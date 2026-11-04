@@ -182,8 +182,15 @@ public static class TaskCalendarPlayVerification
                 Contained(viewport,ScreenBounds(calendar.grid),"Grid outside viewport");
                 Check(calendar.days.Count(d=>d.gameObject.activeInHierarchy)==42,"Expected six-week grid");
                 foreach(var day in calendar.days)Contained(ScreenBounds(calendar.grid),ScreenBounds((RectTransform)day.transform),"Day outside grid");
-                Readable((TMPro.TMP_Text)calendar.search.placeholder);Readable(calendar.noDateLabel);
+                Readable((TMPro.TMP_Text)calendar.search.placeholder);Readable(calendar.noDateLabel); Readable(calendar.noDateCount);
+                Check(calendar.noDateCount.text=="1" && !Overlap(ScreenBounds(calendar.noDateLabel.rectTransform), ScreenBounds(calendar.noDateCount.rectTransform)), "No Date badge count or spacing incorrect");
                 foreach(var day in calendar.days)foreach(var caption in day.taskLabels.Where(t=>t.gameObject.activeInHierarchy))Readable(caption);
+                var todayCell = calendar.days.Single(d => d.Date == now);
+                var futureCells = calendar.days.Where(d => d.Date > now);
+                Readable(todayCell.dailyCount);
+                Check(todayCell.dailyCount.text=="0/1" && futureCells.All(d => d.dailyCount.text=="1"), "Daily count/progress badges incorrect");
+                Contained(ScreenBounds((RectTransform)todayCell.dailyButton.transform),ScreenBounds(todayCell.dailyCount.rectTransform),"Daily badge outside footer");
+                Check(!Overlap(ScreenBounds(todayCell.dailyLabel.rectTransform),ScreenBounds(todayCell.dailyCount.rectTransform)),"Daily badge overlaps caption");
                 capture.Begin(Path.GetFullPath(Folder+"/month-"+context+".png"));yield return .2;
                 var todayArtwork=calendar.today.image.sprite;
                 Click(calendar.next);yield return .2;
@@ -201,7 +208,7 @@ public static class TaskCalendarPlayVerification
                 capture.Begin(Path.GetFullPath(Folder+"/details-"+context+".png"));yield return .2;
                 calendar.Back();yield return .2;Click(calendar.drawerAdd);yield return .5;
                 Check(owner.IsEditing&&owner.editor.gameObject.activeInHierarchy,"Calendar draft missing");
-                Check(owner.editor.datePicker.SelectedDate==now&&owner.editor.scheduleToggle.isOn,"Calendar draft date not inherited");
+                Check(owner.editor.datePicker.SelectedDate==now&&owner.editor.datePicker.HasDate,"Calendar draft date not inherited");
                 Contained(viewport,ScreenBounds((RectTransform)owner.editor.transform),"Editor outside viewport");
                 capture.Begin(Path.GetFullPath(Folder+"/edit-"+context+".png"));yield return .2;
                 Click(owner.editor.datePicker.dateButton);yield return .2;
@@ -211,9 +218,14 @@ public static class TaskCalendarPlayVerification
                 owner.CancelDraft();calendar.CloseDrawer();
             }
         }
+        context="daily badge click";
+        Click(calendar.days.Single(d => d.Date==now).dailyButton,new Vector2(.92f,.5f));
+        yield return .2;
+        Check(calendar.DrawerOpen && calendar.SelectedDate==now,"Daily badge did not open its day");
+        calendar.CloseDrawer();
         context="no-date creation";
-        calendar.OpenNoDate();yield return .2;Click(calendar.drawerAdd);yield return .2;
-        Check(!owner.editor.scheduleToggle.isOn,"No Date creation unexpectedly scheduled");owner.CancelDraft();calendar.CloseDrawer();
+        Click(calendar.noDateButton,new Vector2(.87f,.5f));yield return .2;Click(calendar.drawerAdd);yield return .2;
+        Check(!owner.editor.datePicker.HasDate,"No Date creation unexpectedly scheduled");owner.CancelDraft();calendar.CloseDrawer();
         context="date jump";
         Click(calendar.monthButton);yield return .3;
         Check(calendar.jumpPicker.overlay.activeInHierarchy,"Date jump did not open");
@@ -248,7 +260,9 @@ public static class TaskCalendarPlayVerification
         owner.CompleteForDate(daily,TaskService.DateKey(now.AddDays(-1)));
         Check(owner.HasTaskModal&&!owner.Service.Snapshot.history.Any(h=>h.taskId==daily&&!h.revoked),"Stale daily command settled a new day");
         ((TaskConfirmDialog)typeof(TaskSystemUI).GetField("confirmation",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(owner)).Dismiss();
-        calendar.search.text="no such task";yield return .2;calendar.SelectDate(now);yield return .2;
+        calendar.search.text="no such task";yield return .2;
+        Check(calendar.noDateCount.text=="0" && calendar.noDateCount.gameObject.activeInHierarchy, "Filtered zero badge missing");
+        capture.Begin(Path.GetFullPath(Folder+"/no-date-zero.png"));yield return .2;calendar.SelectDate(now);yield return .2;
         Check(calendar.emptyLabel.gameObject.activeInHierarchy&&calendar.emptyLabel.text.Contains("matching"),"Filtered empty state missing");
         calendar.ClearFilters();calendar.CloseDrawer();
         var motion = new GameObject("Calendar motion capture").AddComponent<CalendarMotionCapture>();motion.Begin(Folder+"/motion");

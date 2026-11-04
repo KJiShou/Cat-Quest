@@ -15,6 +15,22 @@ public class TaskTagSelection : MonoBehaviour
     private Transform configuredList;
     private readonly List<string> colors = new List<string>();
     private Sprite swatchSprite;
+    private TMP_Dropdown maskDropdown;
+
+    // TMP adds None and All before the individual options in a multi-select popup.
+    public void BindMask(TMP_Dropdown dropdown) => maskDropdown = dropdown;
+
+    private void RefreshMask()
+    {
+        int all = (1 << maskDropdown.options.Count) - 1;
+        int mask = maskDropdown.value;
+        for (int i = 0; i < items.Count; i++)
+        {
+            bool on = i == 0 ? mask == 0 : i == 1 ? mask == all : (mask & (1 << (i - 2))) != 0;
+            items[i].SetIsOnWithoutNotify(on);
+            if (items[i].graphic) items[i].graphic.CrossFadeAlpha(on ? 1 : 0, 0, true);
+        }
+    }
 
     public void SetColors(IEnumerable<string> values, Sprite sprite)
     {
@@ -78,6 +94,18 @@ public class TaskTagSelection : MonoBehaviour
             }
             toggle.group = null;
             toggle.onValueChanged.RemoveAllListeners();
+            if (maskDropdown)
+            {
+                toggle.onValueChanged.AddListener(on =>
+                {
+                    int bit = index >= 2 ? 1 << (index - 2) : 0;
+                    if (index == 0) maskDropdown.value = 0;
+                    else if (index == 1) maskDropdown.value = (1 << maskDropdown.options.Count) - 1;
+                    else maskDropdown.value = on ? maskDropdown.value | bit : maskDropdown.value & ~bit;
+                    RefreshMask();
+                });
+                continue;
+            }
             toggle.SetIsOnWithoutNotify(selected.Contains(index));
             if (toggle.graphic) toggle.graphic.CrossFadeAlpha(selected.Contains(index) ? 1 : 0, 0, true);
             toggle.onValueChanged.AddListener(isOn =>
@@ -86,5 +114,6 @@ public class TaskTagSelection : MonoBehaviour
                 SelectionChanged?.Invoke(index, isOn);
             });
         }
+        if (maskDropdown) RefreshMask();
     }
 }

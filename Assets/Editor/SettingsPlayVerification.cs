@@ -68,7 +68,7 @@ public static class SettingsPlayVerification
         {
             SessionState.SetBool(Flag + ".enteredPlay", true);
             evidence.Clear(); checks.Clear(); loggedError = null;
-            run = SessionState.GetBool(Flag + ".mute", false) ? RunMute() : SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
+            run = SessionState.GetBool(Flag + ".backupRepeat", false) ? RunBackupRepeat() : SessionState.GetBool(Flag + ".mute", false) ? RunMute() : SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
         }
         if (state == PlayModeStateChange.EnteredEditMode)
         {
@@ -107,13 +107,14 @@ public static class SettingsPlayVerification
                 else
                 {
                     Check(evidence.All(path => File.Exists(path) && new FileInfo(path).Length > 100), "A requested screenshot is missing or empty.");
-                    Finish(SessionState.GetBool(Flag + ".mute", false) ? "PASS: Sound/Music mute, unmute, independent channels, reopen, keyboard submit, rapid repeated clicks, immediate persistence/reload at both resolutions." : SessionState.GetBool(Flag + ".appUpdates", false) ? "PASS: App Update bindings, state views, modal dismissal/focus, download continuity, button motion/reset at 1920x1080 and 1280x720. Network/install are verified separately." : SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
+                    Finish(SessionState.GetBool(Flag + ".backupRepeat", false) ? "PASS: backup actions and custom repeat editor at both resolutions." : SessionState.GetBool(Flag + ".mute", false) ? "PASS: Sound/Music mute, unmute, independent channels, reopen, keyboard submit, rapid repeated clicks, immediate persistence/reload at both resolutions." : SessionState.GetBool(Flag + ".appUpdates", false) ? "PASS: App Update bindings, state views, modal dismissal/focus, download continuity, button motion/reset at 1920x1080 and 1280x720. Network/install are verified separately." : SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
                 }
             }
             catch (Exception e) { Finish("FAIL at " + context + ": " + e); }
             return;
         }
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists(Request)) return;
+        SessionState.SetBool(Flag + ".backupRepeat", File.ReadAllText(Request).Trim() == "backup-repeat");
         SessionState.SetBool(Flag + ".mute", File.ReadAllText(Request).Trim() == "mute");
         SessionState.SetBool(Flag + ".taskDates", File.ReadAllText(Request).Trim().StartsWith("task-dates"));
         SessionState.SetBool(Flag + ".appUpdates", File.ReadAllText(Request).Trim() == "app-updates");
@@ -328,6 +329,66 @@ public static class SettingsPlayVerification
     }
     static void Reset(JuicyButton feedback, string reason) => Check(Vector2.Distance(feedback.DrawScale, Vector2.one) < .005f && Mathf.Abs(feedback.DrawOffset) < .1f, reason);
 
+
+    static IEnumerator RunBackupRepeat()
+    {
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>().Skip();
+        var manager = GameDataManager.EnsureInstance();
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.json"), "Expected isolated save");
+        var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
+        var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
+        foreach (var size in new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720) })
+        {
+            string suffix = size.x + "x" + size.y;
+            Resolution(size); nav.ShowPage(MainMenuPage.Dashboard); yield return 1;
+            Click(launcher.GetComponent<Button>()); yield return .3;
+            var ui = UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();
+            Layout(ui, size);
+            foreach (var button in new[] { ui.importBackup, ui.exportBackup })
+                Check(Hit(Bounds((RectTransform)button.transform).center) == button.gameObject, "Backup action blocked");
+            Capture("backup-" + suffix); yield return .3;
+            ui.Close(); nav.ShowPage(MainMenuPage.Tasks); yield return .5;
+            var editor = nav.taskSystem.editor;
+            editor.gameObject.SetActive(true);
+            editor.LoadDraft(new QuestTask { title = "Review notes", daily = true, date = "2026-11-04" }, manager.Tasks.TagCatalog, Array.Empty<string>());
+            yield return .3; Click(editor.repeatChoice); yield return .3;
+            Check(editor.repeatChoice.IsExpanded, "Repeat menu did not open");
+            Capture("repeat-options-" + suffix); yield return .3;
+            editor.repeatChoice.Hide(); editor.repeatChoice.value = 6; yield return .3;
+            editor.repeatInterval.text = "2"; editor.repeatUnit.value = 1; yield return .3;
+            Click(editor.repeatDays); yield return .3;
+            var list = editor.repeatDays.transform.Find("Dropdown List");
+            var weekdays = list.GetComponentsInChildren<Toggle>(false);
+            Click(weekdays[1]); yield return .25;
+            Check(editor.repeatDays.value == 127 && editor.repeatDays.IsExpanded, "Select all closed the weekday menu");
+            Click(weekdays[0]); Click(weekdays[2]); Click(weekdays[3]); Click(weekdays[4]); Click(weekdays[3]); yield return .25;
+            Check(editor.repeatDays.value == 5 && list && editor.repeatDays.IsExpanded && weekdays[2].isOn && !weekdays[3].isOn && weekdays[4].isOn,
+                "Consecutive weekday clicks must update the same open list");
+            Capture("repeat-weekdays-open-" + suffix); yield return .3;
+            ExecuteEvents.Execute(weekdays[4].gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.cancelHandler);
+            yield return .3;
+            Check(!editor.repeatDays.IsExpanded, "Cancel did not dismiss the weekday list");
+            editor.repeatUntil.text = "2026-12-31";
+            var draft = editor.ReadDraft(out var done);
+            Check(draft.repeatWeekdays == 5 && draft.repeatUntil == "2026-12-31", "Custom weekdays or end date lost");
+            Check(draft.daily && draft.repeatUnit == RepeatUnit.Weeks && draft.repeatInterval == 2, "Custom rule draft mismatch");
+            Check(manager.Tasks.Upsert(draft, done, out _), "Custom rule save failed");
+            yield return .2;
+            Check(Hit(Bounds((RectTransform)editor.repeatUntil.transform).center) == editor.repeatUntil.gameObject, "End date input is blocked or collapsed");
+            Check(editor.repeatDays.captionText.text == "Mon, Wed", "Selected weekdays missing from caption");
+            Capture("repeat-custom-" + suffix); yield return .3;
+            Click(editor.datePicker.dateButton); yield return .25;
+            Capture("date-picker-clear-" + suffix); yield return .25;
+            Click(editor.datePicker.noDate); yield return .25;
+            var undated = editor.ReadDraft(out _);
+            Check(!undated.scheduled && !undated.daily && editor.repeatChoice.value == 0 && !editor.datePicker.overlay.activeSelf,
+                "Clearing the date must clear recurrence in the draft");
+            Click(editor.datePicker.dateButton); yield return .2;
+            Click(editor.datePicker.days[12]); yield return .2;
+            Check(editor.ReadDraft(out _).scheduled && !editor.dailyToggle.isOn, "Selecting a date must schedule the one-time draft");
+            editor.gameObject.SetActive(false);
+        }
+    }
 
     static IEnumerator RunQuickUX()
     {

@@ -14,6 +14,10 @@ public class TaskDatePicker : MonoBehaviour
     public Button previousMonth;
     public Button nextMonth;
     public Button dismiss;
+    public Button noDate;
+    public TMP_Text noDateLabel;
+    public bool HasDate { get; private set; } = true;
+    public event Action DateCleared;
     public Button[] days;
     public int year = 2024;
     public int month = 8;
@@ -25,15 +29,24 @@ public class TaskDatePicker : MonoBehaviour
     private readonly Color ink = new Color32(20, 45, 77, 255);
 
     public DateTime SelectedDate => new DateTime(year, month, day);
-    public void LoadValue(DateTime value)
+    public void LoadValue(DateTime value, bool hasDate = true)
     {
         year = value.Year; month = value.Month; day = value.Day;
-        dateLabel.text = SelectedDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+        HasDate = hasDate;
+        RefreshLabel();
     }
 
     private void Awake()
     {
         dateButton.onClick.AddListener(Open);
+        if (noDate) noDate.onClick.AddListener(() =>
+        {
+            HasDate = false;
+            RefreshLabel();
+            overlay.SetActive(false);
+            dateButton.Select();
+            DateCleared?.Invoke();
+        });
         dismiss.onClick.AddListener(() => overlay.SetActive(false));
         (dismiss.GetComponent<JuicyButton>()??dismiss.gameObject.AddComponent<JuicyButton>()).enabled=false;
         previousMonth.onClick.AddListener(() => ChangeMonth(-1));
@@ -43,8 +56,10 @@ public class TaskDatePicker : MonoBehaviour
             int index = i;
             days[i].onClick.AddListener(() => SelectDate(firstGridDay.AddDays(index)));
         }
-        dateLabel.text = SelectedDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+        RefreshLabel();
     }
+
+    void RefreshLabel() => dateLabel.text = HasDate ? SelectedDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture) : "No date";
 
     public void Open()
     {
@@ -88,7 +103,7 @@ public class TaskDatePicker : MonoBehaviour
             var date = firstGridDay.AddDays(i);
             var label = days[i].GetComponentInChildren<TMP_Text>();
             label.text = date.Day.ToString();
-            bool selected = date == SelectedDate;
+            bool selected = HasDate && date == SelectedDate;
             days[i].GetComponent<Image>().color = selected ? new Color32(0, 156, 246, 255) : new Color32(244, 248, 255, 255);
             label.color = selected ? Color.white : date.Month == displayedMonth.Month ? ink : new Color32(167, 182, 200, 255);
         }
@@ -96,9 +111,9 @@ public class TaskDatePicker : MonoBehaviour
 
     private void SelectDate(DateTime date)
     {
-        year = date.Year; month = date.Month; day = date.Day;
-        dateLabel.text = date.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+        LoadValue(date);
         overlay.SetActive(false);
+        dateButton.Select();
         DateSelected?.Invoke(date);
     }
 

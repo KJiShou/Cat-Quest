@@ -104,7 +104,7 @@ public sealed partial class TaskService
         if (changed) Changed?.Invoke();
         return true;
     }
-    public bool Eligible(QuestTask task) => !task.daily || (TryDate(task.date, out var start) && start.Date <= clock.LocalNow.Date);
+    public bool Eligible(QuestTask task) => !task.daily || TaskRepeat.Matches(task, LocalNow);
     public bool IsOverdue(TaskView view)
     {
         if (view.IsHistory || view.Completed || !view.task.scheduled || !Eligible(view.task)) return false;
@@ -170,21 +170,28 @@ public sealed partial class TaskService
             if (task.description.Length > 500) throw new ArgumentException("Description must be 500 characters or fewer.");
             if (task.subtasks.Any(s => s.title.Length > 150)) throw new ArgumentException("Subtask titles must be 150 characters or fewer.");
             if (!Enum.IsDefined(typeof(TaskDifficulty), task.difficulty)) throw new ArgumentException("Choose a valid difficulty.");
-            if (task.daily) task.scheduled = true;
+            if (task.daily)
+            {
+                task.scheduled = true;
+                if (!TaskRepeat.ValidRule(task))
+                    throw new ArgumentException("Use an interval of 1–999, select repeat days, and leave the end date blank or enter YYYY-MM-DD on or after the start.");
+            }
             if (task.scheduled && !TryDate(task.date, out _)) throw new ArgumentException("Choose a valid schedule date.");
             task.tagIds = task.tagIds.Distinct().Where(tagId => data.tags.Any(t => t.id == tagId)).ToList();
             var old = data.tasks.FirstOrDefault(t => t.id == id);
             if (old != null)
             {
-                var previous = GetOccurrence(data, old, Today);
-                if (!old.daily && previous.completed) throw new ArgumentException("Completed tasks are read-only in History.");
+                var previous = data.occurrences.FirstOrDefault(o => o.taskId == id && o.day == OccurrenceDay(old, Today));
+                if (!old.daily && previous?.completed == true) throw new ArgumentException("Completed tasks are read-only in History.");
                 // A type conversion on the same day carries its progress and reward state.
-                if (old.daily != task.daily)
+                if (old.daily != task.daily && previous != null && (Eligible(task) || previous.rewardGranted))
                 {
                     var converted = GetOccurrence(data, task, Today);
                     converted.completed = previous.completed; converted.rewardGranted = previous.rewardGranted;
                     converted.completedSubtaskIds = new List<string>(previous.completedSubtaskIds);
                 }
+                if (old.daily && !Eligible(task) && previous != null && !previous.rewardGranted && !previous.completed)
+                    data.occurrences.Remove(previous);
                 data.tasks.Remove(old);
             }
             data.tasks.Add(task);
@@ -208,7 +215,7 @@ public sealed partial class TaskService
     public bool SetSubtask(string taskId, string subtaskId, bool isDone) => Commit(data =>
     {
         var task = RequireTask(data, taskId);
-        if (!Eligible(task)) throw new ArgumentException("This daily task has not started yet.");
+        if (!Eligible(task)) throw new ArgumentException("This task is not scheduled for today.");
         if (!task.subtasks.Any(s => s.id == subtaskId)) throw new ArgumentException("Subtask no longer exists.");
         var occurrence = GetOccurrence(data, task, Today);
         if (occurrence.completed) throw new ArgumentException("Completed tasks are read-only.");
@@ -228,7 +235,7 @@ public sealed partial class TaskService
         return Commit(data =>
         {
             var current = RequireTask(data, taskId);
-            if (!Eligible(current)) throw new ArgumentException("This daily task has not started yet.");
+            if (!Eligible(current)) throw new ArgumentException("This task is not scheduled for today.");
             var occurrence = GetOccurrence(data, current, Today);
             if (!confirmIncomplete && current.subtasks.Any(s => !occurrence.completedSubtaskIds.Contains(s.id))) throw new ArgumentException("Confirm completing the remaining subtasks first.");
             occurrence.completed = true;

@@ -15,6 +15,10 @@ Open Settings from the existing gear in the main header. The modal uses the proj
 - Close, Escape and the backdrop return from a subview or close Settings. Closing restores focus to the header gear. Tab/Shift+Tab stay within the active view, and keyboard selection scrolls tag actions into view.
 - Settings use the existing local `catquest-data.json` transaction/backup path through `TaskService.SaveSettings`. New players and older saves without settings receive defaults: notifications on, sound and music `1.0` (100%). Existing saved volumes, including mute, and task/progression data are retained.
 
+## Import and export
+
+**Export** opens the Windows file picker to save a JSON copy of your local tasks, settings and progress. **Import** opens a JSON file and asks before replacing local progress. Cat Quest keeps a separate recovery copy beside the active save named `catquest-data.json.before-import-<id>.json`. You can select that copy with Import to undo a restore. Account ownership, credentials and leaderboard sharing preferences stay on the device. Finish active Focus sessions and battles before transferring a backup, and finish Rest before importing. Backups support up to 4,194,304 JSON characters.
+
 ## Tag Manage
 
 The list shows each tag's color and current task-association count. **New tag** creates a tag. **Edit** changes its name and palette color. Names are trimmed, limited to 1–30 characters and unique ignoring case. The palette starts with the existing pale-green task chip and uses SimpleCasual blue, green, navy, orange and red colors.

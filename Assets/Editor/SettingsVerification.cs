@@ -63,9 +63,43 @@ public static class SettingsVerification
         }
     }
     static void Check(bool condition,string message) { if(!condition)throw new Exception(message); }
+    static void VerifyBackupRepeat(string folder)
+    {
+        string path = Path.GetFullPath(folder + "/repeat-save.json");
+        string backup = Path.GetFullPath(folder + "/export.json");
+        var service = new TaskService(new PlayerDataStore(path), new Clock());
+        var task = new QuestTask { title = "Review", daily = true, date = "2026-10-14", repeatUnit = RepeatUnit.Weeks, repeatInterval = 2 };
+        Check(service.Upsert(task, Array.Empty<string>(), out string id), "Could not save custom repeat");
+        Check(!service.Complete(id) && service.Query(TaskTab.Today).Count == 0, "Off-week allowed completion");
+        var week = service.QueryCalendar(service.LocalNow.Date, service.LocalNow.Date.AddDays(7));
+        Check(week.days.Values.Sum(d => d.items.Count) == 1 && week.days[service.LocalNow.Date.AddDays(7)].items.Count == 1, "Biweekly projection");
+        service.TransferBackup(backup, true);
+        Check(service.Delete(id), "Could not prepare import");
+        service.TransferBackup(backup, false);
+        service.TransferBackup(backup, false);
+        var restored = new PlayerDataStore(path).Data;
+        Check(restored.tasks.Single().id == id && restored.tasks[0].repeatInterval == 2 && restored.fishCoins == 0, "Backup reload duplicated or lost task");
+        Check(Directory.GetFiles(folder, "repeat-save.json.before-import-*.json").Length == 2, "Missing recovery copy");
+        string original = File.ReadAllText(path);
+        File.WriteAllText(backup, "{\"version\":999}");
+        try { service.TransferBackup(backup, false); throw new Exception("Unsupported backup accepted"); }
+        catch (IOException) { Check(File.ReadAllText(path) == original, "Rejected import altered save"); }
+        task.repeatWeekdays = (1 << 0) | (1 << 4);
+        task.repeatUntil = "2026-10-30";
+        Check(!TaskRepeat.Matches(task, new DateTime(2026,10,12)) && TaskRepeat.Matches(task, new DateTime(2026,10,16))
+            && !TaskRepeat.Matches(task, new DateTime(2026,10,23)) && TaskRepeat.Matches(task, new DateTime(2026,10,26))
+            && TaskRepeat.Matches(task, new DateTime(2026,10,30)) && !TaskRepeat.Matches(task, new DateTime(2026,11,9)), "Weekly mask, interval or inclusive end");
+        task.repeatUntil = null; task.repeatWeekdays = 0;
+        task.date = "2024-02-29"; task.repeatUnit = RepeatUnit.Years; task.repeatInterval = 1;
+        Check(!TaskRepeat.Matches(task, new DateTime(2025,2,28)) && TaskRepeat.Matches(task, new DateTime(2028,2,29)), "Leap day recurrence");
+        task.date = "2026-11-04"; task.repeatUnit = RepeatUnit.MonthlyWeekday;
+        Check(TaskRepeat.Matches(task, new DateTime(2026,12,2)) && !TaskRepeat.Matches(task, new DateTime(2026,12,9)), "Ordinal weekday recurrence");
+    }
+
     public static void Run(string folder)
     {
         VerifyDateGroups();
+        VerifyBackupRepeat(folder);
         var old=JsonUtility.FromJson<PlayerData>("{\"version\":5,\"username\":\"Settings test\",\"fishCoins\":31}"); PlayerDataStore.Normalize(old);
         Check(old.settings.notificationsEnabled && old.settings.soundVolume==1f && old.settings.musicVolume==1f && old.fishCoins==31,"Legacy setting defaults or unrelated data changed");
         Check(new AppSettings().musicVolume == 1f && new AppSettings().soundVolume == 1f, "New players must start with full music and SFX volume");

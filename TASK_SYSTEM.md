@@ -4,6 +4,12 @@
 
 Open `Assets/Scenes/CharacterHome.unity` for the main UI, or start through `CatQuestBootstrap.unity` for onboarding. Existing player names and progress are retained. The sidebar provides Dashboard, Tasks, Chat, Focus, Boss, Cat Home and Leaderboard. Later features are implemented, not placeholder containers. Feature gates are described in [Tutorial](TUTORIAL_SYSTEM.md).
 
+## Repeat schedules
+
+In the task editor, open the repeat menu beside Schedule. Choose Daily, weekly on the start weekday, monthly on that weekday's position in the month, yearly on the start date, or weekdays. **Does not repeat** creates a one-time task. **Custom repeat** accepts an interval of 1–999 days, weeks, months or years. Select the days for a weekly interval and optionally enter an inclusive end date. Weekly intervals use Monday as the first day. Monthly dates, fifth weekdays and leap days skip months or years that lack the requested date.
+
+Daily Tasks lists recurring definitions, including upcoming and ended schedules. Today and calendar previews use matching dates. An occurrence can be completed only on a matching local day. Existing Daily Tasks continue to repeat every day.
+
 ## Task views and interaction
 
 | View | Contents |

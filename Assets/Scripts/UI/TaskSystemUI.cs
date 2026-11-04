@@ -314,10 +314,16 @@ public partial class TaskSystemUI : MonoBehaviour
     {
         if(view.IsHistory && DateTime.TryParse(view.history.completedUtc,out var completed)) return "Completed " + completed.ToLocalTime().ToString("d MMM yyyy HH:mm",System.Globalization.CultureInfo.InvariantCulture);
         if(!view.task.scheduled) return "No schedule";
-        string day=view.task.daily && Service.Eligible(view.task) ? TaskService.DateKey(Service.LocalNow) : view.task.date;
-        TaskService.TryDate(day,out var date);
-        string prefix=view.Completed ? "Done today | " : view.task.daily && !Service.Eligible(view.task) ? "Starts " : "";
-        return prefix+date.ToString("d MMM yyyy",System.Globalization.CultureInfo.InvariantCulture);
+        TaskService.TryDate(view.task.date, out var date);
+        string prefix = view.Completed ? "Done today | " : "";
+        if (view.task.daily)
+        {
+            var next = TaskRepeat.Next(view.task, Service.LocalNow);
+            if (!next.HasValue) return "Repeat ended";
+            if (next.Value > Service.LocalNow.Date) prefix = next.Value == date ? "Starts " : "Next ";
+            date = next.Value;
+        }
+        return prefix + date.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
     }
     public void SelectTask(string key) { if(!CommitQuickAdd()) return; SelectedKey=key; editing=false; editor.gameObject.SetActive(false); detailsRoot.gameObject.SetActive(true); Refresh(); }
     private void RenderDetails(TaskView view)

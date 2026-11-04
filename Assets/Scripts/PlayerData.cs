@@ -39,6 +39,10 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
     public string description;
     public TaskDifficulty difficulty = TaskDifficulty.Normal;
     public bool daily;
+    public RepeatUnit repeatUnit;
+    public int repeatInterval;
+    public int repeatWeekdays; // Monday = bit 0. Zero uses the start weekday on legacy weekly rules.
+    public string repeatUntil; // Optional inclusive local date.
     public bool scheduled;
     public string date; // Local yyyy-MM-dd; start date for daily tasks.
     public int minuteOfDay; // Legacy save compatibility; no longer used for scheduling.
