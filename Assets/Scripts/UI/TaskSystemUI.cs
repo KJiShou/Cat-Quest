@@ -26,6 +26,7 @@ public partial class TaskSystemUI : MonoBehaviour
     public GameObject inlineTaskTemplate;
     public GameObject confirmDialogTemplate;
     public TMP_InputField QuickAddInput => quickInput;
+    public bool TutorialOwnsInput { get; set; }
     public bool TutorialBlocked => editing || (confirmation != null && confirmation.Root.activeInHierarchy) || (filters && filters.gameObject.activeInHierarchy);
     public bool TutorialNoticeVisible => resultNotice && resultNotice.gameObject.activeInHierarchy;
     public RectTransform TutorialTaskTarget(string id)
@@ -394,7 +395,7 @@ public partial class TaskSystemUI : MonoBehaviour
         quickInput.onSubmit.RemoveAllListeners(); quickInput.onDeselect.RemoveAllListeners();
         quickInput.onSubmit.AddListener(_=>CommitQuickAdd(true));
         quickInput.onDeselect.AddListener(_=> {
-            if(refocusQuick) return;
+            if(refocusQuick || TutorialOwnsInput) return;
             if(quickInput && quickInput.wasCanceled) CancelQuickAdd();
             else if(!PointerOverAdd()) CommitQuickAdd();
         });
@@ -412,6 +413,9 @@ public partial class TaskSystemUI : MonoBehaviour
     }
     public bool CommitQuickAdd(bool continueAdding=false)
     {
+        // Reviewing guide steps can move keyboard focus or revisit tabs. Only
+        // explicit Enter submits the draft while the tutorial owns input.
+        if(TutorialOwnsInput && !continueAdding) return true;
         if(!quickInput || committingQuick) return true;
         if(string.IsNullOrWhiteSpace(quickInput.text)) {
             if(continueAdding) refocusQuick=true; else CancelQuickAdd(); return true;

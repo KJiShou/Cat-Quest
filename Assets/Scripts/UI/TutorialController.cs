@@ -23,6 +23,7 @@ public sealed class TutorialController : MonoBehaviour
     public StoryDialogueView dialogue;
     public CharacterHomePreview mentor;
     public Button next, later, skip, helpClose; // later is retained only for serialized compatibility; hidden.
+    public Button back;
     public TutorialSpotlight spotlight;
     public Button typingShield;
     public RectTransform pointer;
@@ -62,6 +63,7 @@ public sealed class TutorialController : MonoBehaviour
         privacyTarget = settings.accountPage.GetComponentsInChildren<RectTransform>(true).FirstOrDefault(r => r.name == "Privacy");
         typingShield.onClick.AddListener(CompleteTyping);
         next.onClick.AddListener(Continue); skip.onClick.AddListener(Skip);
+        if(back) back.onClick.AddListener(GoBack);
         if(later) later.gameObject.SetActive(false);
         helpClose.onClick.AddListener(CloseHelp);
         if(helpBackdropButton) helpBackdropButton.onClick.AddListener(CloseHelp);
@@ -77,6 +79,7 @@ public sealed class TutorialController : MonoBehaviour
         if(service != null) service.Changed -= DataChanged;
         if(navigation) { navigation.PageChanged -= PageChanged; navigation.AccessDenied -= LockedNotice; }
         next.onClick.RemoveListener(Continue); skip.onClick.RemoveListener(Skip);
+        if(back) back.onClick.RemoveListener(GoBack);
         helpClose.onClick.RemoveListener(CloseHelp);
         if(helpBackdropButton) helpBackdropButton.onClick.RemoveListener(CloseHelp);
     }
@@ -175,7 +178,10 @@ public sealed class TutorialController : MonoBehaviour
             case 4: anchor = tasks.search.transform as RectTransform;
                 text = "Use Search to find a task by name. The filter button beside it can narrow the list further. If a task is missing from your view, check the tab, search and filters."; break;
             case 5: anchor = tasks.TutorialAddTarget;
-                text = "The + button creates a real task. Choose something small you actually want to do. Click the highlighted + button to open the task name field. This does not save or complete any work."; break;
+                text = progress.taskStep == 3
+                    ? "The + button creates a real task. Your task is already saved, so you can continue reviewing the guide without creating another one."
+                    : tasks.QuickAddInput ? "The task name field is already open. Continue to finish writing and save your task. Saving does not mark the work complete."
+                    : "The + button creates a real task. Choose something small you actually want to do. Click the highlighted + button to open the task name field. This does not save or complete any work."; break;
             case 6:
                 anchor = progress.taskStep == 3 ? tasks.TutorialTaskTarget(progress.taskId) : tasks.TutorialAddTarget;
                 text = progress.taskStep == 3 ? "Your task has been saved. No completion rewards have been granted. Press Continue when you are ready to learn how to mark work complete." : "Write your real task in this field, then press Enter to save it. Continue becomes available after the save succeeds. You can always Skip the guide."; break;
@@ -344,6 +350,32 @@ public sealed class TutorialController : MonoBehaviour
         manualTopic = null; Hide(); snoozed = true;
         settings.Open(gameObject);
     }
+    bool CanGoBack => progress != null && shown != null && (
+        (manualTopic == "settings" && settingsStep > 0)
+        || (shown.StartsWith("task-page-") && progress.taskPageStep > 0)
+        || (shown.StartsWith("focus-step-") && progress.focusStep > 0)
+        || (shown.StartsWith("equipment-step-") && progress.equipmentStep > 0)
+        || (shown.StartsWith("boss-step-") && progress.bossStep > 0)
+        || (shown.StartsWith("leaderboard-step-") && progress.leaderboardStep > 0));
+    public void GoBack()
+    {
+        if(!panel.activeSelf || !CanGoBack) return;
+        // Rewind explanation progress only; keep real tasks, sessions and rewards committed.
+        if(manualTopic == "settings") { settingsStep--; Hide(); ShowSettings(); return; }
+        Action show;
+        if(shown.StartsWith("task-page-")) {
+            if(!Save(p => p.taskPageStep--)) return; show = ShowTasks;
+        } else if(shown.StartsWith("focus-step-")) {
+            if(!Save(p => p.focusStep--)) return; show = ShowFocus;
+        } else if(shown.StartsWith("equipment-step-")) {
+            if(!Save(p => p.equipmentStep--)) return; show = ShowEquipment;
+        } else if(shown.StartsWith("boss-step-")) {
+            if(!Save(p => p.bossStep--)) return; show = ShowBoss;
+        } else {
+            if(!Save(p => p.leaderboardStep--)) return; show = ShowLeaderboard;
+        }
+        Hide(); show();
+    }
     public void Continue()
     {
         if(typing != null) { CompleteTyping(); return; }
@@ -413,6 +445,7 @@ public sealed class TutorialController : MonoBehaviour
     void LockedNotice(string message) { if(!Busy()) Show("locked", message + ". Complete tasks to grow your cat. You can read the guide in Settings > Help.", null, "Got it"); }
     void Show(string key, string text, RectTransform anchor, string button, bool welcome = false)
     {
+        if(tasks && key.StartsWith("task-page-")) tasks.TutorialOwnsInput = true;
         target = anchor;
         if(shown == key && panel.activeSelf) { Position(welcome); return; }
         StopTalking(); shown = key; panel.SetActive(true); panel.transform.SetAsLastSibling();
@@ -435,7 +468,7 @@ public sealed class TutorialController : MonoBehaviour
         card.sizeDelta = new Vector2(width, height);
         bool top = false;
         bool targetInteractive = RequiresTargetClick() || shown == "task-page-4" || (shown == "task-page-6" && progress.taskStep != 3) || (shown != null && (shown == "focus-step-1" || shown == "focus-step-2" || shown == "focus-step-3" || shown == "focus-step-6"));
-        if(spotlight) spotlight.Show(target, targetInteractive && (!IsTyping || shown == "task-page-6"), next, skip);
+        if(spotlight) spotlight.Show(target, targetInteractive && (!IsTyping || shown == "task-page-6"), next, skip, back);
         highlight.gameObject.SetActive(target && target.gameObject.activeInHierarchy);
         if(target && target.gameObject.activeInHierarchy)
         {
@@ -496,7 +529,7 @@ public sealed class TutorialController : MonoBehaviour
         if(shown == "task-page-6") target = progress != null && progress.taskStep == 3 ? tasks.TutorialTaskTarget(progress.taskId) : tasks.TutorialAddTarget;
         Position(shown == "task-0");
     }
-    bool RequiresTargetClick() => shown == "task-open" || shown == "task-page-0" || shown == "task-page-1" || shown == "task-page-2" || shown == "task-page-3" || (shown == "task-page-5" && progress.taskStep != 3) || shown == "task-page-8" || shown == "boss-step-2" || shown == "boss-step-6" || shown == "focus-step-6";
+    bool RequiresTargetClick() => shown == "task-open" || shown == "task-page-0" || shown == "task-page-1" || shown == "task-page-2" || shown == "task-page-3" || (shown == "task-page-5" && progress.taskStep != 3 && !tasks.QuickAddInput) || shown == "task-page-8" || shown == "boss-step-2" || shown == "boss-step-6" || shown == "focus-step-6";
     void Observe(Button button)
     {
         if(observedButton == button) return;
@@ -514,11 +547,23 @@ public sealed class TutorialController : MonoBehaviour
     void RefreshInput()
     {
         if(typingShield) { typingShield.gameObject.SetActive(IsTyping && panel.activeSelf); if(typingShield.gameObject.activeSelf)typingShield.transform.SetAsLastSibling(); }
-        if(RequiresTargetClick()) next.interactable = false;
+        bool waitingForAction = RequiresTargetClick() || (shown == "task-page-6" && progress.taskStep != 3);
+        next.gameObject.SetActive(!waitingForAction);
+        next.interactable = !waitingForAction;
+        if(back) back.gameObject.SetActive(CanGoBack);
+        float x = 28;
+        PositionAction(back,ref x); PositionAction(next,ref x); PositionAction(skip,ref x);
         Observe(RequiresTargetClick() && target ? target.GetComponent<Button>() : null);
+    }
+    static void PositionAction(Button button, ref float x)
+    {
+        if(!button || !button.gameObject.activeSelf) return;
+        var rect=(RectTransform)button.transform;
+        rect.anchoredPosition=new Vector2(x,rect.anchoredPosition.y);
+        x+=rect.rect.width+14;
     }
     public void CompleteTyping() { if(!IsTyping)return; StopTalking();dialogue.Complete();Position(shown == "task-0"); }
     void Idle() { var animator = mentor ? mentor.CharacterAnimator : null; if(animator && animator.isActiveAndEnabled && animator.gameObject.activeInHierarchy && !animator.GetCurrentAnimatorStateInfo(0).IsName("sensei-idle")) animator.Play("sensei-idle", 0, 0); }
     void StopTalking() { SettingsAudio.Instance?.StopDialogue(this); if(typing != null) StopCoroutine(typing); typing = null; Idle(); }
-    void Hide() { Observe(null); queuedAction=null; if(typingShield)typingShield.gameObject.SetActive(false); if(pointer)pointer.gameObject.SetActive(false); if(ownsSettings && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsSettings=false; } if(ownsAccount && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsAccount=false; } if(leaderboard)leaderboard.TutorialOwnsInput=false; if(ownsStagePicker && bossPage) { bossPage.stagePicker.SetActive(false); ownsStagePicker=false; } if(spotlight) spotlight.Dismiss(); if(typing != null || (panel && panel.activeSelf)) StopTalking(); shown = null; target = null; if(panel) panel.SetActive(false); if(highlight) highlight.gameObject.SetActive(false); }
+    void Hide() { Observe(null); queuedAction=null; if(typingShield)typingShield.gameObject.SetActive(false); if(pointer)pointer.gameObject.SetActive(false); if(ownsSettings && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsSettings=false; } if(ownsAccount && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsAccount=false; } if(leaderboard)leaderboard.TutorialOwnsInput=false; if(ownsStagePicker && bossPage) { bossPage.stagePicker.SetActive(false); ownsStagePicker=false; } if(spotlight) spotlight.Dismiss(); if(typing != null || (panel && panel.activeSelf)) StopTalking(); shown = null; target = null; if(panel) panel.SetActive(false); if(highlight) highlight.gameObject.SetActive(false); if(tasks) tasks.TutorialOwnsInput=false; }
 }

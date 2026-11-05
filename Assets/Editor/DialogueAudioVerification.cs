@@ -194,7 +194,29 @@ public static class DialogueAudioVerification
             "Finishing Settings guide returns to Settings without lingering voice");
         tutorial.OpenTopic(5); yield return .2;
         Check(Voice(audio).isPlaying, "Reopening Settings guide restarts voice");
+        tutorial.CompleteTyping();tutorial.Continue();yield return .2;tutorial.GoBack();yield return .2;
+        Check(tutorial.CurrentTopic=="help-settings-0" && !tutorial.back.gameObject.activeSelf && Voice(audio).isPlaying,"Settings Back restores the preceding spoken step and hides at first step");
         tutorial.Skip(); Check(!Voice(audio).clip, "Skipping Settings guide stops voice");
+        GameDataManager.Instance.PlayerData.equipmentUnlocked=true;GameDataManager.Instance.SaveData();
+        tutorial.OpenHelp();tutorial.OpenTopic(2);yield return .2;tutorial.CompleteTyping();tutorial.Continue();yield return .2;
+        if(tutorial.CurrentTopic=="equipment-open") {
+            Check(Voice(audio).isPlaying,"Equipment navigation explanation has a voice");
+            tutorial.CompleteTyping();tutorial.Continue();yield return .2;
+        }
+        for(int step=0;step<7;step++) {
+            Check(tutorial.CurrentTopic=="equipment-step-"+step,"Equipment audio step "+step);
+            var line=DialogueAudioLibrary.Find(tutorial.dialogue.body.text,false);
+            Check(line!=null && Voice(audio).clip==Resources.Load<AudioClip>(line.clip) && Voice(audio).isPlaying && Voice(audio).pitch==1f,"Equipment step "+step+" plays approved mentor voice");
+            if(step==1) {
+                tutorial.GoBack();yield return .2;
+                var previous=DialogueAudioLibrary.Find(tutorial.dialogue.body.text,false);
+                Check(tutorial.CurrentTopic=="equipment-step-0" && previous!=null && Voice(audio).clip==Resources.Load<AudioClip>(previous.clip),"Back replaces the current voice with the previous line");
+                tutorial.CompleteTyping();tutorial.Continue();yield return .2;
+            }
+            tutorial.CompleteTyping();Check(!Voice(audio).clip,"Equipment typing skip stops voice");
+            tutorial.Continue();yield return .2;
+        }
+        Check(!tutorial.panel.activeSelf && !Voice(audio).clip,"Equipment completion releases dialogue voice");
         Check(audio.PlayDialogue(tutorial, "Uncatalogued future text", false) == 0 && !Voice(audio).clip, "Unknown text remains silent and clears previous voice");
     }
 }

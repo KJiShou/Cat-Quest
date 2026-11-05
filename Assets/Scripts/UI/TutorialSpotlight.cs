@@ -10,7 +10,7 @@ using UnityEngine.UI;
 public sealed class TutorialSpotlight : MaskableGraphic
 {
     RectTransform target;
-    Button next, skip;
+    Button next, skip, back;
     bool allowTarget;
     Rect hole;
     bool hasHole;
@@ -20,14 +20,14 @@ public sealed class TutorialSpotlight : MaskableGraphic
     readonly Dictionary<Selectable, Navigation> navigation = new Dictionary<Selectable, Navigation>();
     readonly Vector3[] corners = new Vector3[4];
 
-    public void Show(RectTransform anchor, bool interactive, Button continueButton, Button skipButton)
+    public void Show(RectTransform anchor, bool interactive, Button continueButton, Button skipButton, Button backButton)
     {
-        bool changed = target != anchor || allowTarget != interactive || next != continueButton;
+        bool changed = target != anchor || allowTarget != interactive || next != continueButton || skip != skipButton || back != backButton;
         if(!gameObject.activeSelf) {
             previousSelection = EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
             gameObject.SetActive(true); changed = true;
         }
-        target = anchor; allowTarget = interactive; next = continueButton; skip = skipButton;
+        target = anchor; allowTarget = interactive; next = continueButton; skip = skipButton; back = backButton;
         if(changed) RebuildControls();
         UpdateHole();
     }
@@ -41,7 +41,7 @@ public sealed class TutorialSpotlight : MaskableGraphic
     {
         RestoreNavigation();
         if(allowTarget && target) controls.AddRange(target.GetComponentsInChildren<Selectable>(false));
-        if(next) controls.Add(next); if(skip) controls.Add(skip);
+        if(back) controls.Add(back); if(next) controls.Add(next); if(skip) controls.Add(skip);
         foreach(var control in controls) if(control && !navigation.ContainsKey(control)) navigation.Add(control,control.navigation);
     }
     void Update()

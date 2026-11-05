@@ -494,15 +494,6 @@
     },
     {
       "role": "mentor",
-      "text": "Your first Daily Reward has opened equipment management. Collect equipment through Boss mastery, then equip it in Cat Home. An empty inventory is normal at first.",
-      "spoken": "Your first Daily Reward has opened equipment management. Collect equipment through Boss mastery, then equip it in Cat Home. An empty inventory is normal at first.",
-      "clip": "DialogueAudio/mentor-c562d3325af634d52d7a",
-      "duration": 11.329395833333333,
-      "peak": 0.6406446099281311,
-      "sha256": "59dca9981dffee3e3e86faca60ebee3d25e363538f8eaa7033a41dbd969b9490"
-    },
-    {
-      "role": "mentor",
       "text": "A Daily Reward is ready. Use Claim on the completed goal to collect it. Your first claim also opens equipment management.",
       "spoken": "A Daily Reward is ready. Use Claim on the completed goal to collect it. Your first claim also opens equipment management.",
       "clip": "DialogueAudio/mentor-aafd3ef4b604352c672f",
@@ -554,6 +545,24 @@
       "duration": 11.26175,
       "peak": 0.6444791555404663,
       "sha256": "3c037edb9a99b893e08f944337d25f304fffaed41157d86b5f61f5f7af3c146b"
+    },
+    {
+      "role": "mentor",
+      "text": "The + button creates a real task. Your task is already saved, so you can continue reviewing the guide without creating another one.",
+      "spoken": "The + button creates a real task. Your task is already saved, so you can continue reviewing the guide without creating another one.",
+      "clip": "DialogueAudio/mentor-81688f53060c1d421292",
+      "duration": 8.716166666666666,
+      "peak": 0.634970486164093,
+      "sha256": "5c6f8cec06a9cfdd9c56bb5381aa93c262dcde8c44d4e459a8a728f679142587"
+    },
+    {
+      "role": "mentor",
+      "text": "The task name field is already open. Continue to finish writing and save your task. Saving does not mark the work complete.",
+      "spoken": "The task name field is already open. Continue to finish writing and save your task. Saving does not mark the work complete.",
+      "clip": "DialogueAudio/mentor-5c8664bb6d11c2e93ce0",
+      "duration": 8.567645833333334,
+      "peak": 0.6452172994613647,
+      "sha256": "8bdf02159d64fbf065875ea761b27a0afd1628c183ff6c12266281a6930a7d04"
     },
     {
       "role": "mentor",
@@ -701,6 +710,87 @@
     },
     {
       "role": "mentor",
+      "text": "Claim a completed Daily Reward goal on the Dashboard to unlock equipment management. Equipment comes from Boss mastery, not from opening this guide. Keep completing real tasks and Focus sessions to grow your cat.",
+      "spoken": "Claim a completed Daily Reward goal on the Dashboard to unlock equipment management. Equipment comes from Boss mastery, not from opening this guide. Keep completing real tasks and Focus sessions to grow your cat.",
+      "clip": "DialogueAudio/mentor-140a31000cae2c138819",
+      "duration": 14.454395833333333,
+      "peak": 0.6546356678009033,
+      "sha256": "3870574fe92574422445cfb51de2436f7e6031ab6ba866f31c5d1057a5d726f1"
+    },
+    {
+      "role": "mentor",
+      "text": "Equipment management is open! Cat Home is where you review, equip and upgrade your gear. Press Continue to visit it. I will explain each part without spending your Fish Coins or changing your equipment.",
+      "spoken": "Equipment management is open! Cat Home is where you review, equip and upgrade your gear. Press Continue to visit it. I will explain each part without spending your Fish Coins or changing your equipment.",
+      "clip": "DialogueAudio/mentor-f49e1e5592ba1e003e97",
+      "duration": 13.7588125,
+      "peak": 0.6994970440864563,
+      "sha256": "0d6ee540274fb07a4e662c48dd2d12b0f6d2f1e8fd11f6bbeddb370c274c69fa"
+    },
+    {
+      "role": "mentor",
+      "text": "This Backpack holds equipment you have collected. An empty Backpack is normal at first. Each normal Boss has its own mastery: wins 5, 10 and 15 each let you claim one unowned piece from that Boss's set in the stage selector.",
+      "spoken": "This Backpack holds equipment you have collected. An empty Backpack is normal at first. Each normal Boss has its own mastery: wins 5, 10 and 15 each let you claim one unowned piece from that Boss's set in the stage selector.",
+      "clip": "DialogueAudio/mentor-246272988512e612ab62",
+      "duration": 15.2396875,
+      "peak": 0.6491656303405762,
+      "sha256": "2b6f7815eea9b525265333af66b02f6a0b47a9b055a1e8abae73fe755336bda1"
+    },
+    {
+      "role": "mentor",
+      "text": "Your cat has three equipment slots. A Weapon improves ATK, Body Armour improves DEF, and a Head Accessory improves attack speed. You can wear one item in each slot. Empty slots mean you have not equipped an item there yet.",
+      "spoken": "Your cat has three equipment slots. A Weapon improves ATK, Body Armour improves DEF, and a Head Accessory improves attack speed. You can wear one item in each slot. Empty slots mean you have not equipped an item there yet.",
+      "clip": "DialogueAudio/mentor-8949d40e3c4149d8f53a",
+      "duration": 15.082333333333333,
+      "peak": 0.6463567018508911,
+      "sha256": "c685091aa449310ce87d846610cd8ce3b045608bbb2cacf8a532cd549820827c"
+    },
+    {
+      "role": "mentor",
+      "text": "Use the Backpack categories to view all equipment or only Head, Weapon or Body items. A category can be empty even when you own other gear. Return to All to see everything you have collected.",
+      "spoken": "Use the Backpack categories to view all equipment or only Head, Weapon or Body items. A category can be empty even when you own other gear. Return to All to see everything you have collected.",
+      "clip": "DialogueAudio/mentor-06abed92950df990b255",
+      "duration": 12.66175,
+      "peak": 0.6419550776481628,
+      "sha256": "f20edadbb1f1f356803fdb2d3eb3f848c97b7b2581cbd8d53f1d920781324cb5"
+    },
+    {
+      "role": "mentor",
+      "text": "After this guide, select an owned item to inspect its stats and set information. Equip puts it in its matching slot, replacing the item worn there. Unequip returns it to the Backpack; it does not delete the item.",
+      "spoken": "After this guide, select an owned item to inspect its stats and set information. Equip puts it in its matching slot, replacing the item worn there. Unequip returns it to the Backpack; it does not delete the item.",
+      "clip": "DialogueAudio/mentor-04bd1ad0fd40b38b570a",
+      "duration": 14.782333333333334,
+      "peak": 0.6545763611793518,
+      "sha256": "9e6e7975b852a184e4e99f5deb0a9bc29251f5c77a039d4b217c5f328672b5db"
+    },
+    {
+      "role": "mentor",
+      "text": "An item's details show its current effect, next-level effect and upgrade cost in Fish Coins. Upgrading improves that item, but its level cannot exceed your Cat Level. Earn EXP from real work to raise that limit, and check the cost before confirming.",
+      "spoken": "An item's details show its current effect, next-level effect and upgrade cost in Fish Coins. Upgrading improves that item, but its level cannot exceed your Cat Level. Earn EXP from real work to raise that limit, and check the cost before confirming.",
+      "clip": "DialogueAudio/mentor-9c0e5a3b189aa91abb91",
+      "duration": 17.097041666666666,
+      "peak": 0.6548390984535217,
+      "sha256": "a69ff62564ce8c0a71521a64a3c1c4e7c9f29f6869304ee23c403f0c40f06e49"
+    },
+    {
+      "role": "mentor",
+      "text": "Auto Select compares combinations of your owned gear and equips the one with the highest calculated Power. It does not buy or upgrade anything. Use it after the guide for a quick loadout, or choose your own items individually.",
+      "spoken": "Auto Select compares combinations of your owned gear and equips the one with the highest calculated Power. It does not buy or upgrade anything. Use it after the guide for a quick loadout, or choose your own items individually.",
+      "clip": "DialogueAudio/mentor-2adbca1eebf8677002c2",
+      "duration": 14.891166666666667,
+      "peak": 0.6340143084526062,
+      "sha256": "5d311d837676d28a4a5c4f9e14d66cf71fcf808cc644af572400dcc5458d207a"
+    },
+    {
+      "role": "mentor",
+      "text": "Equipped pieces from the same Boss set contribute to its set bonuses. Review the set information when choosing gear. You are ready to explore! If your Backpack is empty, keep growing your cat and claim earned Boss mastery rewards when available.",
+      "spoken": "Equipped pieces from the same Boss set contribute to its set bonuses. Review the set information when choosing gear. You are ready to explore! If your Backpack is empty, keep growing your cat and claim earned Boss mastery rewards when available.",
+      "clip": "DialogueAudio/mentor-947be366ea88dc0f4be1",
+      "duration": 16.51175,
+      "peak": 0.7760049700737,
+      "sha256": "dfbe59792f1b8e1de1e4e8d3108d47d27487e4806205cc50c8224dd04811e25c"
+    },
+    {
+      "role": "mentor",
       "text": "Boss battles unlock at Lv.5. Focus can earn tickets. Confirming entry spends one ticket. Later bosses also require previous victories and higher levels.",
       "spoken": "Boss battles unlock at Lv.5. Focus can earn tickets. Confirming entry spends one ticket. Later bosses also require previous victories and higher levels.",
       "clip": "DialogueAudio/mentor-643f93a1456448c3186f",
@@ -818,33 +908,6 @@
     },
     {
       "role": "mentor",
-      "text": "Unlocks at Lv.2. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
-      "spoken": "Unlocks at Lv.2. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
-      "clip": "DialogueAudio/mentor-02c67f06f6dfd7691b90",
-      "duration": 6.6941041666666665,
-      "peak": 0.6354296207427979,
-      "sha256": "f0cebb58dd7c438f8fd55c04e28b627f2d538923d1c049886d0780553c4aee9a"
-    },
-    {
-      "role": "mentor",
-      "text": "Unlocks at Lv.5. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
-      "spoken": "Unlocks at Lv.5. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
-      "clip": "DialogueAudio/mentor-3c5da45c544ca94d9095",
-      "duration": 6.695583333333333,
-      "peak": 0.6416071653366089,
-      "sha256": "ac0b58eec5d63fc065a665d30b2b5d090bb15765c5414eb77ec04fd51e9fc825"
-    },
-    {
-      "role": "mentor",
-      "text": "{error} Your tasks are safe. Try again.",
-      "spoken": "Unable to save. Your tasks are safe. Try again.",
-      "clip": "DialogueAudio/mentor-e4bf244ea0243e8e0447",
-      "duration": 3.6073333333333335,
-      "peak": 0.6327375769615173,
-      "sha256": "c874420bc7fdd3a08fd3a538d2e870609d9ede16ad5fce8a75f28aa971017ec3"
-    },
-    {
-      "role": "mentor",
       "text": "Focus notifications let you know when Focus or Rest finishes. This switch controls those reminders. The guide leaves your current choice unchanged.",
       "spoken": "Focus notifications let you know when Focus or Rest finishes. This switch controls those reminders. The guide leaves your current choice unchanged.",
       "clip": "DialogueAudio/mentor-45d35fcab3955f95260b",
@@ -923,6 +986,33 @@
       "duration": 10.029395833333334,
       "peak": 0.6393880248069763,
       "sha256": "fa7db7ac3f10076f4f5a77ff576a98d32055cce3dc208ad98dcf51a6f323a03d"
+    },
+    {
+      "role": "mentor",
+      "text": "Unlocks at Lv.2. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
+      "spoken": "Unlocks at Lv.2. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
+      "clip": "DialogueAudio/mentor-02c67f06f6dfd7691b90",
+      "duration": 6.6941041666666665,
+      "peak": 0.6354296207427979,
+      "sha256": "f0cebb58dd7c438f8fd55c04e28b627f2d538923d1c049886d0780553c4aee9a"
+    },
+    {
+      "role": "mentor",
+      "text": "Unlocks at Lv.5. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
+      "spoken": "Unlocks at Lv.5. Complete tasks to grow your cat. You can read the guide in Settings > Help.",
+      "clip": "DialogueAudio/mentor-3c5da45c544ca94d9095",
+      "duration": 6.695583333333333,
+      "peak": 0.6416071653366089,
+      "sha256": "ac0b58eec5d63fc065a665d30b2b5d090bb15765c5414eb77ec04fd51e9fc825"
+    },
+    {
+      "role": "mentor",
+      "text": "{error} Your tasks are safe. Try again.",
+      "spoken": "Unable to save. Your tasks are safe. Try again.",
+      "clip": "DialogueAudio/mentor-e4bf244ea0243e8e0447",
+      "duration": 3.6073333333333335,
+      "peak": 0.6327375769615173,
+      "sha256": "c874420bc7fdd3a08fd3a538d2e870609d9ede16ad5fce8a75f28aa971017ec3"
     }
   ]
 }

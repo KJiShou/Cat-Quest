@@ -12,6 +12,8 @@ public sealed class CatQuestBootstrap : MonoBehaviour
         else
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            // Override a fullscreen mode remembered by an earlier Windows build.
+            Screen.fullScreenMode = FullScreenMode.Windowed;
             Application.targetFrameRate = Application.isFocused ? 60 : 30;
 #endif
             AppUpdateController.Ensure();

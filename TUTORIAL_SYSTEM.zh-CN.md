@@ -10,7 +10,7 @@ Tasks 从 Lv.1 可用，Focus 在 Lv.2，Boss 和 Leaderboard 在 Lv.5，所有�
 
 新玩家跟随 Master Loke 创建真实任务，保存才推进，教学不会标记工作完成或发奖，首次真实奖励解释实际收据。升级后开放 Focus、Boss 和排行榜介绍，解锁提示等候奖励升级表现，不未经选择导航。每日奖励和装备解释观察真实条件。
 
-教学只用 Skip 和 Continue，Skip 停止自动教学但不绕过锁。Settings > Tutorial 可看主题和开始恢复 Tasks，锁主题只解释不打开功能。旧存档不自动重放已解锁介绍。
+教学使用 Back、Continue 和 Skip。Back 返回当前指南的上一段说明，第一步隐藏；只改变讲解进度，保留任务草稿、已保存任务、奖励、装备和进行中的会话。等待真实点击目标或任务保存时隐藏 Continue。Skip 停止自动教学但不绕过锁。Settings > Tutorial 可看主题和开始恢复 Tasks，锁主题只解释不打开功能。旧存档不自动重放已解锁介绍。
 
 ## 所有权与静态 UI
 
@@ -21,9 +21,11 @@ Tasks 从 Lv.1 可用，Focus 在 Lv.2，Boss 和 Leaderboard 在 Lv.5，所有�
 - FeatureLockUI 持有锁、提示、卡片表现及锁定控件键盘限制。
 - CharacterHomePreview 为导师提供可选固定构图与动画参数，旧调用者仍默认。
 
-TutorialSpotlight 在目标周围绘制暗罩并阻止其他指针，键盘只在允许目标及 Skip/Continue 内，关闭禁用失焦恢复原选择导航。说明步骤包含完成勾选框时仅高亮，不允许实际操作。创建任务和 Focus 设置启动仅放行对应控制。
+TutorialSpotlight 在目标周围绘制暗罩并阻止其他指针，键盘只在允许目标及可见的 Back/Continue/Skip 内，关闭禁用失焦恢复原选择导航。说明步骤包含完成勾选框时仅高亮，不允许实际操作。创建任务和 Focus 设置启动仅放行对应控制。
 
 打字时透明全屏输入盾接管点击，任意点击只补全当前句，不穿透下面控件。下一句开始时保留任务输入键盘焦点，避免草稿取消。SimpleCasual Tutorial_Focus_Icon_Up 标出可操作目标。任务页签、加号、History、Boss Stage/Challenge 和 Focus Start 都需玩家真实点击，纯说明用 Continue，不强制任务完成。
+
+Tasks 教学接管输入时，切换焦点或回看页签不会保存快速新增草稿，Enter 仍可明确保存，因此 Back 会保留未写完的文字。关闭教学后释放接管，恢复普通的失焦、切页签及离页保存行为。
 
 排行榜教学在已有 Account 上以三次 Continue 解释显示名、参与、隐私。名字、开关、登录、保存只读，不改偏好或认证，只关闭自己打开的 Account，教学时暂停页面竞争键盘导航。leaderboardStep 经原子路径保存。
 
@@ -35,7 +37,7 @@ TutorialSpotlight 在目标周围绘制暗罩并阻止其他指针，键盘只�
 
 **Focus 共七步**：番茄钟目的、模式、专注时长、休息、标签、结束取消、Start。Continue 推进说明，改设置不自动推进，最后需实际点击 Start Focus。进度原子保存，Help 重开序列，讲解结束不启动会话。
 
-**Equipment 共七步**：熟练度和空背包、三槽、筛选、装备卸装、升级成本等级限制、Auto Select、套装。导航说明等 Continue 才进入 Cat Home，全程不启用装备操作或消费。equipmentStep 保存，Help > Rewards 进入并重启该指南，尊重既有已读收据。新文案没有配音时使用原文字揭示回退。
+**Equipment 共七步**：熟练度和空背包、三槽、筛选、装备卸装、升级成本等级限制、Auto Select、套装。Continue 前进，Back 回看上一段。导航说明等 Continue 才进入 Cat Home，全程不启用装备操作或消费。equipmentStep 保存，Help > Rewards 进入并重启该指南，尊重既有已读收据。当前装备台词均已配上批准的离线 Master Loke 语音，返回步骤时通过 SettingsAudio 重播对应音频。
 
 ## 视觉参考
 

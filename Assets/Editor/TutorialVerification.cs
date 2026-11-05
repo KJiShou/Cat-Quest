@@ -127,6 +127,64 @@ public static class TutorialVerification
         ExecuteEvents.ExecuteHierarchy(hit,new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left},ExecuteEvents.pointerClickHandler);
     }
     static void FinishSpeech(TutorialController tutorial) { if(tutorial.IsTyping) Click((RectTransform)tutorial.typingShield.transform); }
+    static IEnumerator BackAndReturn(TutorialController tutorial,string previous,string current,bool targetAdvance=false)
+    {
+        FinishSpeech(tutorial);
+        var service=GameDataManager.Instance.Tasks;var before=service.Snapshot;
+        Check(tutorial.back && tutorial.back.gameObject.activeInHierarchy && tutorial.back.GetComponent<JuicyButton>(),"Back binding/shared feedback missing");
+        Click((RectTransform)tutorial.back.transform);yield return .4;
+        Check(tutorial.CurrentTopic==previous,"Back returned to the wrong step: "+tutorial.CurrentTopic);
+        FinishSpeech(tutorial);
+        var reloaded=new PlayerDataStore(GameDataManager.Instance.SavePath).Data;
+        Check(JsonUtility.ToJson(reloaded.tutorial)==JsonUtility.ToJson(service.Tutorial),"Back progress did not persist");
+        if(targetAdvance)Click(tutorial.CurrentTarget);else tutorial.Continue();yield return .4;FinishSpeech(tutorial);
+        Check(tutorial.CurrentTopic==current,"Forward navigation failed after Back");
+        Check(service.Snapshot.experience==before.experience && service.Snapshot.fishCoins==before.fishCoins
+            && service.Snapshot.tickets==before.tickets && service.Snapshot.tasks.Count==before.tasks.Count
+            && service.Snapshot.battles.Count==before.battles.Count,"Back changed committed work or rewards");
+        VerifyDialogueLayout(tutorial);
+    }
+    static IEnumerator BackFeedback(TutorialController tutorial)
+    {
+        var button=tutorial.back;var rect=(RectTransform)button.transform;
+        var feedback=button.GetComponent<JuicyButton>();var position=rect.anchoredPosition;var size=rect.sizeDelta;
+        var pointer=new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left};
+        Check(button.GetComponents<JuicyButton>().Length==1,"Back has competing feedback owners");
+        EventSystem.current.SetSelectedGameObject(tutorial.skip.gameObject);yield return .2;
+        ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerEnterHandler);yield return .25;
+        Check(feedback.DrawScale.x>1 && feedback.DrawOffset>0,"Back hover feedback missing");
+        Capture("back-hover");yield return .2;
+        ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerDownHandler);yield return .2;
+        Check(feedback.DrawScale.y<1 && feedback.DrawOffset<0,"Back press feedback missing");
+        Capture("back-pressed");yield return .2;
+        ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerUpHandler);
+        ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerExitHandler);yield return .4;
+        Check(Vector2.Distance(feedback.DrawScale,Vector2.one)<.005f,"Back release did not settle");
+        for(int i=0;i<8;i++) {
+            ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerDownHandler);yield return .02;
+            ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerExitHandler);yield return .02;
+        }
+        yield return .4;
+        Check(Vector2.Distance(feedback.DrawScale,Vector2.one)<.005f && rect.anchoredPosition==position && rect.sizeDelta==size,"Repeated Back presses changed layout or accumulated scale");
+        button.interactable=false;yield return .3;
+        Submit(button);yield return .2;
+        Check(tutorial.CurrentTopic=="equipment-step-2" && Vector2.Distance(feedback.DrawScale,Vector2.one)<.005f,"Disabled Back advanced or stayed pressed");
+        Capture("back-disabled");yield return .2;button.interactable=true;
+        ExecuteEvents.Execute(button.gameObject,pointer,ExecuteEvents.pointerDownHandler);
+        feedback.SendMessage("OnApplicationFocus",false);
+        Check(feedback.DrawScale==Vector2.one && feedback.DrawOffset==0,"Back focus-loss reset failed");
+        feedback.enabled=false;feedback.enabled=true;yield return .2;
+        if(keyboard==null)keyboard=InputSystem.AddDevice<Keyboard>();
+        EventSystem.current.SetSelectedGameObject(tutorial.skip.gameObject);
+        Key(UnityEngine.InputSystem.Key.Tab);yield return .15;Key();yield return .15;
+        Check(EventSystem.current.currentSelectedGameObject==button.gameObject,"Tab cannot reach Back");
+        Submit(button);yield return .3;FinishSpeech(tutorial);
+        Check(tutorial.CurrentTopic=="equipment-step-1","Keyboard Back did not return one step");
+        tutorial.GoBack();tutorial.GoBack();yield return .3;FinishSpeech(tutorial);
+        Check(tutorial.CurrentTopic=="equipment-step-0" && !button.gameObject.activeSelf && GameDataManager.Instance.Tasks.Tutorial.equipmentStep==0,"Rapid Back crossed the first-step boundary");
+        tutorial.Continue();yield return .2;FinishSpeech(tutorial);tutorial.Continue();yield return .2;FinishSpeech(tutorial);
+        Check(tutorial.CurrentTopic=="equipment-step-2","Forward navigation failed after repeated Back");
+    }
     static void SpotlightBlocks(TutorialController tutorial, Button unrelated)
     {
         FinishSpeech(tutorial);
@@ -145,12 +203,15 @@ public static class TutorialVerification
     static void VerifyDialogueLayout(TutorialController tutorial)
     {
         var body = Bounds(tutorial.dialogue.body.rectTransform, tutorial.card);
-        foreach(var button in new[]{tutorial.next, tutorial.skip}) {
+        foreach(var button in new[]{tutorial.back, tutorial.next, tutorial.skip}.Where(b=>b && b.gameObject.activeInHierarchy)) {
             var rect = (RectTransform)button.transform;
             Visible(rect);
             Check(!body.Overlaps(Bounds(rect, tutorial.card)), "Tutorial button overlaps talking text");
             Check(rect.anchorMin == Vector2.zero && rect.anchorMax == Vector2.zero, "Tutorial actions are not anchored at lower left");
         }
+        var actions=new[]{tutorial.back,tutorial.next,tutorial.skip}.Where(b=>b && b.gameObject.activeInHierarchy).ToArray();
+        for(int i=0;i<actions.Length;i++)for(int j=i+1;j<actions.Length;j++)
+            Check(!Bounds((RectTransform)actions[i].transform,tutorial.card).Overlaps(Bounds((RectTransform)actions[j].transform,tutorial.card)),"Tutorial actions overlap");
         Visible(tutorial.card);
         Check(!tutorial.dialogue.body.isTextOverflowing, "Tutorial talking text clipped: " + tutorial.CurrentTopic);
     }
@@ -213,6 +274,16 @@ public static class TutorialVerification
             for(int equipmentStep=0;equipmentStep<7;equipmentStep++) {
                 Check(tutorial.CurrentTopic=="equipment-step-"+equipmentStep,"Equipment step missing: "+equipmentStep);
                 FinishSpeech(tutorial);
+                Check(tutorial.back && tutorial.back.gameObject.activeSelf==(equipmentStep>0) && tutorial.next.gameObject.activeSelf,"Equipment navigation visibility");
+                if(equipmentStep==2) {
+                    var reverse=BackAndReturn(tutorial,"equipment-step-1","equipment-step-2");while(reverse.MoveNext())yield return reverse.Current;
+                    var feedback=BackFeedback(tutorial);while(feedback.MoveNext())yield return feedback.Current;
+                    using(var locked=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) {
+                        tutorial.GoBack();Check(tutorial.CurrentTopic=="error" && service.Tutorial.equipmentStep==2,"Failed Back persistence advanced tutorial");
+                    }
+                    tutorial.SendMessage("OnApplicationFocus",false);tutorial.SendMessage("OnApplicationFocus",true);yield return .5;FinishSpeech(tutorial);
+                    Check(tutorial.CurrentTopic=="equipment-step-2","Failed Back could not resume the committed step");
+                }
                 Check(tutorial.CurrentTarget && tutorial.highlight.gameObject.activeInHierarchy,"Equipment target missing");
                 Check(tutorial.highlight.GetComponentsInChildren<Image>().All(i=>i.type==Image.Type.Sliced),"Highlight is not sliced");
                 Check(Hit(tutorial.CurrentTarget)==tutorial.spotlight.gameObject,"Explanation allows equipment mutation");
@@ -221,6 +292,7 @@ public static class TutorialVerification
                     tutorial.dialogue.body.ForceMeshUpdate();
                     Check(!tutorial.dialogue.body.isTextOverflowing,"Equipment text overflow at step "+equipmentStep);
                     Visible(tutorial.card); Capture("equipment-"+equipmentStep+"-"+size.x); yield return .3;
+                    VerifyDialogueLayout(tutorial);
                     if(equipmentStep==2) {
                         var side=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
                         var expand=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(side);
@@ -242,7 +314,7 @@ public static class TutorialVerification
             tutorial.OpenTopic(2); yield return .4; FinishSpeech(tutorial); tutorial.Continue(); yield return .4;
             Check(tutorial.CurrentTopic=="equipment-step-0","Help did not restart equipment guide");
             tutorial.Skip(); Check(!tutorial.spotlight.gameObject.activeSelf,"Skip did not release spotlight");
-            File.WriteAllText(Folder+"/checks.txt","PASS: seven equipment steps, navigation, read-only targets, text bounds at 1920x1080/1280x720/1024x768/2560x1080, sidebar states, saved progress reload, focus loss/resume, completion, Help replay, Skip, unchanged currency/inventory, sliced highlights.");
+            File.WriteAllText(Folder+"/checks.txt","PASS: seven equipment steps, Back pointer/keyboard/rapid boundary navigation, hover/press/release/disabled/focus-reset feedback, failed-save recovery, read-only targets, text bounds at 1920x1080/1280x720/1024x768/2560x1080, sidebar states, saved progress reload, focus loss/resume, completion, Help replay, Skip, unchanged currency/inventory, sliced highlights.");
             yield break;
         }
         if(Before) {
@@ -269,6 +341,7 @@ public static class TutorialVerification
         Check(tutorial.CurrentTopic=="task-open","Missing Tasks navigation explanation");
         FinishSpeech(tutorial);
         Check(!tutorial.next.interactable,"Tasks navigation should require target click");
+        Check(!tutorial.next.gameObject.activeSelf,"Tasks navigation still displays Continue");
         Click((RectTransform)nav.buttons[(int)MainMenuPage.Tasks].transform);yield return 1;
         Check(nav.CurrentPage==MainMenuPage.Tasks,"Target click did not open Tasks");
         Check(service.Tutorial.taskStep==2,"Task navigation not tracked");
@@ -279,6 +352,14 @@ public static class TutorialVerification
             yield return .5;Check(tutorial.CurrentTopic=="task-page-"+stepIndex,"Task guide advanced without Continue");
             Capture("task-step-"+stepIndex);yield return .3;
             SpotlightBlocks(tutorial,nav.buttons[(int)MainMenuPage.Dashboard]);
+            Check(tutorial.back && tutorial.back.gameObject.activeSelf==(stepIndex>0),"Task Back visibility");
+            Check(tutorial.next.gameObject.activeSelf==(stepIndex==4),"Task Continue visibility");
+            if(stepIndex==4) {
+                Click((RectTransform)tutorial.back.transform);yield return .3;FinishSpeech(tutorial);
+                Check(tutorial.CurrentTopic=="task-page-3","Task Back did not return to previous explanation");
+                Click(tutorial.CurrentTarget);yield return .3;FinishSpeech(tutorial);
+                Check(tutorial.CurrentTopic=="task-page-4","Task target did not advance again after Back");
+            }
             if(stepIndex==0) {
                 EventSystem.current.SetSelectedGameObject(nav.buttons[(int)MainMenuPage.Dashboard].gameObject);yield return .3;
                 Check(EventSystem.current.currentSelectedGameObject!=nav.buttons[(int)MainMenuPage.Dashboard].gameObject,"Keyboard escaped spotlight");
@@ -288,10 +369,15 @@ public static class TutorialVerification
         }
         Check(tutorial.tasks.QuickAddInput,"Target click did not open the task name field");
         Check(!tutorial.next.interactable,"Task save step advanced without a real save");
+        Check(!tutorial.next.gameObject.activeSelf,"Task input still displays Continue before saving");
         Capture("task-input");yield return .3;
         var taskInput=tutorial.tasks.QuickAddInput;
         Check(Hit((RectTransform)taskInput.transform)!=tutorial.spotlight.gameObject,"Task name input blocked");
         FinishSpeech(tutorial);
+        taskInput.text="Keep draft";Click((RectTransform)tutorial.back.transform);yield return .3;FinishSpeech(tutorial);
+        Check(tutorial.CurrentTopic=="task-page-5" && tutorial.next.gameObject.activeSelf && taskInput.text=="Keep draft" && service.Snapshot.tasks.Count==0,"Back lost, saved or stranded an open task draft");
+        tutorial.Continue();yield return .3;FinishSpeech(tutorial);
+        Check(tutorial.CurrentTopic=="task-page-6" && !tutorial.next.gameObject.activeSelf,"Returning to input did not hide Continue");
         taskInput.Select();taskInput.ActivateInputField();
         taskInput.text="Read one page";
         keyboard=InputSystem.AddDevice<Keyboard>();Key(UnityEngine.InputSystem.Key.Enter);yield return .15;Key();yield return 1;
@@ -299,6 +385,11 @@ public static class TutorialVerification
         Check(service.Tutorial.taskStep==3&&service.Tutorial.taskPageStep==6&&service.Snapshot.history.Count==0,"Save advanced explanation or fabricated completion");
         for(int wait=0;wait<40 && tutorial.CurrentTopic!="task-page-6-saved";wait++)yield return .25;
         Check(tutorial.CurrentTopic=="task-page-6-saved","Saved-task explanation did not resume");
+        FinishSpeech(tutorial);int savedTaskCount=service.Snapshot.tasks.Count;
+        Click((RectTransform)tutorial.back.transform);yield return .3;FinishSpeech(tutorial);
+        Check(tutorial.CurrentTopic=="task-page-5" && tutorial.next.gameObject.activeSelf,"Saved-task Back requires a duplicate creation");
+        tutorial.Continue();yield return .3;FinishSpeech(tutorial);
+        Check(service.Snapshot.tasks.Count==savedTaskCount && service.Tutorial.taskStep==3 && service.Snapshot.history.Count==0,"Back changed committed task work");
         Capture("task-saved");yield return .3;
         if(tutorial.IsTyping)tutorial.Continue();tutorial.Continue();yield return .5;
         Check(tutorial.CurrentTopic=="task-page-7","Task completion explanation missing");
@@ -314,6 +405,11 @@ public static class TutorialVerification
         Check(tutorial.CurrentTopic=="task-page-8","Task History explanation missing");
         FinishSpeech(tutorial);Click(tutorial.CurrentTarget);yield return .5;
         Check(service.Tutorial.taskStep==4&&service.Snapshot.history.Count==0,"Task guide fabricated completion");
+        Check(!tutorial.tasks.TutorialOwnsInput,"Task guide retained ownership after completion");
+        tutorial.tasks.SelectTab(TaskTab.Today);tutorial.tasks.BeginAdd();yield return .2;
+        tutorial.tasks.QuickAddInput.text="Normal blur save";
+        EventSystem.current.SetSelectedGameObject(nav.buttons[(int)MainMenuPage.Dashboard].gameObject);yield return .4;
+        Check(service.Snapshot.tasks.Any(t=>t.title=="Normal blur save") && !tutorial.tasks.QuickAddInput,"Ordinary task blur save stopped after guide completion");
         tutorial.OpenHelp();yield return .5;Capture("help");yield return .3;
         if(keyboard==null)keyboard=InputSystem.AddDevice<Keyboard>();
         Check(EventSystem.current.currentSelectedGameObject==tutorial.topics[0].gameObject,"Help initial keyboard selection");
@@ -342,6 +438,8 @@ public static class TutorialVerification
             // Voice-synchronised lines can outlast six seconds. Use the real typing-skip control before testing target input.
             FinishSpeech(tutorial);
             Check(!tutorial.dialogue.body.isTextOverflowing,"Focus text overflow at "+stepIndex);
+            Check(tutorial.next.gameObject.activeSelf==(stepIndex!=6) && tutorial.back.gameObject.activeSelf==(stepIndex>0),"Focus navigation visibility");
+            if(stepIndex==1) {var reverse=BackAndReturn(tutorial,"focus-step-0","focus-step-1");while(reverse.MoveNext())yield return reverse.Current;}
             Capture("focus-step-"+stepIndex);yield return .3;
             if(stepIndex==0) {
                 foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)}) {
@@ -373,7 +471,10 @@ public static class TutorialVerification
         var runningFocus=FocusRunner.EnsureInstance().Controller;
         string session=runningFocus.SessionId; double elapsed=runningFocus.ElapsedSeconds;
         Check(nav.ShowPage(MainMenuPage.Boss),"Boss navigation while focusing");yield return 1;
-        Check(tutorial.CurrentTopic=="boss-step-0" && tutorial.panel.activeSelf,"Boss tutorial suppressed during Focus");
+        // As in FocusAccess, the fixture's level change can still be animating.
+        // Keep the guide's existing priority behind reward presentation.
+        for(int wait=0;wait<80 && (!tutorial.panel.activeSelf || tutorial.CurrentTopic!="boss-step-0");wait++)yield return .25;
+        Check(tutorial.CurrentTopic=="boss-step-0" && tutorial.panel.activeSelf,"Boss tutorial suppressed during Focus; topic="+tutorial.CurrentTopic+" rewards="+tutorial.rewards.IsAnimating);
         FinishSpeech(tutorial); VerifyDialogueLayout(tutorial); Capture("boss-during-focus");yield return .3;
         Check(nav.ShowPage(MainMenuPage.Leaderboard),"Leaderboard navigation while focusing");yield return 1;
         Check(tutorial.CurrentTopic=="leaderboard-step-0" && tutorial.panel.activeSelf,"Leaderboard tutorial suppressed during Focus");
@@ -392,7 +493,9 @@ public static class TutorialVerification
             Check(!tutorial.dialogue.body.isTextOverflowing,"Boss text overflow "+stepIndex);
             Capture("boss-step-"+stepIndex);yield return .3;
             SpotlightBlocks(tutorial,nav.buttons[(int)MainMenuPage.Dashboard]);
+            Check(tutorial.next.gameObject.activeSelf==(stepIndex!=2 && stepIndex!=6),"Boss action step displays Continue");
             if(stepIndex==3) {
+                var reverse=BackAndReturn(tutorial,"boss-step-2","boss-step-3",true);while(reverse.MoveNext())yield return reverse.Current;
                 Check(tutorial.bossPage.stagePicker.activeSelf,"Stage explanation did not open selector");
                 tutorial.SendMessage("OnApplicationFocus",false);yield return .2;
                 Check(!tutorial.bossPage.stagePicker.activeSelf,"Guide-owned selector remained after focus loss");
@@ -416,6 +519,7 @@ public static class TutorialVerification
         var accountBefore=JsonUtility.ToJson(service.AccountSettings);
         for(int stepIndex=0;stepIndex<3;stepIndex++) {
             Check(tutorial.CurrentTopic=="leaderboard-step-"+stepIndex,"Leaderboard step order incorrect");
+            if(stepIndex==1) {var reverse=BackAndReturn(tutorial,"leaderboard-step-0","leaderboard-step-1");while(reverse.MoveNext())yield return reverse.Current;}
             string key=tutorial.CurrentTopic;
             if(tutorial.IsTyping) {
                 Click((RectTransform)tutorial.settings.upload.transform);yield return .2;

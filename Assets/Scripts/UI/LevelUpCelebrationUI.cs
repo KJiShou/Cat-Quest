@@ -9,6 +9,7 @@ public sealed class LevelUpCelebrationUI : MonoBehaviour
 {
     public GameObject panel;
     public RectTransform design, badge, rays;
+    public RectTransform footer, footerSource;
     public CanvasGroup fade;
     public TMP_Text level, info, fish, tickets;
     public GameObject ticketCard;
@@ -48,6 +49,13 @@ public sealed class LevelUpCelebrationUI : MonoBehaviour
         var rect=(RectTransform)transform;
         float scale=Mathf.Min(rect.rect.width/2560f,rect.rect.height/1440f);
         design.localScale=Vector3.one*scale;
+        // Keep the reference's lower background aligned to the fitted content,
+        // while extending it to the viewport edges independently of that content.
+        if(footer && footerSource) {
+            var panelRect=(RectTransform)panel.transform;
+            float top=panelRect.InverseTransformPoint(footerSource.TransformPoint(new Vector3(0,footerSource.rect.yMax))).y;
+            footer.sizeDelta=new Vector2(0,Mathf.Max(0,top-panelRect.rect.yMin));
+        }
         if(!showing) {
             if(pending.Count==0 || (rewardFlight && rewardFlight.IsAnimating && Time.unscaledTime-queuedAt<4)) return;
             var reward=pending.Dequeue();
