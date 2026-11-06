@@ -79,6 +79,15 @@ public sealed class AiChatPage : MonoBehaviour
     void Refresh()
     {
         if (!client) return;
+        if (!AppPlatform.WindowsDesktop) {
+            status.text = "AI Chat is available in the Windows desktop version.";
+            status.gameObject.SetActive(true);
+            empty.text = "Create and manage your tasks on the Tasks page.";
+            empty.gameObject.SetActive(true);
+            input.interactable = send.interactable = today.interactable = plan.interactable = clear.interactable = false;
+            stop.gameObject.SetActive(false); retry.gameObject.SetActive(false); thinking.enabled = false;
+            return;
+        }
         if (client.Ready && !client.Busy && client.Connection.Connected && string.IsNullOrEmpty(client.Connection.Model) && !requestedModels) {
             requestedModels=true; client.LoadModels(); return;
         }

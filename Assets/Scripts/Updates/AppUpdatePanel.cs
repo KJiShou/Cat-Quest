@@ -18,6 +18,9 @@ public sealed class AppUpdatePanel : MonoBehaviour
     public bool OwnsInput => IsOpen || dismissedFrame == Time.frameCount;
     void Awake()
     {
+        if (!AppPlatform.WindowsDesktop) {
+            entry.gameObject.SetActive(false); popup.SetActive(false); enabled = false; return;
+        }
         controller = AppUpdateController.Ensure();
         entry.onClick.AddListener(Open);
         primary.onClick.AddListener(Activate);
@@ -27,6 +30,7 @@ public sealed class AppUpdatePanel : MonoBehaviour
     void OnDisable() { if (controller) controller.Changed -= Refresh; if (popup) popup.SetActive(false); if (settingsContent) settingsContent.interactable = settingsContent.blocksRaycasts = true; }
     public void Open()
     {
+        if (!AppPlatform.WindowsDesktop) return;
         popup.SetActive(true); popup.transform.SetAsLastSibling(); settingsContent.interactable = settingsContent.blocksRaycasts = false;
         Refresh(); if (EventSystem.current) EventSystem.current.SetSelectedGameObject(later.gameObject);
         if (controller.State == AppUpdateState.Idle) controller.Check();

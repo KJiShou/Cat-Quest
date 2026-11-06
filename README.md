@@ -10,6 +10,8 @@ Tasks and progress are saved locally. You can create and complete tasks without 
 
 > **Release:** [Download the latest Cat Quest release for Windows x64](https://github.com/KJiShou/Cat-Quest/releases/latest). Extract the entire ZIP and run `CatQuest.exe`, keeping all accompanying files together. This student project remains under active development. This repository contains the Unity source project and is not distributed under an open-source license.
 
+> **Browser edition:** [Play on itch.io](https://kjishou.itch.io/cat-quest) in a desktop browser. It keeps tasks, Focus and local progression, with browser backup export. Pet Widget and other Windows integrations require the Windows app; see the [platform differences](docs/web-release.md).
+
 ![Cat Quest Dashboard showing the cat, task overview and daily rewards](docs/images/dashboard.png)
 
 ## Contents
@@ -302,6 +304,8 @@ The open Editor consumes the request. Check the result's modification time and c
 | [Focus animation](FOCUS_ANIMATION.md) | Presentation during Focus |
 | [Boss battles](BOSS_BATTLE.md) / [Equipment](EQUIPMENT.md) | Combat, progression and loadouts |
 | [AI](AI_IMPLEMENTATION.md) | Chat and confirmed task proposals |
+| [Browser edition / itch.io](docs/web-release.md) | Web build, platform differences, browser saves and upload steps |
+| [Mac local test build (Chinese)](docs/mac-release.zh-CN.md) | Apple Silicon / Mono build without Pet Widget, packaging and Mac smoke checks |
 | [Leaderboard](LEADERBOARD.md) / [Firebase setup](Firebase/SETUP.md) | Optional online ranking and deployment |
 | [Settings](SETTINGS.md) / [Sound](SOUND.md) | Preferences, tags, notifications and audio |
 | [Tutorial](TUTORIAL_SYSTEM.md) / [Cursor](CURSOR_SYSTEM.md) | Onboarding, feature gates and cursor configuration |

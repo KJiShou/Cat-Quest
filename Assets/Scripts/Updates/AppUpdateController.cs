@@ -27,6 +27,7 @@ public sealed class AppUpdateController : MonoBehaviour
     public static AppUpdateController Ensure()
     {
         if (Instance) return Instance;
+        if (!AppPlatform.WindowsDesktop) return null;
         if (CompanionProtocol.HasArgument("--companion")) return null;
         var go = new GameObject("App Updates"); DontDestroyOnLoad(go);
         return go.AddComponent<AppUpdateController>();
@@ -182,6 +183,7 @@ public sealed class AppUpdateController : MonoBehaviour
     }
     public static bool InstallationLocked()
     {
+        if (!AppPlatform.WindowsDesktop) return false;
         string path = Path.Combine(InstallDirectory, UpdateRules.LockName);
         if (!File.Exists(path)) return false;
         try { using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None)) { } return false; }

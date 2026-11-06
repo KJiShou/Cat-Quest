@@ -10,6 +10,8 @@ Cat Quest 是使用 Unity 和 C# 开发的 Windows 桌面效率应用，也是�
 
 > **正式版：** [下载最新版 Cat Quest（Windows x64）](https://github.com/KJiShou/Cat-Quest/releases/latest)。完整解压 ZIP，运行 `CatQuest.exe`，并保留所有附带文件。本学生项目仍在持续开发，仓库提供 Unity 源工程；本项目没有采用开源许可证。
 
+> **网页版：** 使用桌面浏览器[在 itch.io 试玩](https://kjishou.itch.io/cat-quest)。保留任务、Focus 和本地成长，并支持导出浏览器备份。Pet Widget 等 Windows 集成功能需要桌面版，详见[平台差异](docs/web-release.zh-CN.md)。
+
 ![Dashboard 展示猫咪、任务概览与每日奖励](docs/images/dashboard.png)
 
 ## 目录
@@ -302,6 +304,8 @@ Editor 消费请求后，检查结果内容及修改时间，缺失或旧文件�
 | [专注动画](FOCUS_ANIMATION.zh-CN.md) | 训练场景表现 |
 | [Boss 战斗](BOSS_BATTLE.zh-CN.md) / [装备](EQUIPMENT.zh-CN.md) | 战斗、成长及搭配 |
 | [AI](AI_IMPLEMENTATION.zh-CN.md) | 聊天与确认后的任务建议 |
+| [网页试玩版 / itch.io](docs/web-release.zh-CN.md) | Web 构建、平台差异、浏览器存档与上传步骤 |
+| [Mac 本地测试版](docs/mac-release.zh-CN.md) | Apple Silicon / Mono 无 Pet Widget 构建、打包与实机检查 |
 | [排行榜](LEADERBOARD.zh-CN.md) / [Firebase 配置](Firebase/SETUP.zh-CN.md) | 可选在线排名及部署 |
 | [设置](SETTINGS.zh-CN.md) / [声音](SOUND.zh-CN.md) | 偏好、标签、通知及音频 |
 | [教学](TUTORIAL_SYSTEM.zh-CN.md) / [光标](CURSOR_SYSTEM.zh-CN.md) | 新手流程、等级门槛和光标 |

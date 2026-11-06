@@ -14,7 +14,7 @@ public sealed class CompanionHost : MonoBehaviour
     public string DirectoryPath { get; private set; }
     public string OwnerId { get; private set; }
     public bool Enabled { get; private set; }
-    public bool IsUnlocked => GameDataManager.Instance.Tasks.CanAccess(ProgressionFeature.Focus);
+    public bool IsUnlocked => AppPlatform.WindowsDesktop && GameDataManager.Instance.Tasks.CanAccess(ProgressionFeature.Focus);
     FocusController focus;
     Process process;
     CompanionPipe pipe;
@@ -42,12 +42,14 @@ public sealed class CompanionHost : MonoBehaviour
     }
     public void SetEnabled(bool enabled)
     {
+        if (!AppPlatform.WindowsDesktop) { Error = AppPlatform.DesktopMessage; return; }
         if(enabled && !IsUnlocked) { Error=GameDataManager.Instance.Tasks.AccessMessage(ProgressionFeature.Focus); return; }
         Enabled=enabled; PlayerPrefs.SetInt("PetWidgetEnabled",enabled?1:0);
         if(enabled) Open(); else CloseWindow();
     }
     public bool Open()
     {
+        if (!AppPlatform.WindowsDesktop) { Error = AppPlatform.DesktopMessage; return false; }
         if(updateShutdown) return false;
         if(!IsUnlocked) { Error=GameDataManager.Instance.Tasks.AccessMessage(ProgressionFeature.Focus); return false; }
         if(IsOpen) return true;

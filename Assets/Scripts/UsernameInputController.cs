@@ -64,7 +64,13 @@ public class UsernameInputController : MonoBehaviour
             return;
         }
 
-        GameDataManager.Instance.SetUsername(username);
+        try { GameDataManager.Instance.SetUsername(username); }
+        catch (System.IO.IOException error) {
+            if (errorText) errorText.text = AppPlatform.Browser
+                ? "Could not save. Check available browser storage."
+                : error.Message;
+            return;
+        }
 
         usernamePanel.SetActive(false);
         skipButton.SetActive(true);
@@ -78,7 +84,9 @@ public class UsernameInputController : MonoBehaviour
         usernamePanel.SetActive(true);
         skipButton.SetActive(false);
         usernameInput.interactable = false;
-        if (errorText) errorText.text = "Update Cat Quest to open this save.";
+        if (errorText) errorText.text = AppPlatform.Browser
+            ? "Cannot open save. Check storage or app version."
+            : "Update Cat Quest to open this save.";
         return true;
     }
 }

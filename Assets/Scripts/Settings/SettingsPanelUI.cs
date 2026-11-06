@@ -140,7 +140,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     {
         Initialize(); returnFocus = opener; closeAiToOpener = false; closeAccountToOpener = false;
         gameObject.SetActive(true); transform.SetAsLastSibling();
-        RefreshSettings(); Show(settingsPage, "Settings", notifications.gameObject);
+        RefreshSettings(); Show(settingsPage, "Settings", AppPlatform.WindowsDesktop ? notifications.gameObject : sound.gameObject);
     }
     public void Close()
     {
@@ -289,6 +289,18 @@ public sealed class SettingsPanelUI : MonoBehaviour
     {
         try
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            if (!export) throw new InvalidOperationException("Backup import is available in the Windows desktop version.");
+            soundCommit.Flush(); musicCommit.Flush();
+            string temporary = System.IO.Path.Combine(Application.temporaryCachePath, "backup-" + Guid.NewGuid().ToString("N") + ".json");
+            try {
+                service.TransferBackup(temporary, true);
+                BrowserPlayerSave.Download(System.IO.File.ReadAllText(temporary));
+            }
+            finally { if (System.IO.File.Exists(temporary)) System.IO.File.Delete(temporary); }
+            settingsStatus.color = settingsInk;
+            settingsStatus.text = "Backup download requested. Keep the downloaded JSON file.";
+#else
             if (!export && GameDataManager.Instance.TryGetComponent<FocusRunner>(out var runner) && runner.Controller.Phase == FocusPhase.Resting)
                 throw new InvalidOperationException("Finish Rest before importing a backup.");
             if (!export && account.State.busy) throw new InvalidOperationException("Wait for the account operation to finish.");
@@ -299,6 +311,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
             if (!export) { RefreshSettings(); audioPlayer.ApplySaved(); }
             settingsStatus.color = settingsInk;
             settingsStatus.text = export ? "Backup exported." : "Backup imported. Previous progress backed up.";
+#endif
         }
         catch (Exception e) { settingsStatus.color = TaskUIBuilder.Overdue; settingsStatus.text = e.Message; }
     }
@@ -332,7 +345,13 @@ public sealed class SettingsPanelUI : MonoBehaviour
         sound.onValueChanged.Invoke(sound.value); music.onValueChanged.Invoke(music.value);
         refreshing = false;
         soundCommit.Clear(); musicCommit.Clear(); RefreshVolumeLabels();
-        if (clearStatus) settingsStatus.text = "";
+        if (!AppPlatform.WindowsDesktop) {
+            notifications.interactable = importBackup.interactable = false;
+            exportBackup.interactable = AppPlatform.Browser;
+        }
+        if (clearStatus) settingsStatus.text = AppPlatform.Browser
+            ? "Progress is saved in this browser. Export a backup before clearing site data. Desktop notifications and backup import require Windows."
+            : AppPlatform.WindowsDesktop ? "" : AppPlatform.DesktopMessage;
     }
     void OnDataChanged() { if (tagsPage.activeSelf) RefreshTags(); }
     public void OpenTags() { RefreshTags(); Show(tagsPage, "Tags", addTag.gameObject); }

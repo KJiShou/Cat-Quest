@@ -65,6 +65,7 @@ public class GameDataManager : MonoBehaviour
     [ContextMenu("Delete Save Data")]
     public void DeleteSaveData()
     {
+        if (AppPlatform.Browser) throw new System.NotSupportedException("Export a backup before managing this site's data in your browser settings.");
         foreach (string suffix in new[] { "", ".bak", ".tmp" })
             if (File.Exists(SavePath + suffix)) File.Delete(SavePath + suffix);
         store = new PlayerDataStore(SavePath);

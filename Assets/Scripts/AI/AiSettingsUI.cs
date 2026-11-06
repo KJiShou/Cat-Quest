@@ -38,6 +38,16 @@ public sealed class AiSettingsUI : MonoBehaviour
     public void Refresh()
     {
         if (!client) return;
+        if (!AppPlatform.WindowsDesktop) {
+            identity.text = "AI Chat";
+            status.text = AppPlatform.DesktopMessage;
+            status.gameObject.SetActive(true); privacy.gameObject.SetActive(false);
+            connect.interactable = model.interactable = language.interactable = reload.interactable = usage.interactable = false;
+            disconnect.gameObject.SetActive(false); cancel.gameObject.SetActive(false);
+            popup.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, compactHeight + MessageHeight(status));
+            GetComponentInParent<SettingsPanelUI>().RefreshAiNavigation();
+            return;
+        }
         var connection = client.Connection;
         if (checkModelsOnOpen && client.Ready)
         {

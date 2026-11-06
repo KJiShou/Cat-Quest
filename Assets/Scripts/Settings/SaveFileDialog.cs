@@ -6,6 +6,7 @@ using System.Text;
 // The Windows player uses the system picker, including its overwrite prompt.
 internal static class SaveFileDialog
 {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     sealed class OpenFileName
     {
@@ -57,4 +58,8 @@ internal static class SaveFileDialog
         }
         finally { Marshal.FreeHGlobal(buffer); }
     }
+#else
+    public static bool ConfirmImport(string path) => false;
+    public static string Pick(bool export) => throw new PlatformNotSupportedException(AppPlatform.DesktopMessage);
+#endif
 }

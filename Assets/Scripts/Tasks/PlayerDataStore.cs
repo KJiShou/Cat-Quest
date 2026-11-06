@@ -17,9 +17,17 @@ public sealed class PlayerDataStore : IPlayerDataStore
     public string Path { get; }
     public string LoadNotice { get; private set; }
     public string WriteBlockReason { get; private set; }
-    public PlayerDataStore(string path)
+    private readonly BrowserPlayerSave browser;
+    public PlayerDataStore(string path, BrowserPlayerSave browserSave = null)
     {
-        Path = path;
+        Path = path; browser = browserSave;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        try { browser ??= BrowserPlayerSave.Open(); }
+        catch (Exception error) {
+            WriteBlockReason = LoadNotice = error.Message;
+            Data = new PlayerData(); Normalize(Data); return;
+        }
+#endif
         bool primaryValid = TryRead(path, out var loaded, out int primaryVersion);
         bool backupValid = TryRead(path + ".bak", out var backup, out int backupVersion);
         if (Math.Max(primaryVersion, backupVersion) > CurrentVersion)
@@ -38,7 +46,7 @@ public sealed class PlayerDataStore : IPlayerDataStore
         {
             Data = new PlayerData();
             Data.tutorial = new TutorialProgress { version = 1 };
-            if (File.Exists(path)) LoadNotice = "The save and backup could not be read. The original files have been kept.";
+            if (HasPrimary()) LoadNotice = "The save and backup could not be read. The original data has been kept.";
         }
         Normalize(Data);
     }
@@ -47,14 +55,24 @@ public sealed class PlayerDataStore : IPlayerDataStore
         WriteBlockReason = $"This save or backup was created by a newer version of Cat Quest (save version {version}). Open it with that version or a newer one. Saving is disabled; your files have not been changed.";
         LoadNotice = WriteBlockReason;
     }
-    private static bool TryRead(string path, out PlayerData data, out int version)
+    private bool HasPrimary()
+    {
+        return browser != null ? !string.IsNullOrEmpty(browser.Primary) : File.Exists(Path);
+    }
+    private bool TryRead(string path, out PlayerData data, out int version)
     {
         data = null;
         version = 0;
         try
         {
-            if (!File.Exists(path)) return false;
-            string json = File.ReadAllText(path).Trim();
+            string json;
+            if (browser != null) json = path == Path ? browser.Primary : browser.Backup;
+            else {
+                if (!File.Exists(path)) return false;
+                json = File.ReadAllText(path);
+            }
+            if (string.IsNullOrWhiteSpace(json)) return false;
+            json = json.Trim();
             if (!json.StartsWith("{") || !json.EndsWith("}")) return false;
             // Read only the version first: newer field types may not deserialize here.
             version = JsonUtility.FromJson<SaveHeader>(json)?.version ?? 0;
@@ -85,18 +103,23 @@ public sealed class PlayerDataStore : IPlayerDataStore
                 error = "Cannot save data from a newer version of Cat Quest."; return false;
             }
             Normalize(candidate);
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
-            // Preserve the pre-tutorial save once, in addition to the rolling atomic backup.
-            if (valid && candidate.tutorial != null && Data.tutorial == null && !File.Exists(Path + ".before-tutorial.bak"))
-                File.Copy(Path, Path + ".before-tutorial.bak");
-            File.WriteAllText(temporary, JsonUtility.ToJson(candidate, true));
-            // A corrupt primary must never replace the last valid backup.
-            if (File.Exists(Path))
+            if (browser != null)
+                browser.Commit(JsonUtility.ToJson(candidate, true), valid, valid && candidate.tutorial != null && Data.tutorial == null);
+            else
             {
-                if (!valid) File.Copy(Path, Path + ".corrupt." + Guid.NewGuid().ToString("N"));
-                File.Replace(temporary, Path, valid ? Path + ".bak" : null);
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
+                // Preserve the pre-tutorial save once, in addition to the rolling atomic backup.
+                if (valid && candidate.tutorial != null && Data.tutorial == null && !File.Exists(Path + ".before-tutorial.bak"))
+                    File.Copy(Path, Path + ".before-tutorial.bak");
+                File.WriteAllText(temporary, JsonUtility.ToJson(candidate, true));
+                // A corrupt primary must never replace the last valid backup.
+                if (File.Exists(Path))
+                {
+                    if (!valid) File.Copy(Path, Path + ".corrupt." + Guid.NewGuid().ToString("N"));
+                    File.Replace(temporary, Path, valid ? Path + ".bak" : null);
+                }
+                else File.Move(temporary, Path);
             }
-            else File.Move(temporary, Path);
             Data = candidate;
             return true;
         }

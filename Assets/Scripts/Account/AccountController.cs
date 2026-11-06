@@ -19,7 +19,7 @@ public sealed class AccountController : MonoBehaviour
                 configured = Configured, busy = busy, signedIn = SignedIn, uploadEnabled = prefs.uploadEnabled,
                 pendingRemoval = prefs.pendingRemoval, conflict = conflict, wrongAccount = WrongAccount(prefs),
                 playerName = DisplayName(prefs), accountLabel = SignedIn ? (string.IsNullOrEmpty(email) ? "Google account" : email) : "Not signed in",
-                status = Configured ? status : configuration ? configuration.ConfigurationError : "Google sign-in is not available yet. Local tasks and progress remain available.",
+                status = !AppPlatform.WindowsDesktop ? AppPlatform.DesktopMessage : Configured ? status : configuration ? configuration.ConfigurationError : "Google sign-in is not available yet. Local tasks and progress remain available.",
                 comparison = comparison
             };
         }
@@ -35,7 +35,7 @@ public sealed class AccountController : MonoBehaviour
     int generation, retryCount;
     float nextSync;
     AccountRemoteSnapshot conflictingRemote;
-    bool Configured => configuration && configuration.IsConfigured;
+    bool Configured => AppPlatform.WindowsDesktop && configuration && configuration.IsConfigured;
     bool SignedIn => !string.IsNullOrEmpty(uid) && !string.IsNullOrEmpty(refreshToken);
 
     // Read-only ranking requests share authentication, never publication or settlement.

@@ -49,6 +49,7 @@ public sealed class ChatGptClient : MonoBehaviour
     {
         if (Connection != null) return;
         Instance = this; Ready = false;
+        if (!AppPlatform.WindowsDesktop) { Status = AppPlatform.DesktopMessage; return; }
         string directory = Path.Combine(Application.persistentDataPath, "ai");
         string isolated = Environment.GetEnvironmentVariable("CATQUEST_AI_TEST_DIRECTORY");
         string testSave = Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");

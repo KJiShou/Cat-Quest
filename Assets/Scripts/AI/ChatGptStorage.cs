@@ -43,14 +43,17 @@ public sealed class ChatGptStorage : IChatGptStorage
             if (File.Exists(temporary)) File.Delete(temporary);
         }
     }
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
     [StructLayout(LayoutKind.Sequential)] struct Blob { public int size; public IntPtr data; }
     [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] static extern bool CryptProtectData(ref Blob input, string description, IntPtr entropy, IntPtr reserved, IntPtr prompt, uint flags, out Blob output);
     [DllImport("crypt32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] static extern bool CryptUnprotectData(ref Blob input, IntPtr description, IntPtr entropy, IntPtr reserved, IntPtr prompt, uint flags, out Blob output);
     [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+#endif
     static byte[] Protect(byte[] bytes, bool encrypt)
     {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         var input = new Blob { size = bytes.Length, data = Marshal.AllocHGlobal(bytes.Length) };
         var output = new Blob();
         try
@@ -67,5 +70,8 @@ public sealed class ChatGptStorage : IChatGptStorage
             Marshal.FreeHGlobal(input.data);
             if (output.data != IntPtr.Zero) { for (int i = 0; i < output.size; i++) Marshal.WriteByte(output.data, i, 0); LocalFree(output.data); }
         }
+#else
+        throw new PlatformNotSupportedException(AppPlatform.DesktopMessage);
+#endif
     }
 }

@@ -23,7 +23,11 @@ using UnityEngine;
 }
 public static class CompanionProtocol
 {
+#if UNITY_WEBGL && !UNITY_EDITOR
+    static readonly string[] Args = Array.Empty<string>();
+#else
     static readonly string[] Args = Environment.GetCommandLineArgs();
+#endif
     public static string Argument(string key)
     {
         var args = Args;
