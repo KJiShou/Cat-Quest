@@ -86,8 +86,16 @@ public sealed class BossPageUI : MonoBehaviour
             });
         }
     }
-    void OnEnable(){resetPreview=true;if(service!=null){service.Changed+=Refresh;if(!SyncMasterSelection())Refresh();}}
+    void OnEnable(){resetPreview=true;if(service!=null){service.Changed+=Refresh;SelectHighestUnlockedStage();Refresh();}}
     void Start(){EnsureActors();Refresh();}
+    void SelectHighestUnlockedStage()
+    {
+        int stage=service.MasterStage;
+        int boss=1+(stage-1)%3;
+        if(service.BossUnlockError(boss,stage)==null){SelectStage(boss,stage);return;}
+        for(int id=3;id>=1;id--)
+            if(service.BossUnlockError(id)==null){SelectStage(id);return;}
+    }
     void EnsureActors(){if(arena.Stage){actors.Bind(arena.Stage);arena.ShowMasterAura(actors.Boss,actors.Cat,selected,master>0);}}
     bool SyncMasterSelection()
     {
@@ -110,8 +118,7 @@ public sealed class BossPageUI : MonoBehaviour
         int stageNumber=service.MasterStage;
         for(int i=0;i<3;i++){
             int id=i+1;var p=service.BossMastery(id);
-            string gate=service.BattleEntryError(id);
-            if(gate=="Earn a ticket through Focus.")gate=null;
+            string gate=service.BossUnlockError(id);
             bool locked=gate!=null;
             stageLocks[i].SetActive(locked);
             stageChoices[i].interactable=!locked;
@@ -123,7 +130,7 @@ public sealed class BossPageUI : MonoBehaviour
             masteryValues[i].text=$"{progress}/5"+(p.pendingClaims>0?" · Claim":"");
             stageCaptions[i].text=$"Stage {id} · {(id==1?"Cyclope":id==2?"Orc":"Demon")}\n"+(gate??"");
         }
-        bool masterUnlocked=service.BossMastery(3).wins>0;
+        bool masterUnlocked=service.BossUnlockError(1+(stageNumber-1)%3,stageNumber)==null;
         masterChoice.interactable=masterUnlocked;masterLock.SetActive(!masterUnlocked);
         masterCaption.text="Master "+stageNumber;
         if(masterDescription)masterDescription.text=masterUnlocked

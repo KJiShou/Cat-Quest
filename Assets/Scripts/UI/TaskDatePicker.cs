@@ -16,6 +16,7 @@ public class TaskDatePicker : MonoBehaviour
     public Button dismiss;
     public Button noDate;
     public TMP_Text noDateLabel;
+    public bool embedded;
     public bool HasDate { get; private set; } = true;
     public event Action DateCleared;
     public Button[] days;
@@ -34,6 +35,7 @@ public class TaskDatePicker : MonoBehaviour
         year = value.Year; month = value.Month; day = value.Day;
         HasDate = hasDate;
         RefreshLabel();
+        if (embedded) { displayedMonth = new DateTime(year, month, 1); RefreshCalendar(); }
     }
 
     private void Awake()
@@ -44,11 +46,14 @@ public class TaskDatePicker : MonoBehaviour
             HasDate = false;
             RefreshLabel();
             overlay.SetActive(false);
-            dateButton.Select();
+            if (embedded) RefreshCalendar(); else dateButton.Select();
             DateCleared?.Invoke();
         });
         dismiss.onClick.AddListener(() => overlay.SetActive(false));
         (dismiss.GetComponent<JuicyButton>()??dismiss.gameObject.AddComponent<JuicyButton>()).enabled=false;
+        // The calendar's Button only catches background clicks. Animate its controls, not the panel.
+        if (calendar.TryGetComponent<Button>(out var background))
+            (background.GetComponent<JuicyButton>()??background.gameObject.AddComponent<JuicyButton>()).enabled=false;
         previousMonth.onClick.AddListener(() => ChangeMonth(-1));
         nextMonth.onClick.AddListener(() => ChangeMonth(1));
         for (int i = 0; i < days.Length; i++)
@@ -64,6 +69,7 @@ public class TaskDatePicker : MonoBehaviour
     public void Open()
     {
         displayedMonth = new DateTime(year, month, 1);
+        if (embedded) { RefreshCalendar(); return; }
         overlay.SetActive(true);
         overlay.transform.SetAsLastSibling();
         RefreshCalendar();
@@ -95,6 +101,7 @@ public class TaskDatePicker : MonoBehaviour
         monthLabel.text = displayedMonth.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
         int leadingDays = ((int)displayedMonth.DayOfWeek + 6) % 7;
         firstGridDay = displayedMonth.AddDays(-leadingDays);
+        var today = DateTime.Today;
         for (int i = 0; i < days.Length; i++)
         {
             bool inRange = (DateTime.MaxValue.Date - firstGridDay).Days >= i;
@@ -104,16 +111,18 @@ public class TaskDatePicker : MonoBehaviour
             var label = days[i].GetComponentInChildren<TMP_Text>();
             label.text = date.Day.ToString();
             bool selected = HasDate && date == SelectedDate;
-            days[i].GetComponent<Image>().color = selected ? new Color32(0, 156, 246, 255) : new Color32(244, 248, 255, 255);
-            label.color = selected ? Color.white : date.Month == displayedMonth.Month ? ink : new Color32(167, 182, 200, 255);
+            bool isToday = date == today;
+            days[i].GetComponent<Image>().color = selected ? new Color32(0, 156, 246, 255)
+                : isToday ? new Color32(186, 247, 255, 255) : new Color32(244, 248, 255, 255);
+            label.color = selected ? Color.white : isToday || date.Month == displayedMonth.Month ? ink : new Color32(167, 182, 200, 255);
         }
     }
 
-    private void SelectDate(DateTime date)
+    public void SelectDate(DateTime date)
     {
         LoadValue(date);
         overlay.SetActive(false);
-        dateButton.Select();
+        if (!embedded) dateButton.Select();
         DateSelected?.Invoke(date);
     }
 

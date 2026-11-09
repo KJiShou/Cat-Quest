@@ -49,6 +49,11 @@ public static class BossModalVerification
         var asset=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Canvas.prefab");foreach(var obj in asset.GetComponentsInChildren<Transform>(true))Check(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(obj.gameObject)==0,"Missing script "+obj.name);
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var manager=GameDataManager.EnsureInstance();
         if(!manager.SavePath.Contains("BossModalVerification"))throw new Exception("Save isolation failed");
+        if(SessionState.GetString(Flag+"mode","")=="progression"){
+            var checks=ProgressionChecks(nav,manager);
+            while(checks.MoveNext())yield return checks.Current;
+            yield break;
+        }
         manager.PlayerData.experience=2025;manager.PlayerData.tickets=10;manager.PlayerData.rewardDays.Add(new RewardDay{day="2026-10-24",questsClaimed=true});
         foreach(var p in manager.PlayerData.bossProgress){p.wins=11;p.pendingClaims=2;}manager.SaveData();
         nav.ShowPage(MainMenuPage.Boss);yield return 1;
@@ -126,5 +131,56 @@ public static class BossModalVerification
             detail.close.onClick.Invoke();
         }
         File.WriteAllText(Folder+"/"+SessionState.GetString(Flag+"mode","")+"/checks.txt","PASS: prefab missing-script scan; both-size text overflow and full-screen raycast blocking; 0/4/5/9/10/11/14/15/30 wins; unscaled sparkles and reopen reset; hover/press/repeated-input/exit/submit/disable/focus-loss feedback; two authoritative claims, owned cards and particle shutdown; reload; entry cancel and stop ticket preservation.");
+    }
+    static IEnumerator ProgressionChecks(MainMenuNavigation nav,GameDataManager manager)
+    {
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
+        var boss=nav.pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>();
+        int Xp(int level){int xp=0;for(int i=1;i<level;i++)xp+=100+25*(i-1);return xp;}
+        foreach(var state in new[]{(5,0,0,0,1),(9,1,0,0,1),(10,1,0,0,2),(19,1,1,0,2),(20,1,1,0,3),(20,1,1,1,2)}){
+            nav.ShowPage(MainMenuPage.Dashboard);
+            var data=manager.PlayerData;data.experience=Xp(state.Item1);data.tickets=0;data.masterStage=5;
+            data.bossProgress[0].wins=state.Item2;data.bossProgress[1].wins=state.Item3;data.bossProgress[2].wins=state.Item4;
+            manager.SaveData();
+            Check(nav.ShowPage(MainMenuPage.Boss),"Boss page inaccessible");yield return .5;
+            Check(boss.SelectedBoss==state.Item5,"Highest unlocked boss selection at level "+state.Item1);
+            Check(boss.bossTitle.text.StartsWith("Master")== (state.Item4>0),"Master selection must follow unlock");
+            boss.ShowStages();yield return .2;
+            for(int i=0;i<3;i++){
+                bool unlocked=manager.Tasks.BossUnlockError(i+1)==null;
+                Check(boss.stageChoices[i].interactable==unlocked&&boss.stageLocks[i].activeSelf==!unlocked,"Zero-ticket lock mismatch "+i);
+            }
+            Check(boss.masterChoice.interactable==(state.Item4>0)&&boss.masterLock.activeSelf==(state.Item4==0),"Master zero-ticket lock");
+            if(state.Item1==5||state.Item1==20){
+                foreach(int width in new[]{1920,1280}){
+                    Resolution(width,width==1920?1080:720);yield return .3;
+                    Canvas.ForceUpdateCanvases();TextFits(boss.stagePicker.transform);
+                    var canvas=boss.GetComponentInParent<Canvas>().rootCanvas;
+                    var camera=canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera;
+                    foreach(var button in boss.stageChoices.Concat(new[]{boss.masterChoice,boss.closeStages})){
+                        var rect=(RectTransform)button.transform;var corners=new Vector3[4];rect.GetWorldCorners(corners);
+                        foreach(var corner in corners){var point=RectTransformUtility.WorldToScreenPoint(camera,corner);Check(point.x>=0&&point.y>=0&&point.x<=width&&point.y<=(width==1920?1080:720),"Stage control outside viewport");}
+                        if(!button.IsInteractable())continue;
+                        var pointer=new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current){position=RectTransformUtility.WorldToScreenPoint(camera,rect.TransformPoint(rect.rect.center))};
+                        var hits=new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();UnityEngine.EventSystems.EventSystem.current.RaycastAll(pointer,hits);
+                        Check(hits.Count>0&&hits[0].gameObject.GetComponentInParent<Button>()==button,"Stage control raycast blocked: "+button.name);
+                    }
+                    Capture("zero-tickets-"+state.Item5+"-master"+state.Item4+"-"+width);yield return .2;
+                }
+            }
+            boss.stageChoices[0].onClick.Invoke();yield return .2;
+            Check(boss.SelectedBoss==1&&!boss.stagePicker.activeSelf,"Unlocked earlier boss must remain selectable");
+            boss.Action();yield return .2;
+            Check(!boss.confirmation.activeSelf&&!boss.IsBattling&&boss.message.text.Contains("ticket"),"No-ticket Challenge must show hint, not enter");
+            Check(manager.PlayerData.tickets==0&&manager.PlayerData.battles.Count==0,"Preview/blocked entry changed battle data");
+            nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Boss);yield return .3;
+            Check(boss.SelectedBoss==state.Item5,"Reopening must restore highest unlocked stage");
+        }
+        var reload=new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock());
+        Check(reload.MasterStage==5&&reload.BossUnlockError(2,5)==null&&reload.BattleEntryError(2,5)!=null,"Reload must preserve unlock without tickets");
+        manager.PlayerData.tickets=1;manager.SaveData();boss.Action();yield return .2;
+        Check(boss.confirmation.activeSelf&&!boss.IsBattling&&manager.PlayerData.tickets==1,"Available ticket still requires confirmation");
+        boss.cancel.onClick.Invoke();Check(manager.PlayerData.tickets==1&&!boss.IsBattling,"Cancel must preserve ticket");
+        File.WriteAllText(Folder+"/progression/checks.txt",DateTime.UtcNow.ToString("O")+"\nPASS: highest unlocked selection; level 9/10/19/20 boundaries; zero-ticket normal/Master locks; manual earlier-stage selection; reopen; no-ticket hint with no entry; reload; confirmation/cancel; 1920x1080 and 1280x720 modal/text checks.\n");
     }
 }

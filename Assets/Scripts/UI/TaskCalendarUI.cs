@@ -249,7 +249,9 @@ public sealed class TaskCalendarUI : MonoBehaviour
         check.interactable = item.kind != CalendarTaskKind.Preview && (!item.view.Completed || Service.CanUndoCompletion(item.view.history?.id));
         check.onClick.AddListener(() => { if (item.view.Completed) owner.CalendarUndo(item.view.history.id); else Complete(item); });
         var button = row.GetComponent<Button>(); button.onClick.RemoveAllListeners(); button.onClick.AddListener(() => OpenItem(item));
+        owner.BindTaskContext(row, item.view, item); owner.BindTaskContext(check.gameObject, item.view, item);
     }
+    public void BindTaskContext(GameObject target, CalendarTaskItem item) => owner.BindTaskContext(target, item.view, item);
     void Complete(CalendarTaskItem item)
     {
         if (item.kind != CalendarTaskKind.Task) return;

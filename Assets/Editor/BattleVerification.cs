@@ -40,6 +40,8 @@ public static class BattleVerification
         }
         var fast=new BattleSimulation(new CombatStats(10000,1,0,2),new CombatStats(10000,1,0,1));int hits=0;fast.Advance(5,h=>{if(h.catAttacks)hits++;});Check(hits==10,"2 ASPD = 10 attacks in 5s");
         var m=new Memory();m.Data.experience=Xp(5);var service=new TaskService(m,new SystemTaskClock());
+        Check(service.BossUnlockError(1)==null,"Zero tickets must not lock an unlocked boss");
+        Check(service.BossUnlockError(2)!=null,"Zero tickets must preserve progression locks");
         Check(!service.BeginBattle(1,0,out _),"No tickets");m.Data.tickets=50;
         Check(!service.BeginBattle(2,0,out _),"Boss 2 gate");
         m.fail=true;Check(!service.BeginBattle(1,0,out _)&&m.Data.tickets==50&&m.Data.battles.Count==0,"Atomic entry failure");m.fail=false;

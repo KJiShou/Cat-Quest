@@ -35,6 +35,7 @@ public sealed class TaskCalendarDayUI : MonoBehaviour
             taskLabels[i].text = (item.view.Completed ? "✓ " : "") + item.view.task.title;
             taskLabels[i].color = item.view.Completed ? TaskUIBuilder.ScheduleInk : owner.Service.IsOverdue(item.view) ? TaskUIBuilder.Overdue : TaskUIBuilder.Ink;
             taskButtons[i].onClick.RemoveAllListeners(); taskButtons[i].onClick.AddListener(() => owner.OpenItem(item));
+            owner.BindTaskContext(taskButtons[i].gameObject, item);
         }
         moreButton.gameObject.SetActive(todos.Count > shown);
         moreLabel.text = "+" + (todos.Count - shown) + " more";

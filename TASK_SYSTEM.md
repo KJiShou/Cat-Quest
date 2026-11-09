@@ -52,6 +52,16 @@ Calendar assets are editable project prefabs under `Assets/Prefabs/Task/Calendar
 
 Calendar projection regressions run within Verify Task System (and its existing aggregates). `Temp/verify-task-calendar.request` runs the isolated calendar Play flow; results and screenshots are in `Library/TaskCalendarVerification/`. Verification does not install or repair UI assets.
 
+## Task context menu
+
+Right-click an active task row (including Calendar previews/drawer rows), or press Shift+F10/the Menu key on a focused row, to open task actions. Only **Edit task** opens the full editor. Difficulty, Tags and Schedule have inline panels with **Save** and **Cancel**: select a difficulty, toggle multiple tags, or choose Today, Tomorrow, a calendar date or No date. Save commits only that field through the existing task service; other task metadata and current subtask progress are preserved. A failed save leaves the inline choices open with an error for retry. Cancel returns to the main menu without saving.
+
+Clearing a repeating task's date explicitly warns that saving also stops repetition. Future Daily previews edit the current template and retain today's progress; they cannot complete early. Complete and confirmed Delete reuse existing task actions, and History remains read-only with its existing eligible undo.
+
+Escape, clicking outside, leaving the page, losing application focus or a task-data refresh dismisses the menu and discards pending choices. Escape in the date picker first closes that picker. The authored popup and its reusable tag row/date-picker bindings are in `Assets/Resources/TaskContextMenu.prefab`.
+
+`Temp/verify-task-context-menu.request` runs targeted Play checks using the Task Tabs runner's isolated save and Editor restoration. Results/captures are in `Library/TaskContextMenuVerification/`; it does not author or repair assets.
+
 ## Ownership and persistence
 
 `GameDataManager` owns the shared store and `TaskService`, retaining SetUsername/GetUsername/HasUsername/SaveData APIs. `TaskSystemUI` binds the list, details, tabs, HUD, search and dialogs. `EditTaskDetailsUI` owns only its draft.

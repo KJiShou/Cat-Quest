@@ -10,8 +10,15 @@ public sealed partial class TaskService
     public CombatStats CatStats => EquipmentStats.Final;
     public string BattleEntryError(int bossId,int masterStage=0)
     {
+        if(HasActiveBattle) return "Finish the current battle first.";
+        var gate=BossUnlockError(bossId,masterStage);
+        if(gate!=null)return gate;
+        return store.Data.tickets<1 ? "Complete a task or use Focus to earn a ticket." : null;
+    }
+    // Progression gates are independent of consumable tickets and active entries.
+    public string BossUnlockError(int bossId,int masterStage=0)
+    {
         var d=store.Data;
-        if(d.battles.Any(b=>b.outcome==BattleOutcome.Running)) return "Finish the current battle first.";
         if(!CanAccess(ProgressionFeature.Boss)) return AccessMessage(ProgressionFeature.Boss);
         if(bossId<1||bossId>3||masterStage<0) return "Invalid boss.";
         int Wins(int id)=>d.bossProgress.FirstOrDefault(p=>p.bossId==id)?.wins??0;
@@ -24,7 +31,7 @@ public sealed partial class TaskService
             int required=bossId==1?1:bossId==2?10:20;
             if(level<required) return "Requires Lv. "+required+".";
         }
-        return d.tickets<1 ? "Complete a task or use Focus to earn a ticket." : null;
+        return null;
     }
     public bool BeginBattle(int bossId,int masterStage,out BattleAttempt attempt)
     {

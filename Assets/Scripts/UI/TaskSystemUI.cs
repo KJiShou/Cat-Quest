@@ -27,7 +27,7 @@ public partial class TaskSystemUI : MonoBehaviour
     public GameObject confirmDialogTemplate;
     public TMP_InputField QuickAddInput => quickInput;
     public bool TutorialOwnsInput { get; set; }
-    public bool TutorialBlocked => editing || (confirmation != null && confirmation.Root.activeInHierarchy) || (filters && filters.gameObject.activeInHierarchy);
+    public bool TutorialBlocked => ContextOpen || editing || (confirmation != null && confirmation.Root.activeInHierarchy) || (filters && filters.gameObject.activeInHierarchy);
     public bool TutorialNoticeVisible => resultNotice && resultNotice.gameObject.activeInHierarchy;
     public RectTransform TutorialTaskTarget(string id)
     {
@@ -134,8 +134,8 @@ public partial class TaskSystemUI : MonoBehaviour
         CancelDraft(); CloseModal(); confirmation?.Dismiss();
         return true;
     }
-    private void OnApplicationFocus(bool focus) { if (focus && isActiveAndEnabled && Service != null) { Service.RefreshDate(); Refresh(); } }
-    private void OnDestroy() { if (Service != null) Service.Changed -= Refresh; if(filters) Destroy(filters.gameObject); if(resultNotice) Destroy(resultNotice.gameObject); if(confirmation?.Root) Destroy(confirmation.Root); }
+    private void OnApplicationFocus(bool focus) { if (!focus) CloseTaskContext(); if (focus && isActiveAndEnabled && Service != null) { Service.RefreshDate(); Refresh(); } }
+    private void OnDestroy() { if (contextMenu) Destroy(contextMenu.gameObject); if (Service != null) Service.Changed -= Refresh; if(filters) Destroy(filters.gameObject); if(resultNotice) Destroy(resultNotice.gameObject); if(confirmation?.Root) Destroy(confirmation.Root); }
 
     private void BuildDetails()
     {
@@ -156,7 +156,7 @@ public partial class TaskSystemUI : MonoBehaviour
     }
     private void CaptureOutsideClick(Transform target)
     {
-        if((calendar && calendar.Active) || editing || SelectedKey==null || !detailsRoot.gameObject.activeInHierarchy
+        if(ContextOpen || (calendar && calendar.Active) || editing || SelectedKey==null || !detailsRoot.gameObject.activeInHierarchy
             || (filters && filters.gameObject.activeSelf) || confirmation.Root.activeSelf) return;
         if(target && target.IsChildOf(detailsRoot)) return;
         for(var current=target; current && current.IsChildOf(listContent); current=current.parent)
@@ -177,8 +177,8 @@ public partial class TaskSystemUI : MonoBehaviour
         if(error) { resultNotice.Dismiss(); confirmation.ShowNotice("Notice",message); }
         else resultNotice.Show(message);
     }
-    private void CloseModal() { if(filters) filters.Dismiss(); }
-    private void OnDisable() { if (Service != null) Service.Changed -= Refresh; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
+    private void CloseModal() { CloseTaskContext(); if(filters) filters.Dismiss(); }
+    private void OnDisable() { StopContextFocus(); if (Service != null) Service.Changed -= Refresh; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
     private void Confirm(string title,string message,Action accepted,string confirmLabel="Confirm")
     {
         CloseModal(); confirmation.Show(title,message,accepted,confirmLabel);
@@ -191,6 +191,7 @@ public partial class TaskSystemUI : MonoBehaviour
     public void Refresh()
     {
         if(Service==null || ui==null) return;
+        CloseTaskContext();
         if(committingQuick) { pendingRefresh=true; return; }
         pendingRefresh=false;
         if (calendar && calendar.Active) { calendar.Refresh(); return; }
@@ -309,6 +310,7 @@ public partial class TaskSystemUI : MonoBehaviour
             checkbox.onClick.AddListener(()=> { if(CommitQuickAdd()) CompleteSelected(view.task.id); });
         }
         var button=row.GetComponent<Button>() ?? row.AddComponent<Button>(); button.onClick.RemoveAllListeners(); button.onClick.AddListener(()=>SelectTask(view.Key));
+        BindTaskContext(row,view); BindTaskContext(checkbox.gameObject,view);
         var background=row.GetComponent<Image>(); if(background) background.color=view.Key==SelectedKey ? new Color32(179,235,255,255) : Color.white;
     }
     private string ScheduleText(TaskView view)
@@ -457,6 +459,7 @@ public partial class TaskSystemUI : MonoBehaviour
     }
     public void CancelDraft()
     {
+        CloseTaskContext(); StopContextFocus();
         editing=false; editor.datePicker.overlay.SetActive(false); editor.timePicker.overlay.SetActive(false);
         editor.gameObject.SetActive(false);
         if (calendar && calendar.Active) calendar.EndEdit();

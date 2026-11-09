@@ -20,6 +20,8 @@ Specification: `D:/Downloads/Cat Quest.pdf`, sections 4.5.4–4.5.5 (PDF pages 6
 
 ## Presentation
 
+Opening the Boss page selects the highest unlocked normal boss, or the current Master stage after Master unlocks. Players can still manually select earlier bosses. Stage locks reflect progression requirements only; zero tickets do not lock unlocked cards. Challenge still requires one ticket and shows the task/Focus ticket hint when none are available.
+
 `BossBattle1.unity` remains the authored environment source. The battle uses its generated preview prefab. The upper-left Stage button opens three hexagonal portrait cards derived from the supplied Light/Stage prefab. Stage 2 uses `OldForestBossStage.prefab`, exported from `Assets/Scenes/Old forest.unity`. Stage 3 uses `LavaDungeonBossStage.prefab`, exported from `Assets/Scenes/Lava dungeon.unity`. Each retains its authored environment, camera projection and boss placement. The prefab camera is centered horizontally on the actors, following the Stage 1 export convention. The exported cat root is named `Ninja Cat` for the existing actor bindings. BossArenaPreview switches the prefab with the selected boss, including Master stages. BossBattleActors reuses the authored Cyclope, Orc or Demon.
 
 The cat runs into sword range before combat. An attack clip plays one cycle per attack interval. Animation speed is `clip.length * ASPD`. Idle/run/death are not accelerated by ASPD. Red flashes and floating numbers indicate hits without interrupting the attack cadence. HP resets at entry. Navigation away explicitly stops combat. Closing the application refunds an unfinished battle.

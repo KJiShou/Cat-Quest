@@ -10,7 +10,7 @@ public partial class TaskSystemUI
     public TaskCalendarUI calendar;
     public string CalendarSchedule(TaskView view) => ScheduleText(view);
     public bool IsEditing => editing;
-    public bool HasTaskModal => (confirmation != null && confirmation.Root.activeInHierarchy) || (filters && filters.gameObject.activeInHierarchy);
+    public bool HasTaskModal => ContextOpen || (confirmation != null && confirmation.Root.activeInHierarchy) || (filters && filters.gameObject.activeInHierarchy);
     public void ShowCalendarFilters(TaskDifficulty? difficulty, IEnumerable<string> tags, Action<TaskDifficulty?, HashSet<string>> apply)
         => filters.Show(difficulty, tags, Service.TagCatalog, apply);
     public void CalendarDraft(QuestTask task, IEnumerable<string> done, bool preview = false)

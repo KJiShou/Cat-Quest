@@ -337,7 +337,7 @@ public class EditTaskDetailsUI : MonoBehaviour
         chip.name = "TagChip";
         chip.SetActive(true);
         chipIds[chip] = tag.id;
-        chip.GetComponentInChildren<TMP_Text>().text = tag.name + " ×";
+        chip.GetComponentInChildren<TMP_Text>().text = tag.name + " \u00D7";
         TagColors.Apply(chip, tag.colorHex, tagTintSprite);
         SizeTag(chip);
         BindTag(chip);

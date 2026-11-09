@@ -27,7 +27,7 @@ public static class TaskTabsVerification
         EditorApplication.update+=Poll;
         EditorApplication.playModeStateChanged+=state=>{
             if(!SessionState.GetBool(Flag,false))return;
-            if(state==PlayModeStateChange.EnteredPlayMode){run=Run();next=EditorApplication.timeSinceStartup+2;}
+            if(state==PlayModeStateChange.EnteredPlayMode){run=SessionState.GetBool(Flag+".contextMenu",false) ? TaskContextMenuVerification.Run() : Run();next=EditorApplication.timeSinceStartup+2;}
             if(state==PlayModeStateChange.EnteredEditMode)RestoreSettings();
         };
     }
@@ -43,12 +43,15 @@ public static class TaskTabsVerification
             try
             {
                 if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);
-                else Finish("PASS: header/Pet Widget viewport containment with 0/9999 balances and long player name, tab/content separation, wrapped subtask heights/nonoverlap, task editor and compressed search containment, all tab corner/center raycasts and selection, hover/press/reset and stable hit areas, keyboard selection/submit, disabled/re-enabled controls, page-close reset, simulated focus-loss reset, rapid sidebar changes; four resolutions with both sidebar states.");
+                else Finish(SessionState.GetBool(Flag+".contextMenu",false) ? "PASS: task context menu targeted Play flow; see Library/TaskContextMenuVerification." : "PASS: header/Pet Widget viewport containment with 0/9999 balances and long player name, tab/content separation, wrapped subtask heights/nonoverlap, task editor and compressed search containment, all tab corner/center raycasts and selection, hover/press/reset and stable hit areas, keyboard selection/submit, disabled/re-enabled controls, page-close reset, simulated focus-loss reset, rapid sidebar changes; four resolutions with both sidebar states.");
             }
             catch(Exception e){Finish("FAIL at "+context+": "+e);}
             return;
         }
-        if(EditorApplication.isCompiling||EditorApplication.isUpdating||EditorApplication.isPlayingOrWillChangePlaymode||!File.Exists("Temp/verify-task-tabs.request"))return;
+        bool contextMenu=File.Exists("Temp/verify-task-context-menu.request");
+        if(EditorApplication.isCompiling||EditorApplication.isUpdating||EditorApplication.isPlayingOrWillChangePlaymode||(!contextMenu&&!File.Exists("Temp/verify-task-tabs.request")))return;
+        SessionState.SetBool(Flag+".contextMenu",contextMenu);
+        if(contextMenu)File.Delete("Temp/verify-task-context-menu.request");
         File.Delete("Temp/verify-task-tabs.request");Directory.CreateDirectory(Folder);
         var previousStore=Environment.GetEnvironmentVariable(StoreVariable);
         SessionState.SetBool(Flag+".hadStore",previousStore!=null);
@@ -97,6 +100,7 @@ public static class TaskTabsVerification
     static void Finish(string result)
     {
         File.WriteAllText(Folder+"/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result);
+        if(SessionState.GetBool(Flag+".contextMenu",false)) { Directory.CreateDirectory("Library/TaskContextMenuVerification"); File.WriteAllText("Library/TaskContextMenuVerification/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result); }
         run=null;
         if(EditorApplication.isPlayingOrWillChangePlaymode)EditorApplication.isPlaying=false;
         else RestoreSettings();

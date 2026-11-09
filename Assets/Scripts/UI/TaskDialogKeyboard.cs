@@ -11,11 +11,13 @@ public sealed class TaskDialogKeyboard : MonoBehaviour
     Button[] controls;
     GameObject previousSelection;
     Action dismiss;
-    public void Open(Button[] buttons, Action close)
+    bool deferFocus;
+    public void Open(Button[] buttons, Action close, bool focusFirst = true)
     {
         if (controls == null)
             previousSelection = EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
         controls = buttons; dismiss = close;
+        deferFocus = !focusFirst;
         for (int i = 0; i < controls.Length; i++)
         {
             var navigation = new Navigation { mode = Navigation.Mode.Explicit };
@@ -23,12 +25,12 @@ public sealed class TaskDialogKeyboard : MonoBehaviour
             navigation.selectOnRight = navigation.selectOnDown = controls[(i + 1) % controls.Length];
             controls[i].navigation = navigation;
         }
-        Focus(controls[0].gameObject);
+        Focus(focusFirst && controls.Length > 0 ? controls[0].gameObject : null);
     }
     static void Focus(GameObject target) { if (EventSystem.current) EventSystem.current.SetSelectedGameObject(target); }
     void Update()
     {
-        if (controls == null || !EventSystem.current) return;
+        if (controls == null || controls.Length == 0 || !EventSystem.current) return;
         var keyboard = Keyboard.current;
         if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) { dismiss?.Invoke(); return; }
         var selected = EventSystem.current.currentSelectedGameObject;
@@ -41,7 +43,10 @@ public sealed class TaskDialogKeyboard : MonoBehaviour
             index = index < 0 ? 0 : (index + direction + controls.Length) % controls.Length;
             Focus(controls[index].gameObject);
         }
-        else if (index < 0) Focus(controls[0].gameObject);
+        else if (index < 0 && (!deferFocus || (keyboard != null &&
+            (keyboard.upArrowKey.wasPressedThisFrame || keyboard.downArrowKey.wasPressedThisFrame ||
+             keyboard.leftArrowKey.wasPressedThisFrame || keyboard.rightArrowKey.wasPressedThisFrame))))
+            Focus(controls[0].gameObject);
     }
     void OnDisable()
     {
