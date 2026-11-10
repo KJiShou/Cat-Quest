@@ -48,6 +48,20 @@ public static class Verification
             string evil=Path.Combine(root,"evil.zip");using(var archive=ZipFile.Open(evil,ZipArchiveMode.Create)) {using(var stream=new StreamWriter(archive.CreateEntry("../escape.txt").Open()))stream.Write("bad");}
             Reject(()=>Installer.Extract(new InstallRequest{package=evil,size=new FileInfo(evil).Length,sha256=UpdateRules.Hash(evil),version="1.3"},Path.Combine(root,"evil-stage")),"ZIP traversal accepted");
             Check(!File.Exists(Path.Combine(root,"escape.txt")),"ZIP escaped staging");
+            string lockedJournal=Path.Combine(root,"locked-journal.json");
+            Installer.Write(lockedJournal,new Journal {state="old"});
+            string oldJournal=File.ReadAllText(lockedJournal);
+            using(var held=new FileStream(lockedJournal,FileMode.Open,FileAccess.Read,FileShare.Read))
+                Reject(()=>Installer.Write(lockedJournal,new Journal {state="new"}),"Persistent journal lock must fail");
+            Check(File.ReadAllText(lockedJournal)==oldJournal,"Failed journal replacement changed committed state");
+            Installer.Write(lockedJournal,new Journal {state="retry"});
+            Check(Installer.Read<Journal>(lockedJournal).state=="retry","Journal retry after persistent lock failed");
+            var brief=new FileStream(lockedJournal,FileMode.Open,FileAccess.Read,FileShare.Read);
+            var release=new System.Threading.Thread(()=>{System.Threading.Thread.Sleep(30);brief.Dispose();});
+            release.Start();
+            try { Installer.Write(lockedJournal,new Journal {state="transient"}); }
+            finally { release.Join(); brief.Dispose(); }
+            Check(Installer.Read<Journal>(lockedJournal).state=="transient","Brief journal lock was not retried safely");
             File.WriteAllText(Path.Combine(root,"result.txt"),DateTime.UtcNow.ToString("O")+" PASS "+checks+" checks: versions, source restriction, paths, extraction/checksums, replacement, obsolete files, unrelated files, duplicate, rollback/retry, crash recovery.");
             Console.WriteLine(File.ReadAllText(Path.Combine(root,"result.txt")));return 0;
         }

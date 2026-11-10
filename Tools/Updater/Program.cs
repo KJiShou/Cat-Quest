@@ -20,7 +20,20 @@ namespace CatQuestUpdater
         {
             string temp = path + ".tmp";
             File.WriteAllText(temp, Json.Serialize(value));
-            if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
+            if (!File.Exists(path)) { File.Move(temp, path); return; }
+            byte[] original = File.ReadAllBytes(path), pending = File.ReadAllBytes(temp);
+            for (int attempt = 0; ; attempt++) {
+                try { File.Replace(temp, path, null); return; }
+                catch (IOException) {
+                    if (attempt >= 2 || !File.Exists(temp)) throw;
+                    // Antivirus/indexing can briefly hold the journal on Windows.
+                    // Retry only this prepared atomic write while both files are
+                    // unchanged; never rerun installation or swallow a lasting lock.
+                    Thread.Sleep(20 << attempt);
+                    if (!File.ReadAllBytes(path).SequenceEqual(original)
+                        || !File.ReadAllBytes(temp).SequenceEqual(pending)) throw;
+                }
+            }
         }
         public static PackageInventory LoadInventory(string directory)
         {
