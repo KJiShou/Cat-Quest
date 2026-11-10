@@ -386,6 +386,34 @@ public static class TutorialVerification
             Visible((RectTransform)tutorial.next.transform);Visible((RectTransform)tutorial.skip.transform);
         }
         if(tutorial.IsTyping)tutorial.Continue();Capture("task-checkbox");yield return .3;tutorial.Continue();yield return .5;
+        var tasksBeforeMenu = JsonUtility.ToJson(service.Snapshot);
+        for(int menuStep=9;menuStep<=26;menuStep++) {
+            Check(tutorial.CurrentTopic=="task-page-"+menuStep,"Missing menu explanation: "+menuStep);
+            FinishSpeech(tutorial);
+            foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720)}) {
+                Resolution(size.x,size.y);yield return .3;
+                VerifyDialogueLayout(tutorial);
+                Check(tutorial.CurrentTarget && tutorial.CurrentTarget.gameObject.activeInHierarchy,"Menu target hidden: "+menuStep);
+                Visible(tutorial.CurrentTarget);
+                Check(Hit(tutorial.CurrentTarget)==tutorial.spotlight.gameObject,"Menu demonstration accepts real actions");
+                Capture("task-menu-"+menuStep+"-"+size.x);yield return .2;
+            }
+            var disk = new PlayerDataStore(manager.SavePath).Data;
+            Check(disk.tutorial.taskPageStep==menuStep,"Menu explanation progress not persisted");
+            if(menuStep==10) {
+                var backFlow = BackAndReturn(tutorial,"task-page-9","task-page-10");
+                while(backFlow.MoveNext()) yield return backFlow.Current;
+                tutorial.SendMessage("OnApplicationFocus",false);yield return .2;
+                Check(!tutorial.GetComponentInChildren<TaskContextMenu>(),"Focus loss retained menu preview");
+                tutorial.SendMessage("OnApplicationFocus",true);yield return .5;FinishSpeech(tutorial);
+                Check(tutorial.CurrentTopic=="task-page-10","Focus resume lost menu progress");
+            }
+            tutorial.Continue();yield return .3;
+        }
+        var beforeMenu = JsonUtility.FromJson<PlayerData>(tasksBeforeMenu);
+        var afterMenu = service.Snapshot; beforeMenu.tutorial = afterMenu.tutorial;
+        Check(JsonUtility.ToJson(beforeMenu)==JsonUtility.ToJson(afterMenu),"Menu guide changed domain state");
+        Check(!tutorial.GetComponentInChildren<TaskContextMenu>(),"Menu preview leaked into tab guide");
         for(int stepIndex=0;stepIndex<=4;stepIndex++)
         {
             Check(tutorial.CurrentTopic=="task-page-"+stepIndex,"Tabs are explained only after the real task is saved: "+stepIndex);

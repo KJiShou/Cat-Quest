@@ -5,7 +5,7 @@
 ## Story / Tutorial 角色声音（2026-10-31）
 
 - 用户确认 B（柔和 Fern）用于主角，D（温柔 Lowell）用于 Master Loke。两者均为 Babble Engine 1.4.0 的 Critter Chatter。Tutorial 全部使用 D。
-- 根据 `IntroStory.unity` 的实际 Dialogue steps 和 `TutorialController` 当前台词离线生成音频，`Assets/Resources/DialogueAudio/catalog.json` 当前覆盖 110 个去重的角色/台词条目，包括七段装备说明及导航、锁定提示。目录记录原台词、生成文本、参数、时长及 SHA-256。同一台词复用文件，保留已有 WAV 和 GUID。
+- 根据 `IntroStory.unity` 的实际 Dialogue steps 和 `TutorialController` 当前台词离线生成音频，`Assets/Resources/DialogueAudio/catalog.json` 当前覆盖 128 个去重的角色/台词条目，包括十八段任务右键菜单说明、七段装备说明及导航、锁定提示。目录记录原台词、生成文本、参数、时长及 SHA-256。同一台词复用文件，保留已有 WAV 和 GUID。
 - 不上传玩家数据、不在游戏运行时联网或合成。`{playerName}` 离线使用 apprentice，动态奖励数字使用占位数字，动态错误使用通用错误短语。显示文字始终保留实际姓名、数值和错误。咿呀声不是逐字真人朗读。
 - `SettingsAudio` 仍是唯一音频管理器。新增独立讲话 AudioSource，使用 Sound 音量。Story 沿用普通 BGM，Tutorial 沿用当前页面/Focus 的 BGM 优先级。Music 的原有设置不变，包括原本为 0 的情况。
 - 保留批准的音高和速度。当语音比原打字时间长时，文字显示放慢至该段语音时长。点击补全文字、换句、跳过、关闭教学、切页、禁用或失去应用焦点会停止当前声音。旧调用者不能停止新调用者的声音。焦点恢复不重播已停止的句子。

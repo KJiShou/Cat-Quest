@@ -47,10 +47,11 @@ public sealed class TutorialController : MonoBehaviour
     bool snoozed, focused = true, changing, ownsStagePicker;
     float pollAt, noticeUntil;
     RectTransform target;
+    TaskContextMenu taskMenuPreview;
     readonly Vector3[] corners = new Vector3[4];
     // Keep persisted step identities; only their teaching order changes.
-    static readonly int[] TaskPageOrder = { 5, 6, 7, 0, 1, 2, 3, 4, 8 };
-    int TaskPagePosition => Array.IndexOf(TaskPageOrder, Mathf.Clamp(progress.taskPageStep, 0, 8));
+    static readonly int[] TaskPageOrder = { 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 0, 1, 2, 3, 4, 8 };
+    int TaskPagePosition => Array.IndexOf(TaskPageOrder, Mathf.Clamp(progress.taskPageStep, 0, 26));
     public bool IsTyping => typing != null;
     public string CurrentTopic => shown;
     public RectTransform CurrentTarget => target;
@@ -165,7 +166,7 @@ public sealed class TutorialController : MonoBehaviour
     }
     void ShowTasks()
     {
-        int step = Mathf.Clamp(progress.taskPageStep, 0, 8);
+        int step = Mathf.Clamp(progress.taskPageStep, 0, 26);
         // An unfinished older guide also gets to useful work before the tab tour.
         // This changes explanation progress only; drafts and saved tasks stay intact.
         if(progress.taskStep < 3 && step != 5 && step != 6) {
@@ -177,6 +178,7 @@ public sealed class TutorialController : MonoBehaviour
             tasks.SelectTab(TaskTab.Today);
         }
 
+        if(step >= 9) { ShowTaskMenuGuide(step); return; }
         RectTransform anchor; string text;
         switch(step)
         {
@@ -206,6 +208,66 @@ public sealed class TutorialController : MonoBehaviour
         }
         Show("task-page-" + step + (step == 6 && progress.taskStep == 3 ? "-saved" : ""), text, anchor, "Continue");
         next.interactable = !RequiresTargetClick() && (step != 6 || progress.taskStep == 3);
+    }
+    void ShowTaskMenuGuide(int step)
+    {
+        if(!taskMenuPreview) {
+            var template = Resources.Load<TaskContextMenu>("TaskContextMenu");
+            if(template) {
+                taskMenuPreview = Instantiate(template, transform);
+                var task = snapshot.tasks.FirstOrDefault(t => t.id == progress.taskId)
+                    ?? new QuestTask { title = "Example task" };
+                taskMenuPreview.Show(task, service.TagCatalog, service.LocalNow, true,
+                    new Vector2(Screen.width * .08f, Screen.height * .88f), null, null);
+                taskMenuPreview.transform.SetAsFirstSibling();
+            }
+        }
+        var menu = taskMenuPreview;
+        var section = (step >= 12 && step <= 15) || step == 26 ? TaskContextAction.Difficulty
+            : step == 17 ? TaskContextAction.Tags
+            : step >= 19 && step <= 23 ? TaskContextAction.ChooseDate : TaskContextAction.Edit;
+        if(menu && shown != "task-page-" + step) menu.ShowTutorialPanel(section);
+        RectTransform anchor = menu ? menu.panel : null;
+        string text;
+        switch(step) {
+            case 9:
+                text = "Right-click an active task to open this menu. With a task focused, Shift plus F10 or the Menu key also works. This is a safe preview: Continue explains each button without changing your task."; break;
+            case 10: anchor = menu ? menu.edit.transform as RectTransform : null;
+                text = "Edit task opens the full editor for the name, description, subtasks and repeat settings. Save keeps your changes; Cancel leaves the task unchanged. Editing does not complete the work."; break;
+            case 11: anchor = menu ? menu.difficulty.transform as RectTransform : null;
+                text = "Change difficulty opens three choices. Choose the effort that fits your real task. The change is only saved when you press Save."; break;
+            case 12: anchor = menu ? menu.difficultyOptions[0].transform as RectTransform : null;
+                text = "Easy is for a small, straightforward task. Selecting it changes the draft difficulty. It does not save or grant a reward yet."; break;
+            case 13: anchor = menu ? menu.difficultyOptions[1].transform as RectTransform : null;
+                text = "Medium is for a task that needs a moderate amount of effort. Difficulty is your choice; select the level that fits the work."; break;
+            case 14: anchor = menu ? menu.difficultyOptions[2].transform as RectTransform : null;
+                text = "Hard is for more demanding work. Difficulty affects completion rewards within your daily allowance. Selecting Hard does not complete the task."; break;
+            case 15: anchor = menu ? menu.save.transform as RectTransform : null;
+                text = "Save applies the selected difficulty to this task. If saving fails, your choices stay open so you can retry. Editing does not grant completion rewards."; break;
+            case 16: anchor = menu ? menu.tags.transform as RectTransform : null;
+                text = "Add or remove tags opens your tag collection. Tags organize your tasks and help you find related work."; break;
+            case 17: anchor = menu ? menu.tagsPanel.transform as RectTransform : null;
+                text = "Select a tag to add it, and select it again to remove it. You can choose several tags. Save applies your choices. If the list is empty, create tags in Settings first."; break;
+            case 18: anchor = menu ? menu.schedule.transform as RectTransform : null;
+                text = "Schedule opens the date controls. Choose a shortcut or a calendar day, then Save schedule to apply it. For repeating tasks this changes the repeat start date."; break;
+            case 19: anchor = menu ? menu.today.transform as RectTransform : null;
+                text = "Today selects today's date. It is a shortcut for scheduling the task today. You still need Save schedule to keep the change."; break;
+            case 20: anchor = menu ? menu.tomorrow.transform as RectTransform : null;
+                text = "Tomorrow selects the next day's date. It does not mark the task complete or move any earned rewards."; break;
+            case 21: anchor = menu ? menu.datePicker.calendar.transform as RectTransform : null;
+                text = "The left and right arrows move between months. Press a numbered day to choose that date. Your selected date is a draft until you press Save schedule."; break;
+            case 22: anchor = menu ? menu.clearDate.transform as RectTransform : null;
+                text = "Clear date removes the schedule when you save. For a repeating task, saving also stops repetition. Read that label before saving. Existing completed history stays intact."; break;
+            case 23: anchor = menu ? menu.save.transform as RectTransform : null;
+                text = "Save schedule applies the chosen date, or clears it if you selected No date. Other task details and current subtask progress are preserved."; break;
+            case 24: anchor = menu ? menu.complete.transform as RectTransform : null;
+                text = "Complete task records finished work, just like the checkbox. Use it only after doing the task. It is disabled when completion is unavailable, including future repeating-task previews. This guide will not press it."; break;
+            case 25: anchor = menu ? menu.delete.transform as RectTransform : null;
+                text = "Delete task asks you to confirm before removing it. Deleting a repeating task also stops future repeats. Completed history and earned rewards remain. You can cancel the confirmation."; break;
+            default: anchor = menu ? menu.back.transform as RectTransform : null;
+                text = "Cancel returns from a submenu without saving its choices. Escape, clicking outside, or leaving Tasks closes the menu and discards unsaved choices. Continue to explore the task tabs."; break;
+        }
+        Show("task-page-" + step, text, anchor, "Continue");
     }
     void ShowFocus()
     {
@@ -586,5 +648,5 @@ public sealed class TutorialController : MonoBehaviour
     public void CompleteTyping() { if(!IsTyping)return; StopTalking();dialogue.Complete();Position(shown == "task-0"); }
     void Idle() { var animator = mentor ? mentor.CharacterAnimator : null; if(animator && animator.isActiveAndEnabled && animator.gameObject.activeInHierarchy && !animator.GetCurrentAnimatorStateInfo(0).IsName("sensei-idle")) animator.Play("sensei-idle", 0, 0); }
     void StopTalking() { SettingsAudio.Instance?.StopDialogue(this); if(typing != null) StopCoroutine(typing); typing = null; Idle(); }
-    void Hide() { Observe(null); queuedAction=null; if(typingShield)typingShield.gameObject.SetActive(false); if(pointer)pointer.gameObject.SetActive(false); if(ownsSettings && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsSettings=false; } if(ownsAccount && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsAccount=false; } if(leaderboard)leaderboard.TutorialOwnsInput=false; if(ownsStagePicker && bossPage) { bossPage.stagePicker.SetActive(false); ownsStagePicker=false; } if(spotlight) spotlight.Dismiss(); if(typing != null || (panel && panel.activeSelf)) StopTalking(); shown = null; target = null; if(panel) panel.SetActive(false); if(highlight) highlight.gameObject.SetActive(false); if(tasks) tasks.TutorialOwnsInput=false; }
+    void Hide() { if(taskMenuPreview) { taskMenuPreview.Dismiss(); Destroy(taskMenuPreview.gameObject); taskMenuPreview = null; } Observe(null); queuedAction=null; if(typingShield)typingShield.gameObject.SetActive(false); if(pointer)pointer.gameObject.SetActive(false); if(ownsSettings && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsSettings=false; } if(ownsAccount && settings) { settings.TutorialOwnsInput=false; settings.Close(); ownsAccount=false; } if(leaderboard)leaderboard.TutorialOwnsInput=false; if(ownsStagePicker && bossPage) { bossPage.stagePicker.SetActive(false); ownsStagePicker=false; } if(spotlight) spotlight.Dismiss(); if(typing != null || (panel && panel.activeSelf)) StopTalking(); shown = null; target = null; if(panel) panel.SetActive(false); if(highlight) highlight.gameObject.SetActive(false); if(tasks) tasks.TutorialOwnsInput=false; }
 }

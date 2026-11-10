@@ -620,6 +620,168 @@
     },
     {
       "role": "mentor",
+      "text": "Right-click an active task to open this menu. With a task focused, Shift plus F10 or the Menu key also works. This is a safe preview: Continue explains each button without changing your task.",
+      "spoken": "Right-click an active task to open this menu. With a task focused, Shift plus F10 or the Menu key also works. This is a safe preview: Continue explains each button without changing your task.",
+      "clip": "DialogueAudio/mentor-1ada43f962675b5a766d",
+      "duration": 13.197041666666667,
+      "peak": 0.6447030305862427,
+      "sha256": "dc6386752930c4f1e4c21e42da94e64f1a1412b5dc89d29f404e1c7d993d7852"
+    },
+    {
+      "role": "mentor",
+      "text": "Edit task opens the full editor for the name, description, subtasks and repeat settings. Save keeps your changes; Cancel leaves the task unchanged. Editing does not complete the work.",
+      "spoken": "Edit task opens the full editor for the name, description, subtasks and repeat settings. Save keeps your changes; Cancel leaves the task unchanged. Editing does not complete the work.",
+      "clip": "DialogueAudio/mentor-ecc7dd616d5f4be93c09",
+      "duration": 12.969104166666666,
+      "peak": 0.6541870832443237,
+      "sha256": "b5dd42a843f6cba8ec56a25c655b8c134ef72a878ddc6bf1d7585deb937157ef"
+    },
+    {
+      "role": "mentor",
+      "text": "Change difficulty opens three choices. Choose the effort that fits your real task. The change is only saved when you press Save.",
+      "spoken": "Change difficulty opens three choices. Choose the effort that fits your real task. The change is only saved when you press Save.",
+      "clip": "DialogueAudio/mentor-678ce9f1c7fbd3fb602a",
+      "duration": 9.004395833333334,
+      "peak": 0.6303911209106445,
+      "sha256": "5533a18e5583437f6b7644d736600ee2ecac5e081decbc3703fb3b9accf09609"
+    },
+    {
+      "role": "mentor",
+      "text": "Easy is for a small, straightforward task. Selecting it changes the draft difficulty. It does not save or grant a reward yet.",
+      "spoken": "Easy is for a small, straightforward task. Selecting it changes the draft difficulty. It does not save or grant a reward yet.",
+      "clip": "DialogueAudio/mentor-47833a126adcc0eac0d9",
+      "duration": 8.894104166666667,
+      "peak": 0.6473546028137207,
+      "sha256": "c7cabbd50295f302047df033b4b6d22781b862b55352dc59d61ce1db35d777f9"
+    },
+    {
+      "role": "mentor",
+      "text": "Medium is for a task that needs a moderate amount of effort. Difficulty is your choice; select the level that fits the work.",
+      "spoken": "Medium is for a task that needs a moderate amount of effort. Difficulty is your choice; select the level that fits the work.",
+      "clip": "DialogueAudio/mentor-f83c6f97a3a1fd801acd",
+      "duration": 8.504395833333334,
+      "peak": 0.64164799451828,
+      "sha256": "7eb81499d3e9772c40b3447a5f56a760c5c9fb83288355e5778811baf0967887"
+    },
+    {
+      "role": "mentor",
+      "text": "Hard is for more demanding work. Difficulty affects completion rewards within your daily allowance. Selecting Hard does not complete the task.",
+      "spoken": "Hard is for more demanding work. Difficulty affects completion rewards within your daily allowance. Selecting Hard does not complete the task.",
+      "clip": "DialogueAudio/mentor-8aeb6d570817dbff1a8c",
+      "duration": 9.973520833333334,
+      "peak": 0.6421287655830383,
+      "sha256": "541c20551c678c00064c8c79840d327feb191bcdce2827be4624ad4616754cf1"
+    },
+    {
+      "role": "mentor",
+      "text": "Save applies the selected difficulty to this task. If saving fails, your choices stay open so you can retry. Editing does not grant completion rewards.",
+      "spoken": "Save applies the selected difficulty to this task. If saving fails, your choices stay open so you can retry. Editing does not grant completion rewards.",
+      "clip": "DialogueAudio/mentor-1925f951e56769fac43b",
+      "duration": 10.632333333333333,
+      "peak": 0.6351221203804016,
+      "sha256": "9884be0c49ed151a9d13a12d856df34f22a85ffc0d34c3d84ccc67d1479a52dd"
+    },
+    {
+      "role": "mentor",
+      "text": "Add or remove tags opens your tag collection. Tags organize your tasks and help you find related work.",
+      "spoken": "Add or remove tags opens your tag collection. Tags organize your tasks and help you find related work.",
+      "clip": "DialogueAudio/mentor-69dc300d821349d37c31",
+      "duration": 6.888229166666667,
+      "peak": 0.6441887021064758,
+      "sha256": "d29e6e8541c7b481592211c5136e787f6eb2623319f4d9371f02c2df57466e98"
+    },
+    {
+      "role": "mentor",
+      "text": "Select a tag to add it, and select it again to remove it. You can choose several tags. Save applies your choices. If the list is empty, create tags in Settings first.",
+      "spoken": "Select a tag to add it, and select it again to remove it. You can choose several tags. Save applies your choices. If the list is empty, create tags in Settings first.",
+      "clip": "DialogueAudio/mentor-dcef44040c94cce83666",
+      "duration": 11.698520833333333,
+      "peak": 0.6380131244659424,
+      "sha256": "0e8dc0f95434673293ca26a0ba5ef4e78c8a8cacc6e636ccec032bc0a3cf48d5"
+    },
+    {
+      "role": "mentor",
+      "text": "Schedule opens the date controls. Choose a shortcut or a calendar day, then Save schedule to apply it. For repeating tasks this changes the repeat start date.",
+      "spoken": "Schedule opens the date controls. Choose a shortcut or a calendar day, then Save schedule to apply it. For repeating tasks this changes the repeat start date.",
+      "clip": "DialogueAudio/mentor-29995d2048491bd775f3",
+      "duration": 11.1029375,
+      "peak": 0.6481018662452698,
+      "sha256": "fbe231f2116c7b4b438d0e905fa69ed86aba6f96766993b0ae17399f9118ad6e"
+    },
+    {
+      "role": "mentor",
+      "text": "Today selects today's date. It is a shortcut for scheduling the task today. You still need Save schedule to keep the change.",
+      "spoken": "Today selects today's date. It is a shortcut for scheduling the task today. You still need Save schedule to keep the change.",
+      "clip": "DialogueAudio/mentor-28779966fdf755b5458f",
+      "duration": 8.735291666666667,
+      "peak": 0.6460090279579163,
+      "sha256": "25597540fbc2639e849647c3de102408e4897cc182c48f4fb8c014f1eb1c87e2"
+    },
+    {
+      "role": "mentor",
+      "text": "Tomorrow selects the next day's date. It does not mark the task complete or move any earned rewards.",
+      "spoken": "Tomorrow selects the next day's date. It does not mark the task complete or move any earned rewards.",
+      "clip": "DialogueAudio/mentor-c8a4964df161475f7c34",
+      "duration": 6.845583333333333,
+      "peak": 0.643521785736084,
+      "sha256": "1325dbe5392a2758957fc9514c5f5a9f9d4ca6b853813284b79f7f06d65c0e18"
+    },
+    {
+      "role": "mentor",
+      "text": "The left and right arrows move between months. Press a numbered day to choose that date. Your selected date is a draft until you press Save schedule.",
+      "spoken": "The left and right arrows move between months. Press a numbered day to choose that date. Your selected date is a draft until you press Save schedule.",
+      "clip": "DialogueAudio/mentor-0696d538ecb40d07c03d",
+      "duration": 10.116166666666667,
+      "peak": 0.6455839276313782,
+      "sha256": "5df36ecbb8f9a5240717dabf23e984c70ebda42d7de642457b12b22c1de8a64a"
+    },
+    {
+      "role": "mentor",
+      "text": "Clear date removes the schedule when you save. For a repeating task, saving also stops repetition. Read that label before saving. Existing completed history stays intact.",
+      "spoken": "Clear date removes the schedule when you save. For a repeating task, saving also stops repetition. Read that label before saving. Existing completed history stays intact.",
+      "clip": "DialogueAudio/mentor-5d735ac6efd627839eda",
+      "duration": 12.107333333333333,
+      "peak": 0.6435057520866394,
+      "sha256": "ee664581e5f8b94e8d6325c6556489921682fb545eff7bdf8d783889519b71e2"
+    },
+    {
+      "role": "mentor",
+      "text": "Save schedule applies the chosen date, or clears it if you selected No date. Other task details and current subtask progress are preserved.",
+      "spoken": "Save schedule applies the chosen date, or clears it if you selected No date. Other task details and current subtask progress are preserved.",
+      "clip": "DialogueAudio/mentor-7e1836440661d4ccea62",
+      "duration": 9.523520833333333,
+      "peak": 0.646205723285675,
+      "sha256": "2f41e2b77836eff911977789cb4460c80b4a54f0384660c7bc4d02edfea27522"
+    },
+    {
+      "role": "mentor",
+      "text": "Complete task records finished work, just like the checkbox. Use it only after doing the task. It is disabled when completion is unavailable, including future repeating-task previews. This guide will not press it.",
+      "spoken": "Complete task records finished work, just like the checkbox. Use it only after doing the task. It is disabled when completion is unavailable, including future repeating-task previews. This guide will not press it.",
+      "clip": "DialogueAudio/mentor-696136529e4bfb0ad019",
+      "duration": 14.945583333333333,
+      "peak": 0.6467345356941223,
+      "sha256": "69150c0e00a3264fd4e088c26eafc01bdfb3231aae48d31094eb7bc081e142e4"
+    },
+    {
+      "role": "mentor",
+      "text": "Delete task asks you to confirm before removing it. Deleting a repeating task also stops future repeats. Completed history and earned rewards remain. You can cancel the confirmation.",
+      "spoken": "Delete task asks you to confirm before removing it. Deleting a repeating task also stops future repeats. Completed history and earned rewards remain. You can cancel the confirmation.",
+      "clip": "DialogueAudio/mentor-8a1a54bf1b7de2a130f7",
+      "duration": 12.676458333333333,
+      "peak": 0.6451606750488281,
+      "sha256": "17d6e93959da4160d8f9d9d88e7b93f321cf375261a97f5933bc540199435407"
+    },
+    {
+      "role": "mentor",
+      "text": "Cancel returns from a submenu without saving its choices. Escape, clicking outside, or leaving Tasks closes the menu and discards unsaved choices. Continue to explore the task tabs.",
+      "spoken": "Cancel returns from a submenu without saving its choices. Escape, clicking outside, or leaving Tasks closes the menu and discards unsaved choices. Continue to explore the task tabs.",
+      "clip": "DialogueAudio/mentor-a1e1113ce6b11e26128a",
+      "duration": 12.76175,
+      "peak": 0.6464576125144958,
+      "sha256": "748f523f0c660043ba49279b31d73484c57d0b343797b8b685b46488e21cdae3"
+    },
+    {
+      "role": "mentor",
       "text": "Focus unlocks at Lv.2. Complete real tasks to grow your cat. Once open, I will walk you through the timer, one step at a time.",
       "spoken": "Focus unlocks at Lv.2. Complete real tasks to grow your cat. Once open, I will walk you through the timer, one step at a time.",
       "clip": "DialogueAudio/mentor-0450518325ba17749990",

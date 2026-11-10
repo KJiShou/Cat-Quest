@@ -43,7 +43,7 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     GameObject returnFocus, lastTagFocus;
     Canvas canvas;
     RectTransform root;
-    bool saving;
+    bool saving, tutorialPreview;
     float defaultPanelWidth;
 
     void Awake()
@@ -78,6 +78,7 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     public void Show(QuestTask task, List<QuestTag> catalog, DateTime now, bool canComplete, Vector2 point,
         Action<TaskContextAction> callback, Func<TaskContextChange,string> onApply)
     {
+        tutorialPreview=false;
         returnFocus=EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
         original=PlayerDataStore.Copy(task); localToday=now.Date;
         action=callback; apply=onApply; screenPoint=point; heading.text=task.title;
@@ -116,6 +117,15 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
         RefreshDifficulty(); ClearError(); FocusControls();
         tagScroll.verticalNormalizedPosition=1; lastTagFocus=null;
         Canvas.ForceUpdateCanvases(); LayoutRebuilder.ForceRebuildLayoutImmediate(panel); Position();
+    }
+    // Tutorial instances have no domain callbacks and never capture keyboard input.
+    public void ShowTutorialPanel(TaskContextAction choice)
+    {
+        action = null; apply = null; tutorialPreview = true;
+        ShowPanel(choice);
+        keyboard.enabled = false;
+        pickerKeyboard.enabled = false;
+        returnFocus = null;
     }
     void FocusControls()
     {
@@ -177,7 +187,7 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     }
     void Position()
     {
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(root,screenPoint,canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera,out var point);
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(root,tutorialPreview ? new Vector2(Screen.width * .08f, Screen.height * .88f) : screenPoint,canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera,out var point);
         var bounds=root.rect;
         panel.localPosition=new Vector3(Mathf.Clamp(point.x,bounds.xMin+12,bounds.xMax-panel.rect.width-12),Mathf.Clamp(point.y,bounds.yMin+panel.rect.height+12,bounds.yMax-12),0);
     }
