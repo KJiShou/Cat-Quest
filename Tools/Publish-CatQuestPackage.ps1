@@ -12,7 +12,9 @@ $identity = Get-Content -LiteralPath (Join-Path $build 'catquest-build.json') -R
 if ($identity.development -and !$AllowDevelopmentBuild) { throw 'Development builds cannot be published. Build a release player first.' }
 $version = [string]$identity.version
 if ($version -notmatch '^\d+\.\d+(\.\d+){0,2}$') { throw 'Use a numeric release version, for example 1.2.1.' }
-$notes = Get-Content -LiteralPath $NotesFile -Raw
+# Read a plain string: Windows PowerShell attaches provider metadata to
+# Get-Content output, which ConvertTo-Json can otherwise emit as an object.
+$notes = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $NotesFile).Path)
 if ($notes.Length -gt 8000) { throw 'Release notes must be at most 8000 characters.' }
 [IO.Directory]::CreateDirectory($output) | Out-Null
 $zipName = "CatQuest-$version-win-x64.zip"
