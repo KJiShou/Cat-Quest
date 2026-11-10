@@ -27,6 +27,10 @@ public sealed class FocusPanelUI : MonoBehaviour
     public TMP_Text fishReward, ticketReward;
     public Slider rewardAllowanceBar, ticketAllowanceBar;
     public TMP_Text rewardAllowanceLabel, ticketAllowanceLabel;
+    public TMP_Text ticketRule;
+    public GameObject ticketProgressCard;
+    public Slider ticketProgressBar;
+    public TMP_Text ticketStepValue;
     public TMP_FontAsset settingsFont;
     public Sprite settingsSprite;
     public Toggle pomodoroMode, stopwatchMode, countdownMode;
@@ -142,7 +146,15 @@ public sealed class FocusPanelUI : MonoBehaviour
             if (focus.Phase != FocusPhase.Focusing || focus.SessionId != session) return;
             if (cancelSession) focus.Cancel();
             else focus.EndEarly();
-        });
+        }, cancelSession ? null : (Func<FocusCancelConfirmation.RewardPreview>)EndFocusEstimate);
+    }
+    private FocusCancelConfirmation.RewardPreview EndFocusEstimate()
+    {
+        var service = GameDataManager.EnsureInstance().Tasks;
+        var estimate = service.PreviewFocusRewards(focus.ElapsedSeconds);
+        int minutes = (int)(Math.Min(focus.ElapsedSeconds, service.FocusSessionMinuteLimit * 60d) / 60);
+        int remaining = TaskService.DailyGoalTarget(DailyRewardGoal.Focus25Minutes) - service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes);
+        return new FocusCancelConfirmation.RewardPreview(estimate, Math.Max(0, Math.Min(minutes, remaining)));
     }
     private void EndRest() { focus.EndRest(); }
     private void Retry() { focus.RetrySettlement(); }
@@ -317,12 +329,18 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (ticketAllowanceBar) { ticketAllowanceBar.maxValue = TaskService.FocusTicketCap; ticketAllowanceBar.SetValueWithoutNotify(day.focusTickets); }
         if (rewardAllowanceLabel) rewardAllowanceLabel.text = $"Reward time today   {day.focusMinutes} / {dailyLimit} min";
         if (ticketAllowanceLabel) ticketAllowanceLabel.text = $"Boss Tickets today   {day.focusTickets} / {TaskService.FocusTicketCap}";
+        RefreshTicketProgress(day, previewReward.tickets);
         string notice = (day.focusMinutes >= dailyLimit ? "Daily EXP / Fish limit reached. Timer still available."
                 : focus.ElapsedSeconds >= sessionLimit * 60d && focus.CountsUp ? (focus.Phase == FocusPhase.Focusing ? "Session reward limit reached. Timer continues." : $"Session rewards limited to {sessionLimit} min.")
                 : "");
         // The authored scene intentionally unbinds the old sky message. Keep result feedback
         // in this serialized settings card instead of overriding the scene's sky composition.
-        if (focus.Phase == FocusPhase.Saving)
+        bool persistentNotice = !string.IsNullOrEmpty(focus.ErrorMessage);
+        if (persistentNotice)
+            notice = (focus.Phase == FocusPhase.Saving ? "Not saved. " : "Start failed. ")
+                + FocusErrorSummary(focus.ErrorMessage)
+                + (focus.Phase == FocusPhase.Saving ? " Retry Save." : " Try Start Focus again.");
+        else if (focus.Phase == FocusPhase.Saving)
             notice = "Focus not saved. Retry to save your result.";
         else if (focus.Phase == FocusPhase.Finished && focus.LastResult != null)
             notice = "Focus saved." + (string.IsNullOrEmpty(notice) ? "" : "\n" + notice);
@@ -333,10 +351,40 @@ public sealed class FocusPanelUI : MonoBehaviour
         {
             lastNotice = notice;
             noticeSession = focus.SessionId;
-            noticeUntil = string.IsNullOrEmpty(notice) ? 0 : Time.realtimeSinceStartupAsDouble + 4;
+            noticeUntil = persistentNotice || string.IsNullOrEmpty(notice) ? 0 : Time.realtimeSinceStartupAsDouble + 4;
         }
-        if (allowance) allowance.text = Time.realtimeSinceStartupAsDouble < noticeUntil ? notice : "";
+        if (allowance) allowance.text = persistentNotice || Time.realtimeSinceStartupAsDouble < noticeUntil ? notice : "";
         if(allowanceNotice)allowanceNotice.SetActive(allowance&&!string.IsNullOrEmpty(allowance.text));
+    }
+    private void RefreshTicketProgress(RewardDay day, int estimatedTickets)
+    {
+        const double ticketSeconds = 25 * 60;
+        bool focusing = focus.Phase == FocusPhase.Focusing;
+        int remaining = TaskService.FocusTicketCap - day.focusTickets;
+        double nextBoundary = (Math.Floor(focus.ElapsedSeconds / ticketSeconds) + 1) * ticketSeconds;
+        bool endsBeforeNext = focusing && !focus.CountsUp && focus.FocusSeconds < nextBoundary;
+        bool visible = (focus.Phase == FocusPhase.Ready || focusing) && remaining > 0 && estimatedTickets < remaining
+            && (!endsBeforeNext || estimatedTickets == 0);
+        if (ticketProgressCard) ticketProgressCard.SetActive(visible);
+        bool shortPlan = !focusing && !focus.CountsUp && focus.FocusSeconds < ticketSeconds;
+        double elapsed = focusing ? focus.ElapsedSeconds % ticketSeconds : 0;
+        double seconds = shortPlan ? focus.FocusSeconds : endsBeforeNext ? focus.RemainingSeconds : ticketSeconds - elapsed;
+        if (ticketRule) ticketRule.text = visible ? FocusController.FormatTime(seconds, false) : "";
+        if (ticketStepValue) ticketStepValue.text = visible ? (shortPlan || endsBeforeNext ? "0" : "+1") : "";
+        if (ticketProgressBar) {
+            ticketProgressBar.maxValue = 1;
+            ticketProgressBar.SetValueWithoutNotify(visible ? (float)(elapsed / ticketSeconds) : 0);
+        }
+    }
+    static string FocusErrorSummary(string error)
+    {
+        // Keep the actual reason, but omit the long local path and duplicate save
+        // heading in this compact card. The controller retains the original error.
+        const string savePrefix = "Could not save your changes. ";
+        if (error.StartsWith(savePrefix, StringComparison.Ordinal)) error = error.Substring(savePrefix.Length);
+        var path = GameDataManager.Instance ? GameDataManager.Instance.SavePath : null;
+        if (!string.IsNullOrEmpty(path)) error = error.Replace(path + ".tmp", "save file").Replace(path, "save file");
+        return error;
     }
     private static void Style(Button button, bool enabled, bool selected)
     {

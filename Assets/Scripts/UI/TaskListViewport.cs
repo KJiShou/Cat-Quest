@@ -40,6 +40,21 @@ internal sealed class TaskListViewport
         before.gameObject.SetActive(false); after.gameObject.SetActive(false);
     }
     float Spacing => layout ? layout.spacing : 0;
+    public float ScrollOffset => Mathf.Max(0, viewport.InverseTransformPoint(
+        content.TransformPoint(new Vector3(0, content.rect.yMax))).y - viewport.rect.yMax);
+    public void RestoreScrollOffset(float offset)
+    {
+        var scroll = content.GetComponentInParent<ScrollRect>();
+        if (!scroll || !viewport || !content.gameObject.activeInHierarchy) return;
+        // Resolve the newly bound tab's extent before restoring its pixel offset.
+        // This is only used on navigation, not on every ordinary data refresh.
+        Canvas.ForceUpdateCanvases();
+        float maximum = Mathf.Max(0, content.rect.height - viewport.rect.height);
+        scroll.StopMovement();
+        scroll.verticalNormalizedPosition = maximum > 0 ? 1 - Mathf.Clamp(offset, 0, maximum) / maximum : 1;
+        lastSelection = EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
+        Update(true);
+    }
     public void Begin(int prefix = 0, float prefixPixels = 0)
     {
         entries.Clear(); extent = 0; prefixCount = prefix;

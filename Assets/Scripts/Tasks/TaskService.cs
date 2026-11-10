@@ -42,8 +42,33 @@ public sealed partial class TaskService
     public int FishCoins => store.Data.fishCoins;
     public int Tickets => store.Data.tickets;
     public int Experience => store.Data.experience;
+    public string PlayerName => store.Data.username;
     public List<QuestTag> TagCatalog => store.Data.tags.ConvertAll(t => new QuestTag { id = t.id, name = t.name, colorHex = t.colorHex });
     public PlayerData Snapshot => PlayerDataStore.Copy(store.Data);
+    // Detached task-domain data for browsing; not a candidate for persistence.
+    // Currency values are also used by the existing Tasks header.
+    public PlayerData TaskSnapshot => CopyTaskSnapshot(store.Data.tasks, store.Data.occurrences, store.Data.history);
+    private PlayerData CopyTaskSnapshot(IEnumerable<QuestTask> tasks, IEnumerable<TaskOccurrence> occurrences, IEnumerable<TaskCompletion> history)
+    {
+        return new PlayerData { tasks = tasks.Select(t => t.DetachedCopy()).ToList(), tags = TagCatalog,
+            occurrences = occurrences.Select(o => o.DetachedCopy()).ToList(), history = history.Select(h => h.DetachedCopy()).ToList(),
+            fishCoins = store.Data.fishCoins, tickets = store.Data.tickets };
+    }
+    internal PlayerData BrowseSnapshot(bool includeHistory)
+    {
+        string today = Today;
+        return CopyTaskSnapshot(store.Data.tasks, store.Data.occurrences.Where(o => o.day == "once" || o.day == today),
+            includeHistory ? store.Data.history : (IEnumerable<TaskCompletion>)Array.Empty<TaskCompletion>());
+    }
+    internal int HistoryCount => store.Data.history.Count(h => !h.revoked);
+    internal int BrowseCount(PlayerData data, TaskTab tab)
+    {
+        if (tab == TaskTab.History) return HistoryCount;
+        if (tab == TaskTab.Tags) return data.tags.Count;
+        int count = QuerySnapshot(data, tab, orderResults: false).Count;
+        if (tab == TaskTab.Todo) count += QuerySnapshot(data, TaskTab.Daily, orderResults: false).Count(v => !v.Completed);
+        return count;
+    }
     private readonly IPlayerDataStore store;
     private readonly ITaskClock clock;
     private string observedDay;
@@ -303,36 +328,77 @@ public sealed partial class TaskService
     });
 
     public List<TaskView> Query(TaskTab tab, string search = "", TaskDifficulty? difficulty = null, IEnumerable<string> tagIds = null)
-        => QuerySnapshot(Snapshot, tab, search, difficulty, tagIds);
+    {
+        bool history = tab == TaskTab.History;
+        string today = Today;
+        var data = CopyTaskSnapshot(history ? Array.Empty<QuestTask>() : store.Data.tasks,
+            history ? Array.Empty<TaskOccurrence>() : store.Data.occurrences.Where(o => o.day == "once" || o.day == today),
+            history ? store.Data.history : Array.Empty<TaskCompletion>());
+        return QuerySnapshot(data, tab, search, difficulty, tagIds);
+    }
 
-    internal List<TaskView> QuerySnapshot(PlayerData data, TaskTab tab, string search = "", TaskDifficulty? difficulty = null, IEnumerable<string> tagIds = null)
+    private static Dictionary<(string task, string day), TaskOccurrence> IndexOccurrences(IEnumerable<TaskOccurrence> occurrences, string currentDay = null)
+    {
+        var index = new Dictionary<(string, string), TaskOccurrence>();
+        foreach (var occurrence in occurrences)
+        {
+            if (currentDay != null && occurrence.day != "once" && occurrence.day != currentDay) continue;
+            var key = (occurrence.taskId, occurrence.day);
+            // Preserve FirstOrDefault behavior if a legacy save contains duplicate keys.
+            if (!index.ContainsKey(key)) index.Add(key, occurrence);
+        }
+        return index;
+    }
+    private static TaskView LiveTaskView(PlayerData data, QuestTask task, TaskOccurrence occurrence)
+    {
+        var view = new TaskView { task = task, occurrence = occurrence, tagNames = new List<string>(), tagColors = new List<string>() };
+        // Keep catalog order, including the historical duplicate-tag behavior.
+        foreach (var tag in data.tags)
+            if (task.tagIds.Contains(tag.id)) { view.tagNames.Add(tag.name); view.tagColors.Add(tag.colorHex); }
+        return view;
+    }
+
+    private static IEnumerable<TaskCompletion> OrderHistory(IEnumerable<TaskCompletion> history)
+    {
+        // Preserve current-culture ordering and stable ties, but compute each
+        // collation key once instead of comparing long timestamps repeatedly.
+        var comparison = CultureInfo.CurrentCulture.CompareInfo;
+        var comparer = Comparer<SortKey>.Create((a, b) => a == null ? (b == null ? 0 : -1) : b == null ? 1 : SortKey.Compare(a, b));
+        return history.Where(h => !h.revoked)
+            .Select(h => new { item = h, key = h.completedUtc == null ? null : comparison.GetSortKey(h.completedUtc) })
+            .OrderByDescending(pair => pair.key, comparer).Select(pair => pair.item);
+    }
+
+    internal List<TaskView> QuerySnapshot(PlayerData data, TaskTab tab, string search = "", TaskDifficulty? difficulty = null, IEnumerable<string> tagIds = null, bool orderResults = true)
     {
         var today = Today;
         var selectedTags = (tagIds ?? Array.Empty<string>()).ToArray();
         var rows = new List<TaskView>();
         if (tab == TaskTab.History)
-            foreach (var item in data.history.Where(h => !h.revoked).OrderByDescending(h => h.completedUtc)) rows.Add(new TaskView
+            foreach (var item in OrderHistory(data.history)) rows.Add(new TaskView
             {
                 task = item.snapshot, history = item, tagNames = item.tagNames, tagColors = item.tagColors,
                 occurrence = new TaskOccurrence { taskId = item.taskId, day = item.day, completed = true, rewardGranted = true, completedSubtaskIds = item.snapshot.subtasks.Select(s => s.id).ToList() }
             });
         else
+        {
+            var occurrences = IndexOccurrences(data.occurrences, today);
             foreach (var task in data.tasks)
             {
-                var occurrence = data.occurrences.FirstOrDefault(o => o.taskId == task.id && o.day == OccurrenceDay(task, today)) ?? new TaskOccurrence { taskId = task.id, day = OccurrenceDay(task, today) };
+                string day = OccurrenceDay(task, today);
+                if (!occurrences.TryGetValue((task.id, day), out var occurrence)) occurrence = new TaskOccurrence { taskId = task.id, day = day };
                 bool show = tab == TaskTab.Daily ? task.daily
                     : tab == TaskTab.Todo ? !task.daily && !occurrence.completed
                     : tab == TaskTab.Tags ? !occurrence.completed && Eligible(task)
                     : !occurrence.completed && (task.daily ? Eligible(task) : task.scheduled && TryDate(task.date, out var due) && due.Date <= clock.LocalNow.Date);
-                if (show) rows.Add(new TaskView { task = task, occurrence = occurrence,
-                    tagNames = data.tags.Where(t => task.tagIds.Contains(t.id)).Select(t => t.name).ToList(),
-                    tagColors = data.tags.Where(t => task.tagIds.Contains(t.id)).Select(t => t.colorHex).ToList() });
+                if (show) rows.Add(LiveTaskView(data, task, occurrence));
             }
+        }
         search = (search ?? "").Trim();
         rows = rows.Where(v => (!difficulty.HasValue || v.task.difficulty == difficulty.Value)
             && selectedTags.All(id => v.task.tagIds.Contains(id))
             && (search.Length == 0 || ((v.task.title ?? "") + " " + v.task.description + " " + string.Join(" ", v.tagNames)).IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
-        if (tab != TaskTab.History) rows = rows.OrderBy(v => v.Completed).ThenBy(v => v.task.scheduled ? v.task.date : "9999").ThenBy(v => v.task.title).ToList();
+        if (orderResults && tab != TaskTab.History) rows = rows.OrderBy(v => v.Completed).ThenBy(v => v.task.scheduled ? v.task.date : "9999").ThenBy(v => v.task.title).ToList();
         return rows;
     }
 }

@@ -14,6 +14,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public Button aiButton, aiBack;
     public Button importBackup, exportBackup;
     public Toggle notifications, upload;
+    public Toggle reduceMotion;
     public Slider sound, music;
     public Button soundMute, musicMute;
     public SettingsSliderCommit soundCommit, musicCommit;
@@ -75,6 +76,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         confirmDelete.onClick.AddListener(DeleteTag);
         cancelDelete.onClick.AddListener(OpenTags);
         notifications.onValueChanged.AddListener(_ => { if (!refreshing) SaveSettings(); });
+        if(reduceMotion)reduceMotion.onValueChanged.AddListener(_ => { if(!refreshing)SaveSettings(); });
         sound.onValueChanged.AddListener(_ => PreviewVolumes(soundCommit));
         music.onValueChanged.AddListener(_ => PreviewVolumes(musicCommit));
         soundMute.onClick.AddListener(ToggleSoundMute);
@@ -228,6 +230,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     {
         var draft = service.Settings;
         draft.notificationsEnabled = notifications.isOn;
+        if(reduceMotion)draft.reduceMotion = reduceMotion.isOn;
         draft.soundVolume = sound.value;
         draft.musicVolume = music.value;
         draft.defaultTaskTab = selectedTaskTab;
@@ -339,6 +342,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         showDashboardFocus.SetIsOnWithoutNotify(!saved.hideDashboardFocus);
         showDashboardCharacter.SetIsOnWithoutNotify(!saved.hideDashboardCharacter);
         notifications.SetIsOnWithoutNotify(saved.notificationsEnabled);
+        if(reduceMotion)reduceMotion.SetIsOnWithoutNotify(saved.reduceMotion);
         sound.SetValueWithoutNotify(saved.soundVolume); music.SetValueWithoutNotify(saved.musicVolume);
         RememberVolumes();
         // Native sliders do not notify visual adapters during programmatic initialization.

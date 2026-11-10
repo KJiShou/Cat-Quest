@@ -692,12 +692,12 @@
     },
     {
       "role": "mentor",
-      "text": "Pomodoro asks you to finish the planned session. Cancel gives no rewards. Other modes offer End Early, which saves rewards for time earned under the existing limits. Cancelled or interrupted sessions give no rewards.",
-      "spoken": "Pomodoro asks you to finish the planned session. Cancel gives no rewards. Other modes offer End Early, which saves rewards for time earned under the existing limits. Cancelled or interrupted sessions give no rewards.",
-      "clip": "DialogueAudio/mentor-f57f1c895069212488a4",
-      "duration": 14.707333333333333,
-      "peak": 0.6467494964599609,
-      "sha256": "71c4607e4a0924a27440c6c67de055e4e3157582766daa7cd584f3d22d57f8e4"
+      "text": "Each session earns one Ticket per full 25 minutes, within the daily limit. Short sessions do not combine for Tickets. End Early saves earned rewards and adds to your daily Focus goal. Pomodoro Cancel and interruptions give no rewards.",
+      "spoken": "Each session earns one Ticket per full 25 minutes, within the daily limit. Short sessions do not combine for Tickets. End Early saves earned rewards and adds to your daily Focus goal. Pomodoro Cancel and interruptions give no rewards.",
+      "clip": "DialogueAudio/mentor-d65a6c2c0e624512a491",
+      "duration": 15.813229166666666,
+      "peak": 0.6316299438476562,
+      "sha256": "001f457f60a5956edc87c8c709be9a17447dfcc80714ef36482cfe010202e3a3"
     },
     {
       "role": "mentor",
@@ -728,12 +728,12 @@
     },
     {
       "role": "mentor",
-      "text": "This Backpack holds equipment you have collected. An empty Backpack is normal at first. Each normal Boss has its own mastery: wins 5, 10 and 15 each let you claim one unowned piece from that Boss's set in the stage selector.",
-      "spoken": "This Backpack holds equipment you have collected. An empty Backpack is normal at first. Each normal Boss has its own mastery: wins 5, 10 and 15 each let you claim one unowned piece from that Boss's set in the stage selector.",
-      "clip": "DialogueAudio/mentor-246272988512e612ab62",
-      "duration": 15.2396875,
-      "peak": 0.6491656303405762,
-      "sha256": "2b6f7815eea9b525265333af66b02f6a0b47a9b055a1e8abae73fe755336bda1"
+      "text": "This Backpack holds your collected equipment. An empty Backpack is normal at first. Each normal Boss has fixed mastery rewards: 5 wins unlock the Weapon, 10 wins the Body Armour, and 15 wins the Head Accessory. Claim each earned piece in the stage selector.",
+      "spoken": "This Backpack holds your collected equipment. An empty Backpack is normal at first. Each normal Boss has fixed mastery rewards: 5 wins unlock the Weapon, 10 wins the Body Armour, and 15 wins the Head Accessory. Claim each earned piece in the stage selector.",
+      "clip": "DialogueAudio/mentor-90656e7406e14c0db3d9",
+      "duration": 17.688229166666666,
+      "peak": 0.6568107604980469,
+      "sha256": "97ccd33b1b3f40f502e3a9b24e8b6eedc5e1b3b901df2318af4d4ebedce7264e"
     },
     {
       "role": "mentor",
@@ -836,12 +836,12 @@
     },
     {
       "role": "mentor",
-      "text": "Each normal boss has its own mastery. Wins 5, 10 and 15 each allow one unowned piece from that boss's three-piece equipment set. Claim earned rewards here when they are available.",
-      "spoken": "Each normal boss has its own mastery. Wins 5, 10 and 15 each allow one unowned piece from that boss's three-piece equipment set. Claim earned rewards here when they are available.",
-      "clip": "DialogueAudio/mentor-42951b17d123b151654e",
-      "duration": 11.829395833333333,
-      "peak": 0.6324825882911682,
-      "sha256": "a863771eb927e3a8a02d6ac9492cb3f2cbec45b81e10dc3ef9e6953c8f74efa4"
+      "text": "Each normal Boss has its own fixed mastery rewards: 5 wins unlock the Weapon, 10 wins the Body Armour, and 15 wins the Head Accessory. Open the reward chests here to claim earned pieces.",
+      "spoken": "Each normal Boss has its own fixed mastery rewards: 5 wins unlock the Weapon, 10 wins the Body Armour, and 15 wins the Head Accessory. Open the reward chests here to claim earned pieces.",
+      "clip": "DialogueAudio/mentor-336d6c514276efc3b209",
+      "duration": 12.31175,
+      "peak": 0.6544238328933716,
+      "sha256": "00c0c0b4759b03c63227d35071f55e2df74d3d458c92513360172f3bc85ee932"
     },
     {
       "role": "mentor",
@@ -944,21 +944,21 @@
     },
     {
       "role": "mentor",
-      "text": "Choose which tab opens when you enter Tasks: Today, Daily Tasks or Todo. Your tasks stay saved whichever starting tab you prefer.",
-      "spoken": "Choose which tab opens when you enter Tasks: Today, Daily Tasks or Todo. Your tasks stay saved whichever starting tab you prefer.",
-      "clip": "DialogueAudio/mentor-6ac62d2c34c07a862c50",
-      "duration": 8.970583333333334,
-      "peak": 0.6348201632499695,
-      "sha256": "735dbc501bc9c98a15bff1cbe757ab0ab412ffde86a376fdc60673640892cd5d"
+      "text": "Choose the starting Tasks tab for each launch: Today, Daily Tasks or Todo. Later visits keep your current tab, search, filters and scroll position.",
+      "spoken": "Choose the starting Tasks tab for each launch: Today, Daily Tasks or Todo. Later visits keep your current tab, search, filters and scroll position.",
+      "clip": "DialogueAudio/mentor-78700fb1d53003e6a1b5",
+      "duration": 10.455875,
+      "peak": 0.6431536674499512,
+      "sha256": "f1f4d39d2654ec2aa21b7292207fb581065073b58b232a347f11c39a3c32d191"
     },
     {
       "role": "mentor",
-      "text": "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session.",
-      "spoken": "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session.",
-      "clip": "DialogueAudio/mentor-446ef0e4449fc503b910",
-      "duration": 8.573520833333333,
-      "peak": 0.6505845785140991,
-      "sha256": "27efacd6e524b40956eb293ba470f473dbf35ffd8c90f5dbfd8183cff5782855"
+      "text": "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session. Reduce motion limits decorative effects without changing your progress.",
+      "spoken": "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session. Reduce motion limits decorative effects without changing your progress.",
+      "clip": "DialogueAudio/mentor-e991ee7a876d1aff59cf",
+      "duration": 13.526458333333334,
+      "peak": 0.6505590677261353,
+      "sha256": "cc9600c65d998be8eaec77541fbe11218e6eb57e2c0d0fc7f40f761b62f37a8b"
     },
     {
       "role": "mentor",

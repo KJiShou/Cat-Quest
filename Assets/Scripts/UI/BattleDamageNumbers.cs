@@ -41,7 +41,7 @@ public sealed class BattleDamageNumbers : MonoBehaviour
         n.age=0;n.active=true;n.text.text="−"+damage;
         n.text.color=onCat?new Color32(255,111,126,255):new Color32(255,241,182,255);n.text.alpha=1;
         var rect=n.text.rectTransform;rect.anchorMin=rect.anchorMax=new Vector2(point.x,point.y);
-        rect.anchoredPosition=n.origin;rect.localScale=Vector3.one*.55f;n.text.gameObject.SetActive(true);
+        rect.anchoredPosition=n.origin;rect.localScale=Vector3.one*(UiMotion.Reduced?1:.55f);n.text.gameObject.SetActive(true);
     }
     void Update()
     {
@@ -50,9 +50,9 @@ public sealed class BattleDamageNumbers : MonoBehaviour
             n.age+=Time.unscaledDeltaTime;
             if(n.age>=Lifetime){n.active=false;n.text.gameObject.SetActive(false);continue;}
             float t=n.age;
-            n.text.rectTransform.anchoredPosition=n.origin+n.velocity*t+Vector2.down*(.5f*Gravity*t*t);
+            n.text.rectTransform.anchoredPosition=UiMotion.Reduced?n.origin:n.origin+n.velocity*t+Vector2.down*(.5f*Gravity*t*t);
             float scale=t<.09f?Mathf.Lerp(.55f,1.4f,t/.09f):t<.23f?Mathf.Lerp(1.4f,1,(t-.09f)/.14f):1;
-            n.text.rectTransform.localScale=Vector3.one*scale;
+            n.text.rectTransform.localScale=Vector3.one*(UiMotion.Reduced?1:scale);
             n.text.alpha=1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(.45f,Lifetime,t));
         }
     }

@@ -34,7 +34,14 @@ public sealed partial class TaskService
     {
         first = first.Date; last = last.Date;
         if (last < first || (last - first).TotalDays > 366) throw new ArgumentException("Calendar range must be at most one year.");
-        var data = Snapshot;
+        // Bound the detached projection before copying or building views. No Date
+        // receipts intentionally remain available regardless of the month browsed.
+        string firstKey = DateKey(first), lastKey = DateKey(last);
+        var data = CopyTaskSnapshot(store.Data.tasks,
+            store.Data.occurrences.Where(o => o.day == "once" || string.CompareOrdinal(o.day, firstKey) >= 0 && string.CompareOrdinal(o.day, lastKey) <= 0),
+            showCompleted ? store.Data.history.Where(h => !h.revoked && CalendarReceiptDate(h, out var date)
+                && (!date.HasValue || date.Value >= first && date.Value <= last)) : Array.Empty<TaskCompletion>());
+        var occurrences = IndexOccurrences(data.occurrences);
         var today = LocalNow.Date;
         var selectedTags = (tagIds ?? Array.Empty<string>()).ToArray();
         string text = (search ?? "").Trim();
@@ -48,13 +55,11 @@ public sealed partial class TaskService
             && selectedTags.All(id => view.task.tagIds.Contains(id))
             && (text.Length == 0 || ((view.task.title ?? "") + " " + view.task.description + " " + string.Join(" ", view.tagNames))
                 .IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0);
-        TaskView Live(QuestTask task, string day) => new TaskView {
-            task = task,
-            occurrence = data.occurrences.FirstOrDefault(o => o.taskId == task.id && o.day == day)
-                ?? new TaskOccurrence { taskId = task.id, day = day },
-            tagNames = data.tags.Where(t => task.tagIds.Contains(t.id)).Select(t => t.name).ToList(),
-            tagColors = data.tags.Where(t => task.tagIds.Contains(t.id)).Select(t => t.colorHex).ToList()
-        };
+        TaskView Live(QuestTask task, string day)
+        {
+            if (!occurrences.TryGetValue((task.id, day), out var occurrence)) occurrence = new TaskOccurrence { taskId = task.id, day = day };
+            return LiveTaskView(data, task, occurrence);
+        }
         void Add(TaskView view, CalendarTaskKind kind, DateTime? date)
         {
             if (!Matches(view) || (!showCompleted && view.Completed)) return;
@@ -66,8 +71,10 @@ public sealed partial class TaskService
         {
             if (!task.daily)
             {
+                DateTime? date = task.scheduled && TryDate(task.date, out var due) ? due : (DateTime?)null;
+                if (date.HasValue && (date.Value < first || date.Value > last)) continue;
                 var view = Live(task, "once");
-                if (!view.Completed) Add(view, CalendarTaskKind.Task, task.scheduled && TryDate(task.date, out var due) ? due : (DateTime?)null);
+                if (!view.Completed) Add(view, CalendarTaskKind.Task, date);
                 continue;
             }
             foreach (var date in result.days.Keys.Where(d => d >= today && TaskRepeat.Matches(task, d)))
@@ -82,9 +89,7 @@ public sealed partial class TaskService
         foreach (var receipt in data.history.Where(h => !h.revoked))
         {
             var task = receipt.snapshot;
-            DateTime? date = null;
-            if (task.daily) { if (!TryDate(receipt.day, out var day)) continue; date = day; }
-            else if (task.scheduled && TryDate(task.date, out var due)) date = due;
+            if (!CalendarReceiptDate(receipt, out var date)) continue;
             Add(new TaskView { task = task, history = receipt, tagNames = receipt.tagNames, tagColors = receipt.tagColors,
                 occurrence = new TaskOccurrence { taskId = receipt.taskId, day = receipt.day, completed = true,
                     rewardGranted = true, completedSubtaskIds = task.subtasks.Select(s => s.id).ToList() } }, CalendarTaskKind.History, date);
@@ -97,5 +102,16 @@ public sealed partial class TaskService
             bucket.items = bucket.items.OrderBy(i => i.view.task.daily).ThenBy(i => i.view.Completed).ThenBy(i => i.view.task.title, StringComparer.OrdinalIgnoreCase).ToList();
         result.noDate = result.noDate.OrderBy(i => i.view.Completed).ThenBy(i => i.view.task.title, StringComparer.OrdinalIgnoreCase).ToList();
         return result;
+    }
+    private static bool CalendarReceiptDate(TaskCompletion receipt, out DateTime? date)
+    {
+        date = null;
+        if (receipt.snapshot.daily)
+        {
+            if (!TryDate(receipt.day, out var day)) return false;
+            date = day;
+        }
+        else if (receipt.snapshot.scheduled && TryDate(receipt.snapshot.date, out var due)) date = due;
+        return true;
     }
 }

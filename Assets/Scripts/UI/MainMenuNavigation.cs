@@ -45,7 +45,12 @@ public sealed class MainMenuNavigation : MonoBehaviour
         if(index<0 || index>=pages.Length || !pages[index]) return false;
         if (!CanOpen(page)) { AccessDenied?.Invoke("Unlocks at Lv." + (page == MainMenuPage.Focus ? 2 : 5)); return false; }
         if(taskSystem.gameObject.activeInHierarchy && taskSystem.Service!=null && page!=MainMenuPage.Tasks)
-            if(!taskSystem.PrepareToLeavePage()) return false;
+            if(!taskSystem.PrepareToLeavePage(()=>ShowPage(page))) return false;
+        if(CurrentPage==MainMenuPage.Boss && page!=MainMenuPage.Boss && pages[(int)MainMenuPage.Boss].activeInHierarchy)
+        {
+            var boss=pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>();
+            if(boss && !boss.PrepareToLeavePage(()=>ShowPage(page))) return false;
+        }
         if(CurrentPage==MainMenuPage.Dashboard && page!=MainMenuPage.Dashboard && pages[0].activeInHierarchy)
         {
             var dashboard=pages[0].GetComponentInChildren<DashboardTasksUI>();

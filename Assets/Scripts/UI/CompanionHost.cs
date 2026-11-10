@@ -16,6 +16,7 @@ public sealed class CompanionHost : MonoBehaviour
     public bool Enabled { get; private set; }
     public bool IsUnlocked => AppPlatform.WindowsDesktop && GameDataManager.Instance.Tasks.CanAccess(ProgressionFeature.Focus);
     FocusController focus;
+    TaskService service;
     Process process;
     CompanionPipe pipe;
     string pipeName, token;
@@ -39,6 +40,7 @@ public sealed class CompanionHost : MonoBehaviour
         if (CompanionProtocol.HasArgument("--focus-smoke")) Directory.CreateDirectory(DirectoryPath);
         Enabled=IsUnlocked && PlayerPrefs.GetInt("PetWidgetEnabled",0)==1;
         focus.Changed+=PublishIfOpen;
+        service=GameDataManager.Instance.Tasks;service.Changed+=PublishIfOpen;
     }
     public void SetEnabled(bool enabled)
     {
@@ -158,6 +160,7 @@ public sealed class CompanionHost : MonoBehaviour
         dirty = false;
         lastSnapshot = new CompanionState {
             requestId=requestId, accepted=accepted,
+            reduceMotion=service.ReduceMotion,
             equipmentAuraTier=auraTier,equipmentAuraPieces=auraPieces,
             ownerId=OwnerId,sessionId=focus.SessionId ?? "",
             phase=focus.Phase,mode=focus.Options.mode,elapsedSeconds=focus.ElapsedSeconds,remainingSeconds=focus.RemainingSeconds,fishCount=focus.SpectatorFishCount,
@@ -167,6 +170,7 @@ public sealed class CompanionHost : MonoBehaviour
     void OnDestroy()
     {
         if(focus!=null) focus.Changed-=PublishIfOpen;
+        if(service!=null)service.Changed-=PublishIfOpen;
         if (IsOpen) process.CloseMainWindow();
         pipe?.Dispose();
         process?.Dispose();

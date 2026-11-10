@@ -28,7 +28,7 @@ public sealed class TaskConfirmDialog
         heading.font=font; heading.fontSize=24; heading.enableAutoSizing=false; heading.alignment=TextAlignmentOptions.Center;
         message=popup.Find("Text_Info").GetComponent<TMP_Text>();
         Place(message.rectTransform,new Vector2(.5f,.5f),new Vector2(0,5),new Vector2(550,110));
-        message.font=font; message.fontSize=18; message.enableAutoSizing=false;
+        message.font=font; message.fontSize=18; message.enableAutoSizing=false; message.richText=false;
         message.textWrappingMode=TextWrappingModes.Normal; message.alignment=TextAlignmentOptions.Center;
         confirm=popup.Find("Button_Ok").GetComponent<Button>(); confirm.name="Confirm";
         cancel=UnityEngine.Object.Instantiate(confirm,popup); cancel.name="Cancel";
@@ -62,9 +62,10 @@ public sealed class TaskConfirmDialog
         var text=button.GetComponentInChildren<TMP_Text>(true); text.text=caption; text.font=font; text.fontSize=22;
         text.enableAutoSizing=false; text.alignment=TextAlignmentOptions.Center; TaskUIBuilder.Stretch(text.rectTransform,14,14,4,4);
     }
-    public void Show(string title,string body,Action onConfirm,string confirmLabel="Confirm")
+    public void Show(string title,string body,Action onConfirm,string confirmLabel="Confirm",string cancelLabel="Cancel")
     {
         cancel.gameObject.SetActive(true); confirm.GetComponentInChildren<TMP_Text>(true).text=confirmLabel;
+        cancel.GetComponentInChildren<TMP_Text>(true).text=cancelLabel;
         accepted=onConfirm; heading.text=title; message.text=body; Root.SetActive(true); Root.transform.SetAsLastSibling();
         keyboard.Open(new[]{cancel,confirm,closeButton},Close);
     }

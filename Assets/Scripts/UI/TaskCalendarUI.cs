@@ -301,10 +301,14 @@ public sealed class TaskCalendarUI : MonoBehaviour
         if (selected == null) emptyLabel.text = "Task saved, but hidden by the current filters.";
     }
     static DateTime Date(string value) => TaskService.TryDate(value, out var date) ? date : DateTime.Today;
-    public void Back() { if (owner.IsEditing) owner.CancelDraft(); else { selected = null; RenderDrawer(); } }
+    public void Back() {
+        if (owner.IsEditing) { if(owner.PrepareToDiscardDraft(null)) owner.CancelDraft(); }
+        else { selected = null; RenderDrawer(); }
+    }
     public void CloseDrawer()
     {
         if (owner.HasTaskModal) return;
+        if (!owner.PrepareToDiscardDraft(CloseDrawer)) return;
         if (owner.IsEditing) owner.CancelDraft();
         drawer.gameObject.SetActive(false); selected = null; Layout();
         if (EventSystem.current) EventSystem.current.SetSelectedGameObject(returnFocus && returnFocus.activeInHierarchy ? returnFocus : today.gameObject);
@@ -344,7 +348,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
         bool modal = owner.HasTaskModal || dropdown;
         if (modal) { returningFromModal = true; return; }
         if (returningFromModal) { returningFromModal = false; return; }
-        if (Input.GetKeyDown(KeyCode.Escape)) { if (owner.IsEditing) owner.CancelDraft(); else if (selected != null) Back(); else if (DrawerOpen) CloseDrawer(); return; }
+        if (Input.GetKeyDown(KeyCode.Escape)) { if (owner.IsEditing || selected != null) Back(); else if (DrawerOpen) CloseDrawer(); return; }
         if (owner.IsEditing) return;
         if (Input.GetKeyDown(KeyCode.Tab) && EventSystem.current)
         {

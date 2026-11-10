@@ -38,16 +38,28 @@ public class ResisesSideMenuInLayoutGroup : MonoBehaviour
     private void Awake()
     {
         testingAvtive = false;
-        expander.onValueChanged.AddListener(OnExpanderValueChanged);
     }
 
-    private void OnDestroy()
+    private void OnEnable()
     {
-        expander.onValueChanged.RemoveListener(OnExpanderValueChanged);
+        if (expander) expander.onValueChanged.AddListener(OnExpanderValueChanged);
+        SettleToCurrentState();
+    }
+
+    private void OnDisable()
+    {
+        if (expander) expander.onValueChanged.RemoveListener(OnExpanderValueChanged);
+        SettleToCurrentState();
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus) SettleToCurrentState();
     }
 
     private void LateUpdate()
     {
+        if(UiMotion.Reduced && _animationRoutine!=null)SettleToCurrentState();
         // Window resizing must also resize the page when the toggle has not changed.
         // Use the current sidebar width so an in-flight transition stays continuous.
         float width = TotalWidth;
@@ -78,39 +90,55 @@ public class ResisesSideMenuInLayoutGroup : MonoBehaviour
 
     private void OnExpanderValueChanged(bool value)
     {
-        if (_animationRoutine != null)
-            StopCoroutine(_animationRoutine);
-
-        StartCoroutine(AnimateChange(value));
-    }
-
-    private IEnumerator AnimateChange(bool value)
-    {
+        StopAnimation();
         float destinationWidth = value ? expandedWidth : collapsedWidth;
-
-        if (instantChange)
+        if (instantChange || UiMotion.Reduced || animationDuration <= 0f || !isActiveAndEnabled)
         {
-            sideMenuContainer.sizeDelta = SizeOfMenu(destinationWidth);
-            contentContainer.sizeDelta = SizeOfContent(destinationWidth);
-            yield break;
+            ApplyWidth(destinationWidth);
+            return;
         }
 
-        float startWidth = sideMenuContainer.sizeDelta.x;
-        float startTime = Time.time;
+        _animationRoutine = StartCoroutine(AnimateChange(destinationWidth));
+    }
+
+    private void StopAnimation()
+    {
+        if (_animationRoutine == null) return;
+        StopCoroutine(_animationRoutine);
+        _animationRoutine = null;
+    }
+
+    private void SettleToCurrentState()
+    {
+        StopAnimation();
+        if (expander && container && sideMenuContainer && contentContainer)
+            ApplyWidth(expander.isOn ? expandedWidth : collapsedWidth);
+    }
+
+    private void ApplyWidth(float width)
+    {
+        sideMenuContainer.sizeDelta = SizeOfMenu(width);
+        contentContainer.sizeDelta = SizeOfContent(width);
+    }
+
+    private IEnumerator AnimateChange(float destinationWidth)
+    {
+        // Reversing a transition continues from its rendered width, not an endpoint.
+        float startWidth = sideMenuContainer.rect.width;
+        float startTime = Time.unscaledTime;
         float elapsedTime = 0f;
 
         while (elapsedTime < animationDuration)
         {
-            elapsedTime = Time.time - startTime;
+            elapsedTime = Time.unscaledTime - startTime;
             float t = Mathf.Clamp01(elapsedTime / animationDuration);
             float easedT = easingCurve.Evaluate(t);
             float currentWidth = Mathf.Lerp(startWidth, destinationWidth, easedT);
-            sideMenuContainer.sizeDelta = SizeOfMenu(currentWidth);
-            contentContainer.sizeDelta = SizeOfContent(currentWidth);
+            ApplyWidth(currentWidth);
             yield return null;
         }
 
-        sideMenuContainer.sizeDelta = SizeOfMenu(destinationWidth);
-        contentContainer.sizeDelta = SizeOfContent(destinationWidth);
+        ApplyWidth(destinationWidth);
+        _animationRoutine = null;
     }
 }

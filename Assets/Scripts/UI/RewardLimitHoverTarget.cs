@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 
 // The authored currency pill remains the hit area; the tooltip never receives input.
-public enum RewardLimitKind { Fish, Tickets, Experience }
+public enum RewardLimitKind { Fish, Tickets, Experience, FocusSessionTickets }
 
 public sealed class RewardLimitHoverTarget : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, ISelectHandler, IDeselectHandler
 {

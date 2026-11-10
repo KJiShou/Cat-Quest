@@ -156,12 +156,23 @@ public static class BossRewardVerification
         nav.ShowPage(MainMenuPage.Boss);flights.SendMessage("OnApplicationFocus",false);yield return .5;
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);yield return .6;
-            panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;panel.Action();panel.Confirm();Check(panel.IsBattling,"Entry");yield return .2;
+            panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;
+            // Page entry selects the highest unlocked boss. This fixture measures
+            // Cyclope's repeat reward, so choose it explicitly before entry.
+            panel.SelectStage(1);
+            for(int frame=0;panel.arena.IsLoading&&frame<200;frame++)yield return .05;
+            Check(panel.SelectedBoss==1&&panel.arena.IsReady,"Repeat-reward Cyclope arena ready: "+panel.arena.LoadError);
+            panel.Action();panel.Confirm();Check(panel.IsBattling,"Entry");
+            var entry=service.Snapshot.battles.Last();
+            Check(entry.bossId==1&&entry.masterStage==0&&entry.outcome==BattleOutcome.Running
+                &&service.Snapshot.bossProgress.Single(p=>p.bossId==1).wins>0,"Repeat EXP fixture entered normal Cyclope after an existing win");
+            yield return .2;
             int xp=service.Snapshot.experience;
             // The first run exercises skip, the second the ordinary simulation finish.
             if(width==1920)panel.skipUI.skip.onClick.Invoke();
             else {panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);}
-            Check(service.Snapshot.experience==xp+10,"Repeat EXP");
+            var receipt=service.Snapshot.battles.Last();
+            Check(service.Snapshot.experience==xp+10,$"Repeat EXP: boss={receipt.bossId}, master={receipt.masterStage}, outcome={receipt.outcome}, receipt EXP={receipt.experience}, total={service.Snapshot.experience}, expected={xp+10}, error={service.LastError}");
             if(width==1280){
                 Check(!panel.resultPanels[0].activeSelf&&panel.actors.IsFinishingVictory,"Ordinary victory leaves room for the death sequence");
                 yield return BossBattleActors.VictoryDuration+.05;

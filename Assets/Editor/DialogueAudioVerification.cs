@@ -129,9 +129,13 @@ public static class DialogueAudioVerification
         Check(DialogueAudioLibrary.Find("Disk full Your tasks are safe. Try again.", false) != null, "Dynamic save error matches template");
         var input = UnityEngine.Object.FindFirstObjectByType<UsernameInputController>();
         ((TMP_InputField)typeof(UsernameInputController).GetField("usernameInput", Private).GetValue(input)).text = "Audio Apprentice";
-        input.ConfirmUsername(); yield return .15;
+        // The first line is only 0.425 s. Observe startup in the same Editor tick;
+        // an Editor update delayed by asset/UI work may miss the entire short clip.
+        input.ConfirmUsername();
         var audio = SettingsAudio.Instance;
-        Check(Voice(audio) && Voice(audio).isPlaying && Voice(audio).clip && Voice(audio).clip.name.StartsWith("player-"), "Story starts approved B voice");
+        Check(Voice(audio) && Voice(audio).isPlaying && Voice(audio).clip && Voice(audio).clip.name.StartsWith("player-"),
+            "Story starts approved B voice; clip="+(Voice(audio)&&Voice(audio).clip?Voice(audio).clip.name:"none")
+            +"; playing="+(Voice(audio)&&Voice(audio).isPlaying)+"; focused="+Application.isFocused);
         Check(audio.musicSource.clip == audio.musicClip && audio.musicSource.loop, "Story reuses menu BGM loop");
         yield return Voice(audio).clip.length + .3;
         Check(!Voice(audio).clip, "Natural Story completion stops and releases voice");
@@ -217,6 +221,48 @@ public static class DialogueAudioVerification
             tutorial.Continue();yield return .2;
         }
         Check(!tutorial.panel.activeSelf && !Voice(audio).clip,"Equipment completion releases dialogue voice");
+        GameDataManager.Instance.PlayerData.experience=550;GameDataManager.Instance.SaveData();
+        var progress=GameDataManager.Instance.Tasks.Tutorial;progress.announcedLevel=5;
+        Check(GameDataManager.Instance.Tasks.SaveTutorial(progress),"Seed Boss level in isolated tutorial state");
+        Check(UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>().ShowPage(MainMenuPage.Boss),"Boss available for mastery voice check");
+        yield return 1;
+        // The fixture's EXP jump raises normal reward feedback on Changed. Respect
+        // its priority instead of opening a guide while that presentation owns UI.
+        for(int wait=0;wait<80&&(tutorial.rewards.IsAnimating||tutorial.celebration.IsShowing||tutorial.celebration.PendingCount>0);wait++)yield return .1;
+        Check(!tutorial.rewards.IsAnimating&&!tutorial.celebration.IsShowing&&tutorial.celebration.PendingCount==0,"Fixture reward feedback settles before Boss guide");
+        tutorial.OpenTopic(3);yield return .2;
+        for(int step=0;step<4;step++) {
+            Check(tutorial.CurrentTopic=="boss-step-"+step,"Boss voice guide reaches step "+step+"; actual="+tutorial.CurrentTopic);
+            tutorial.CompleteTyping();
+            if(step==2)tutorial.bossPage.stageButton.onClick.Invoke();else tutorial.Continue();
+            yield return .3;
+        }
+        var mastery=DialogueAudioLibrary.Find(tutorial.dialogue.body.text,false);
+        Check(tutorial.CurrentTopic=="boss-step-4" && mastery!=null
+            && Voice(audio).clip==Resources.Load<AudioClip>(mastery.clip) && Voice(audio).isPlaying,
+            "Fixed-order Boss mastery explanation plays its matching mentor voice");
+        tutorial.Skip();Check(!Voice(audio).clip,"Skipping mastery explanation releases voice");
+        var focus = FocusRunner.EnsureInstance().Controller;
+        var focusPhase = focus.Phase; string focusSession = focus.SessionId;
+        tutorial.OpenTopic(1); yield return .2;
+        for(int step=0;step<5;step++) {
+            Check(tutorial.CurrentTopic=="focus-step-"+step,"Focus voice guide reaches step "+step);
+            tutorial.CompleteTyping();tutorial.Continue();yield return .2;
+        }
+        var ticketRule=DialogueAudioLibrary.Find(tutorial.dialogue.body.text,false);
+        Check(tutorial.CurrentTopic=="focus-step-5" && tutorial.dialogue.body.text.Contains("full 25 minutes")
+            && tutorial.dialogue.body.text.Contains("daily Focus goal") && ticketRule!=null
+            && Voice(audio).clip==Resources.Load<AudioClip>(ticketRule.clip) && Voice(audio).isPlaying && Voice(audio).pitch==1f,
+            "Per-session Ticket and End Early explanation plays its matching approved mentor voice");
+        tutorial.CompleteTyping();
+        Check(!Voice(audio).clip && !tutorial.IsTyping && tutorial.CurrentTopic=="focus-step-5",
+            "Completing Focus rule typing stops voice without advancing the guide");
+        tutorial.GoBack();yield return .2;tutorial.CompleteTyping();tutorial.Continue();yield return .2;
+        Check(tutorial.CurrentTopic=="focus-step-5" && Voice(audio).clip==Resources.Load<AudioClip>(ticketRule.clip)
+            && Voice(audio).isPlaying,"Revisiting the Focus rule restarts its matching voice");
+        tutorial.Skip();
+        Check(!Voice(audio).clip && focus.Phase==focusPhase && focus.SessionId==focusSession,
+            "Skipping the Focus rule stops voice without starting or ending a real session");
         Check(audio.PlayDialogue(tutorial, "Uncatalogued future text", false) == 0 && !Voice(audio).clip, "Unknown text remains silent and clears previous voice");
     }
 }

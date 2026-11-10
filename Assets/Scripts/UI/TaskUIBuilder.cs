@@ -11,7 +11,7 @@ public sealed class TaskUIBuilder
     public static readonly Color Ink = new Color32(20,45,77,255);
     public static readonly Color Blue = new Color32(0,137,245,255);
     public static readonly Color Overdue = new Color32(220,55,65,255);
-    public static readonly Color ScheduleInk = new Color32(137,145,156,255);
+    public static readonly Color ScheduleInk = new Color32(85,105,128,255);
     public static Color DifficultyColor(TaskDifficulty difficulty) => difficulty == TaskDifficulty.Hard
         ? new Color32(255,235,96,255) : difficulty == TaskDifficulty.Easy
         ? new Color32(0,166,85,255) : new Color32(0,118,220,255);

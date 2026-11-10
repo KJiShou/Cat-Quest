@@ -9,11 +9,13 @@
 - **Notification** 控制 Windows 专注与休息结束提醒，立即保存。
 - **Sound/Music** 分别控制应用内音源 0–100%，零显示 Muted。拖动预览，释放、键盘取消选择、短暂键盘空闲或关闭时提交。失败提示并恢复已保存音量。
 - 点击 Sound/Music 左侧圆形图标立即静音／取消静音，互不影响。取消静音恢复本次应用运行期间最近的非零音量，关闭再打开设置仍保留；若启动时已经静音，首次恢复为 100%。静音音量沿用滑块的保存及失败回滚逻辑。
-- **Default task tab** 选择进入 Tasks 时显示 Today、Daily Tasks 或 Todo，立即保存，失败恢复已保存选项。旧存档和无效选项默认 Today，具体任务跳转优先于默认页。
+- **Default task tab** 选择启动后首次进入 Tasks 时显示 Today、Daily Tasks 或 Todo；同次运行再次返回时保留当前分类和各分类的浏览状态。立即保存，失败恢复已保存选项。旧存档和无效选项默认 Today，具体任务跳转优先于默认页。
 - **Dashboard leaderboard** 选择 Boss Stage、Tasks Completed、Focus Minutes、Power，立即保存并控制预览和 View All 目标，旧存档默认 Focus Minutes。
 - **Show on Dashboard** 独立控制 Tasks、Daily rewards、Focus、Leaderboard、Character，默认全显示。保存失败恢复，隐藏卡离开布局、空行收起，没有上方卡时快捷行保持紧凑，全隐藏显示设置提示。仅改变 Dashboard 表现，不停止计时或禁用侧栏功能，隐藏排名保留分类。
 - 关闭、Escape、背景返回上一级或退出，退出恢复齿轮焦点，Tab/Shift+Tab 限在当前视图，键盘选标签操作会滚动到可见。
 - `TaskService.SaveSettings` 使用已有 `catquest-data.json` 原子备份。新玩家及没有设置的旧存档默认：通知开、音效和音乐均为 1.0，显示 100%。保留已有音量（包括静音）、任务和成长。
+
+**Reduce motion** 保存在同一份本地设置，旧存档默认关闭。开启后停止按钮弹跳、侧栏过渡、奖励飞行、血条震动、伤害数字位移以及重复装饰粒子；保留文字、颜色、奖励金额和核心角色／战斗演出。保存失败恢复原选项。主窗口通过已验证的 Companion 状态同步此偏好，Companion 不独立写存档。
 
 ## 标签管理
 
@@ -74,4 +76,4 @@ Settings → AI 独立于排行榜 Google 账号。Continue with ChatGPT 使用�
 
 Settings 遵循[紧凑按钮配色](.impeccable.zh-CN.md#紧凑按钮外观)：次操作天蓝、主操作蓝色、删除淡红；排行榜／默认分类选中项为藏蓝底白字。受影响切片控件使用 multiplier 2 与更薄阴影，标签颜色和账号品牌保持例外。
 
-Default task tab 作用于 List。同一次运行中返回已启用的 Calendar 会保留月份和选择；重新启动先进入 List，并使用已保存的默认分类。
+Default task tab 作用于启动后首次进入 List。同一次运行中 List 各分类保留搜索、筛选、选择和滚动位置，Calendar 保留独立的月份和选择；重新启动先进入 List，并使用已保存的默认分类。

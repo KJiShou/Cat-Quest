@@ -7,6 +7,22 @@ public sealed partial class TaskService
     public string EquippedItem(EquipmentSlot slot) => EquipmentRules.Equipped(store.Data,slot);
     public bool OwnsEquipment(string id) => store.Data.equipment.Exists(item=>item.id==id);
     public EquipmentStats EquipmentStats=>EquipmentRules.Calculate(store.Data);
+    // Detached equipment-only presentation/preview data. Never persist this projection
+    // as a complete save: private tasks and historical receipts are intentionally absent.
+    public PlayerData EquipmentSnapshot
+    {
+        get {
+            var data=store.Data;
+            return new PlayerData {
+                experience=data.experience, fishCoins=data.fishCoins, equipmentUnlocked=EquipmentUnlocked,
+                equippedWeaponId=data.equippedWeaponId, equippedBodyOutfitId=data.equippedBodyOutfitId,
+                equippedHeadAccessoryId=data.equippedHeadAccessoryId,
+                equipment=data.equipment.ConvertAll(item=>new EquipmentItem { id=item.id, level=item.level }),
+                bossProgress=data.bossProgress.ConvertAll(progress=>new BossProgress { bossId=progress.bossId,
+                    wins=progress.wins, pendingClaims=progress.pendingClaims, claimedComponents=progress.claimedComponents })
+            };
+        }
+    }
     string EquipmentAccessError()=>!EquipmentUnlocked?"Claim your first Daily Reward to unlock equipment.":store.Data.battles.Any(b=>b.outcome==BattleOutcome.Running)?"Finish the current battle before changing equipment.":null;
     public string ClaimEquipmentError(string itemId)
     {
@@ -35,7 +51,7 @@ public sealed partial class TaskService
     public bool AutoEquip()
     {
         var error=EquipmentAccessError();if(error!=null){LastError=error;return false;}
-        var preview=Snapshot;
+        var preview=EquipmentSnapshot;
         var options=Enumerable.Range(0,3).Select(slot=>preview.equipment.Where(i=>(int)EquipmentRules.Find(i.id).Slot==slot).Select(i=>i.id).Prepend((string)null).ToArray()).ToArray();
         string[] best=Enumerable.Range(0,3).Select(i=>EquipmentRules.Equipped(preview,(EquipmentSlot)i)).ToArray();
         double power=EquipmentRules.Calculate(preview).Final.Power;

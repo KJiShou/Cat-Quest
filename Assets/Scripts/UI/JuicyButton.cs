@@ -49,15 +49,20 @@ public sealed class JuicyButton : MonoBehaviour, IPointerEnterHandler, IPointerE
         // Full-width list controls must remain inside their scroll viewport.
         var bounds=((RectTransform)transform).rect;
         if(bounds.width>bounds.height*6 && GetComponentInParent<RectMask2D>())target.x=1;
-        // Substeps keep the spring stable even during slow editor frames.
-        float remaining=Mathf.Min(Time.unscaledDeltaTime,.1f);
-        while(remaining>0){float dt=Mathf.Min(remaining,1f/120);remaining-=dt;
-            velocity+=((target-scale)*650-velocity*(down?40:27))*dt;scale+=velocity*dt;}
-        DrawOffset=Mathf.Lerp(DrawOffset,down?-3:over?3:0,1-Mathf.Exp(-22*Time.unscaledDeltaTime));
-        DrawShine=Mathf.Lerp(DrawShine,down?0:over?.15f:0,1-Mathf.Exp(-18*Time.unscaledDeltaTime));
+        if(UiMotion.Reduced) {
+            scale=Vector2.one;velocity=Vector2.zero;DrawOffset=0;
+            DrawShine=down?.06f:over?.18f:0;
+        } else {
+            // Substeps keep the spring stable even during slow editor frames.
+            float remaining=Mathf.Min(Time.unscaledDeltaTime,.1f);
+            while(remaining>0){float dt=Mathf.Min(remaining,1f/120);remaining-=dt;
+                velocity+=((target-scale)*650-velocity*(down?40:27))*dt;scale+=velocity*dt;}
+            DrawOffset=Mathf.Lerp(DrawOffset,down?-3:over?3:0,1-Mathf.Exp(-22*Time.unscaledDeltaTime));
+            DrawShine=Mathf.Lerp(DrawShine,down?0:over?.15f:0,1-Mathf.Exp(-18*Time.unscaledDeltaTime));
+        }
         if(visual){visual.localScale=new Vector3(scale.x,scale.y,1);visual.anchoredPosition=new Vector2(0,DrawOffset);}
         else if(oldScale!=scale || oldOffset!=DrawOffset || oldShine!=DrawShine)RefreshMeshes();
-        if(shine){var c=shine.color;c.a=Mathf.Lerp(c.a,down?0:over?.15f:0,1-Mathf.Exp(-18*Time.unscaledDeltaTime));shine.color=c;}
+        if(shine){var c=shine.color;c.a=DrawShine;shine.color=c;}
         if(!active){pressed=hovered=selected=false;submitUntil=0;}
     }
     public void OnPointerEnter(PointerEventData e){hovered=true;}

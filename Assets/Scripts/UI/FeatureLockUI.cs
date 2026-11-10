@@ -15,8 +15,11 @@ public sealed class FeatureLockUI : MonoBehaviour, IPointerEnterHandler, IPointe
     bool wasLocked;
     TaskService service;
     FocusController focus;
+    SidebarNavigationButton navigation;
+    bool hovered, selected;
     void OnEnable()
     {
+        navigation = GetComponent<SidebarNavigationButton>();
         service = GameDataManager.EnsureInstance().Tasks;
         focus = FocusRunner.EnsureInstance().Controller;
         if(card && controls == null) { controls = GetComponentsInChildren<Selectable>(true); enabledBeforeLock = new bool[controls.Length]; }
@@ -26,15 +29,17 @@ public sealed class FeatureLockUI : MonoBehaviour, IPointerEnterHandler, IPointe
     {
         if(service != null) service.Changed -= Refresh;
         if(focus != null) focus.Changed -= Refresh;
+        hovered = selected = false;
         if(tooltip) tooltip.SetActive(false);
     }
     public bool Locked => service != null && !service.CanAccess(feature)
         && !(feature == ProgressionFeature.Focus && focus.Phase is FocusPhase.Focusing or FocusPhase.Saving or FocusPhase.Resting)
-        && !(feature == ProgressionFeature.Boss && service.Snapshot.battles.Exists(b => b.outcome == BattleOutcome.Running));
+        && !(feature == ProgressionFeature.Boss && service.HasActiveBattle);
     void Refresh()
     {
         bool locked = Locked;
-        artwork.SetActive(locked); reason.text = service.AccessMessage(feature);
+        artwork.SetActive(locked);
+        reason.text = (navigation && !string.IsNullOrEmpty(navigation.NavigationName) ? navigation.NavigationName + "\n" : "") + service.AccessMessage(feature);
         if(card && locked != wasLocked)
         {
             for(int i=0;i<controls.Length;i++) if(controls[i])
@@ -44,11 +49,13 @@ public sealed class FeatureLockUI : MonoBehaviour, IPointerEnterHandler, IPointe
             }
         }
         wasLocked = locked;
-        if(tooltip && !Locked) tooltip.SetActive(false);
+        Tip();
+        if(navigation) navigation.RefreshNameTooltip();
     }
-    void Tip(bool show) { if(tooltip) { tooltip.SetActive(show && Locked); if(show) tooltip.transform.SetAsLastSibling(); } }
-    public void OnPointerEnter(PointerEventData e) => Tip(true);
-    public void OnPointerExit(PointerEventData e) => Tip(false);
-    public void OnSelect(BaseEventData e) => Tip(true);
-    public void OnDeselect(BaseEventData e) => Tip(false);
+    void Tip() { if(tooltip) { bool show=(hovered || selected) && Locked; tooltip.SetActive(show); if(show) tooltip.transform.SetAsLastSibling(); } }
+    public void OnPointerEnter(PointerEventData e) { hovered=true; Tip(); }
+    public void OnPointerExit(PointerEventData e) { hovered=false; Tip(); }
+    public void OnSelect(BaseEventData e) { selected=!(e is PointerEventData); Tip(); }
+    public void OnDeselect(BaseEventData e) { selected=false; Tip(); }
+    void OnApplicationFocus(bool focused) { if(!focused) { hovered=selected=false; Tip(); } }
 }

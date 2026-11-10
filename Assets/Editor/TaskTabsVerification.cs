@@ -27,7 +27,7 @@ public static class TaskTabsVerification
         EditorApplication.update+=Poll;
         EditorApplication.playModeStateChanged+=state=>{
             if(!SessionState.GetBool(Flag,false))return;
-            if(state==PlayModeStateChange.EnteredPlayMode){run=SessionState.GetBool(Flag+".contextMenu",false) ? TaskContextMenuVerification.Run() : Run();next=EditorApplication.timeSinceStartup+2;}
+            if(state==PlayModeStateChange.EnteredPlayMode){run=SessionState.GetBool(Flag+".roundTwo",false) ? UsabilityRoundTwoVerification.Run(SessionState.GetString(Flag+".output",""),SessionState.GetBool(Flag+".before",false)) : SessionState.GetBool(Flag+".priority",false) ? PriorityUsabilityVerification.Run(SessionState.GetString(Flag+".output","")) : SessionState.GetBool(Flag+".contextMenu",false) ? TaskContextMenuVerification.Run() : Run();next=EditorApplication.timeSinceStartup+2;}
             if(state==PlayModeStateChange.EnteredEditMode)RestoreSettings();
         };
     }
@@ -43,30 +43,55 @@ public static class TaskTabsVerification
             try
             {
                 if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);
-                else Finish(SessionState.GetBool(Flag+".contextMenu",false) ? "PASS: task context menu targeted Play flow; see Library/TaskContextMenuVerification." : "PASS: header/Pet Widget viewport containment with 0/9999 balances and long player name, tab/content separation, wrapped subtask heights/nonoverlap, task editor and compressed search containment, all tab corner/center raycasts and selection, hover/press/reset and stable hit areas, keyboard selection/submit, disabled/re-enabled controls, page-close reset, simulated focus-loss reset, rapid sidebar changes; four resolutions with both sidebar states.");
+                else Finish(SessionState.GetBool(Flag+".roundTwo",false) ? (SessionState.GetBool(Flag+".before",false)?"PASS: before captures; no repairs or authored asset writes.":"PASS: second usability fixes; see checks.txt and captures.") : SessionState.GetBool(Flag+".priority",false) ? "PASS: priority usability regressions; isolated save; four resolutions and both sidebar states. See checks.txt." : SessionState.GetBool(Flag+".contextMenu",false) ? "PASS: task context menu targeted Play flow; see Library/TaskContextMenuVerification." : "PASS: header/Pet Widget viewport containment with 0/9999 balances and long player name, tab/content separation, wrapped subtask heights/nonoverlap, task editor and compressed search containment, all tab corner/center raycasts and selection, hover/press/reset and stable hit areas, keyboard selection/submit, disabled/re-enabled controls, page-close reset, simulated focus-loss reset, rapid sidebar changes; four resolutions with both sidebar states.");
             }
             catch(Exception e){Finish("FAIL at "+context+": "+e);}
             return;
         }
         bool contextMenu=File.Exists("Temp/verify-task-context-menu.request");
-        if(EditorApplication.isCompiling||EditorApplication.isUpdating||EditorApplication.isPlayingOrWillChangePlaymode||(!contextMenu&&!File.Exists("Temp/verify-task-tabs.request")))return;
+        bool roundTwo=File.Exists("Temp/verify-usability-round2.request");
+        bool priority=roundTwo||File.Exists("Temp/verify-priority-usability.request");
+        if(EditorApplication.isCompiling||EditorApplication.isUpdating||EditorApplication.isPlayingOrWillChangePlaymode||(!priority&&!contextMenu&&!File.Exists("Temp/verify-task-tabs.request")))return;
+        if(priority && Directory.GetFiles("Temp","verify-*.request").Any(p=>Path.GetFileName(p)!=(roundTwo?"verify-usability-round2.request":"verify-priority-usability.request")))return;
+        SessionState.SetBool(Flag+".roundTwo",roundTwo);
+        SessionState.SetBool(Flag+".before",roundTwo&&File.ReadAllText("Temp/verify-usability-round2.request").Trim()=="before");
+        if(roundTwo)File.Delete("Temp/verify-usability-round2.request");
+        SessionState.SetBool(Flag+".priority",priority);
+        if(priority)File.Delete("Temp/verify-priority-usability.request");
         SessionState.SetBool(Flag+".contextMenu",contextMenu);
         if(contextMenu)File.Delete("Temp/verify-task-context-menu.request");
         File.Delete("Temp/verify-task-tabs.request");Directory.CreateDirectory(Folder);
         var previousStore=Environment.GetEnvironmentVariable(StoreVariable);
         SessionState.SetBool(Flag+".hadStore",previousStore!=null);
         SessionState.SetString(Flag+".store",previousStore??"");
+        var previousAi=Environment.GetEnvironmentVariable("CATQUEST_AI_TEST_DIRECTORY");
+        SessionState.SetBool(Flag+".hadAi",previousAi!=null);SessionState.SetString(Flag+".ai",previousAi??"");
+        SessionState.SetBool(Flag+".paused",EditorApplication.isPaused);
         SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(EditorSceneManager.playModeStartScene));
         SessionState.SetInt(Flag+".size",(int)SizeProperty.GetValue(GameView));
         var group=GameViewGroup();
         SessionState.SetInt(Flag+".customCount",(int)group.GetType().GetMethod("GetCustomCount").Invoke(group,null));
-        SessionState.SetString(Flag+".deadline",DateTime.UtcNow.AddSeconds(180).ToString("O"));
+        SessionState.SetString(Flag+".deadline",DateTime.UtcNow.AddSeconds(priority?300:180).ToString("O"));
         SessionState.SetBool(Flag,true);
         try
         {
             File.WriteAllText(Folder+"/result.txt","RUNNING "+DateTime.UtcNow.ToString("O"));
-            Environment.SetEnvironmentVariable(StoreVariable,Path.GetFullPath(Folder+"/save-"+Guid.NewGuid().ToString("N")+".json"));
+            string output=roundTwo?"Library/UsabilityRoundTwoVerification/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+(SessionState.GetBool(Flag+".before",false)?"-before":"-after"):priority?"Library/PriorityUsabilityVerification/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss"):Folder;
+            Directory.CreateDirectory(output);SessionState.SetString(Flag+".output",output);
+            if(priority) {
+                File.WriteAllText((roundTwo?"Library/UsabilityRoundTwoVerification/":"Library/PriorityUsabilityVerification/")+"latest.txt",output);
+                File.WriteAllText(output+"/result.txt","RUNNING "+DateTime.UtcNow.ToString("O"));
+            }
+            string save=Path.GetFullPath(output+"/save-"+Guid.NewGuid().ToString("N")+".json");
+            if(priority)File.WriteAllText(save,"{\"version\":5,\"experience\":10000,\"tickets\":20,\"tagsInitialized\":true,"+(roundTwo?"\"settings\":{\"defaultTaskTab\":1},":"")+"\"tutorial\":{\"version\":1,\"dismissed\":true,\"taskStep\":4}}");
+            Environment.SetEnvironmentVariable(StoreVariable,save);
+            Environment.SetEnvironmentVariable("CATQUEST_AI_TEST_DIRECTORY",Path.GetFullPath(output+"/ai-"+Guid.NewGuid().ToString("N")));
+            if(priority&&!roundTwo) {
+                BattleVerification.Run();
+                File.WriteAllText(output+"/domain.txt","PASS: BattleVerification aggregate (includes Focus, rewards, tasks and CharacterHome) "+DateTime.UtcNow.ToString("O"));
+            }
             EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");
+            EditorApplication.isPaused=false;
             EditorApplication.isPlaying=true;
         }
         catch(Exception e){Finish("FAIL starting verification: "+e);}
@@ -82,8 +107,10 @@ public static class TaskTabsVerification
     }
     static void RestoreSettings()
     {
+        (run as IDisposable)?.Dispose();
         run=null;requestedSize=default;
         Environment.SetEnvironmentVariable(StoreVariable,SessionState.GetBool(Flag+".hadStore",false)?SessionState.GetString(Flag+".store",""):null);
+        Environment.SetEnvironmentVariable("CATQUEST_AI_TEST_DIRECTORY",SessionState.GetBool(Flag+".hadAi",false)?SessionState.GetString(Flag+".ai",""):null);
         string previousScene=SessionState.GetString(Flag+".scene","");
         EditorSceneManager.playModeStartScene=string.IsNullOrEmpty(previousScene)?null:AssetDatabase.LoadAssetAtPath<SceneAsset>(previousScene);
         try
@@ -95,13 +122,18 @@ public static class TaskTabsVerification
             for(int i=count-1;i>=SessionState.GetInt(Flag+".customCount",count);i--)
                 group.GetType().GetMethod("RemoveCustomSize").Invoke(group,new object[]{builtIn+i});
         }
-        finally { SessionState.SetBool(Flag,false); }
+        finally {
+            EditorApplication.isPaused=SessionState.GetBool(Flag+".paused",false);
+            if(SessionState.GetBool(Flag+".priority",false))File.WriteAllText(SessionState.GetString(Flag+".output",Folder)+"/restored.txt",DateTime.UtcNow.ToString("O")+" Restored save/AI environment, Play Mode start scene, Game View size/custom sizes and pause state; no authored scene saved.");
+            SessionState.SetBool(Flag,false);
+        }
     }
     static void Finish(string result)
     {
         File.WriteAllText(Folder+"/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result);
+        if(SessionState.GetBool(Flag+".priority",false))File.WriteAllText(SessionState.GetString(Flag+".output",Folder)+"/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result);
         if(SessionState.GetBool(Flag+".contextMenu",false)) { Directory.CreateDirectory("Library/TaskContextMenuVerification"); File.WriteAllText("Library/TaskContextMenuVerification/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result); }
-        run=null;
+        (run as IDisposable)?.Dispose();run=null;
         if(EditorApplication.isPlayingOrWillChangePlaymode)EditorApplication.isPlaying=false;
         else RestoreSettings();
     }

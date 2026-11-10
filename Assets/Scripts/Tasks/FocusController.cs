@@ -30,6 +30,9 @@ public sealed class FocusController : IFocusPresentation
     }
     public FocusPhase Phase { get; private set; }
     public string Message { get; private set; } = "25 minutes of Focus, then 5 minutes of Rest.";
+    // Transient operation failure, separate from ordinary status text. Keep it until
+    // a successful retry so changing settings/pages cannot hide an unsaved result.
+    public string ErrorMessage { get; private set; } = "";
     public double ElapsedSeconds { get; private set; }
     public double RemainingSeconds => Phase == FocusPhase.Resting ? Math.Max(0, RestSeconds - restElapsed)
         : Phase == FocusPhase.Ready || Phase == FocusPhase.Finished || Phase == FocusPhase.Interrupted ? FocusSeconds
@@ -61,12 +64,16 @@ public sealed class FocusController : IFocusPresentation
     public bool Start(FocusSessionOptions options)
     {
         if (Phase == FocusPhase.Focusing || Phase == FocusPhase.Saving || Phase == FocusPhase.Resting) return false;
-        if (!service.BeginFocus(options, out sessionId)) { Message = service.LastError; Changed?.Invoke(); return false; }
+        if (!service.BeginFocus(options, out sessionId)) {
+            Message = ErrorMessage = service.LastError ?? "The Focus session could not be saved.";
+            Changed?.Invoke(); return false;
+        }
         Options = options.Copy();
         var receipt = service.FocusReceipt(sessionId);
         Options.questTitle = receipt.questTitle; Options.occurrenceDay = receipt.occurrenceDay;
         Options.tagIds = receipt.tagIds.ToList(); Options.tagNames = receipt.tagNames.ToList();
         Phase = FocusPhase.Focusing; ElapsedSeconds = 0; restElapsed = 0; LastResult = null;
+        ErrorMessage = "";
         Message = "Stay focused. Your cat is training with you.";
         Changed?.Invoke(); return true;
     }
@@ -98,7 +105,12 @@ public sealed class FocusController : IFocusPresentation
     {
         if (Phase != FocusPhase.Saving) return false;
         bool saved = cancel ? service.CancelFocus(sessionId, invalid) : service.FinishFocus(sessionId, ElapsedSeconds, early);
-        if (!saved) { Message = service.LastError + " Retry to save this result."; Changed?.Invoke(); return false; }
+        if (!saved) {
+            ErrorMessage = service.LastError ?? "Your Focus result could not be saved.";
+            Message = ErrorMessage + " Retry to save this result.";
+            Changed?.Invoke(); return false;
+        }
+        ErrorMessage = "";
         LastResult = service.FocusReceipt(sessionId);
         if (cancel)
         {

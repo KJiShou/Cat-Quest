@@ -15,8 +15,8 @@ public sealed class CatStatusUI : MonoBehaviour
     private void OnDisable() { if (service != null) service.Changed -= Refresh; }
     private void Refresh()
     {
-        TaskService.CatLevel(service.Snapshot.experience, out int catLevel, out int xp, out int required);
-        if (playerName) playerName.text = string.IsNullOrWhiteSpace(service.Snapshot.username) ? "Player" : service.Snapshot.username;
+        TaskService.CatLevel(service.Experience, out int catLevel, out int xp, out int required);
+        if (playerName) playerName.text = string.IsNullOrWhiteSpace(service.PlayerName) ? "Player" : service.PlayerName;
         level.text = "LV " + catLevel;
         experience.text = $"{xp} / {required}";
         experienceBar.maxValue = required;

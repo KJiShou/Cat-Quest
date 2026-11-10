@@ -36,6 +36,7 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
     }
 
     GameObject previousSelection;
+    public event System.Action Closed;
     public bool IsHoverPreview { get; private set; }
     Vector2 pointerPosition, modalPosition;
     [SerializeField] Image backdrop;
@@ -77,6 +78,7 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
         if(!IsHoverPreview&&events&&events.currentSelectedGameObject&&events.currentSelectedGameObject.transform.IsChildOf(transform))
             events.SetSelectedGameObject(previousSelection&&previousSelection.activeInHierarchy?previousSelection:null);
         if(IsHoverPreview)SetHoverPreview(false);
+        else Closed?.Invoke();
     }
     public void FocusActions()
     {

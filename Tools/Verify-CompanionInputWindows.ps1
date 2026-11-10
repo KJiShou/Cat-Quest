@@ -28,7 +28,8 @@ public static class FocusNative {
  [StructLayout(LayoutKind.Explicit,Size=32)] struct UNION { [FieldOffset(0)] public KEYBOARD keyboard; }
  [StructLayout(LayoutKind.Sequential)] struct KEYBOARD { public ushort vk,scan;public uint flags,time;public UIntPtr extra; }
  [DllImport("user32.dll",SetLastError=true)] static extern uint SendInput(uint count,INPUT[] inputs,int size);
- public static void Key(byte key,bool up){var input=new INPUT{type=1,data=new UNION{keyboard=new KEYBOARD{scan=(ushort)MapVirtualKey(key,0),flags=(uint)(8|(up?2:0)|((key>=33&&key<=46)?1:0))}}};if(SendInput(1,new[]{input},Marshal.SizeOf<INPUT>())!=1)throw new Exception("SendInput rejected");}
+ public static IntPtr InputTarget;
+ public static void Key(byte key,bool up){if(!up&&GetForegroundWindow()!=InputTarget)throw new Exception("Owned companion lost foreground before SendInput");var input=new INPUT{type=1,data=new UNION{keyboard=new KEYBOARD{scan=(ushort)MapVirtualKey(key,0),flags=(uint)(8|(up?2:0)|((key>=33&&key<=46)?1:0))}}};if(SendInput(1,new[]{input},Marshal.SizeOf<INPUT>())!=1)throw new Exception("SendInput rejected");}
 
  [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left,Top,Right,Bottom; }
  public delegate bool Callback(IntPtr h,IntPtr p);
@@ -45,12 +46,28 @@ public static class FocusNative {
  [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint key,uint kind);
  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+ [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
  [DllImport("ntdll.dll")] public static extern int NtSuspendProcess(IntPtr h);
  [DllImport("ntdll.dll")] public static extern int NtResumeProcess(IntPtr h);
- public static IntPtr Window(int id) { IntPtr result=IntPtr.Zero; long area=0; EnumWindows((h,p)=> { uint pid; GetWindowThreadProcessId(h,out pid); Rect r; GetWindowRect(h,out r); long a=(long)(r.Right-r.Left)*(r.Bottom-r.Top); if(pid==id && IsWindowVisible(h) && a>area){area=a;result=h;} return true; },IntPtr.Zero);return result; }
+ [StructLayout(LayoutKind.Sequential)] public struct NativePoint { public int X,Y; }
+ [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(NativePoint point);
+ [DllImport("user32.dll")] static extern bool GetCursorPos(out NativePoint point);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h,System.Text.StringBuilder value,int count);
+ public static string ClassName(IntPtr h){var value=new System.Text.StringBuilder(256);GetClassName(h,value,256);return value.ToString();}
+ public static uint PointerProcess(){NativePoint p;GetCursorPos(out p);uint pid;GetWindowThreadProcessId(WindowFromPoint(p),out pid);return pid;}
+ public static bool PointerHits(IntPtr target){NativePoint p;GetCursorPos(out p);uint a,b;GetWindowThreadProcessId(target,out a);GetWindowThreadProcessId(WindowFromPoint(p),out b);return a==b;}
+ public static string Describe(IntPtr target){NativePoint p;GetCursorPos(out p);Rect r;GetWindowRect(target,out r);var hit=WindowFromPoint(p);uint pid;GetWindowThreadProcessId(hit,out pid);return "target="+target+" class="+ClassName(target)+" rect="+r.Left+","+r.Top+","+r.Right+","+r.Bottom+" foreground="+GetForegroundWindow()+" cursor="+p.X+","+p.Y+" pointWindow="+hit+" pointClass="+ClassName(hit)+" pointPID="+pid;}
+ [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a,uint b,bool attach);
+ [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+ [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int command);
+ public static void Activate(IntPtr target) {uint pid;uint other=GetWindowThreadProcessId(GetForegroundWindow(),out pid),own=GetCurrentThreadId();bool attached=own!=other&&AttachThreadInput(own,other,true);try{ShowWindow(target,9);SetForegroundWindow(target);}finally{if(attached)AttachThreadInput(own,other,false);}}
+ public static IntPtr Window(int id) { IntPtr result=IntPtr.Zero; long area=0; EnumWindows((h,p)=> { uint pid; GetWindowThreadProcessId(h,out pid); Rect r; GetWindowRect(h,out r); long a=(long)(r.Right-r.Left)*(r.Bottom-r.Top); if(pid==id && IsWindowVisible(h) && ClassName(h)=="UnityWndClass" && a>area){area=a;result=h;} return true; },IntPtr.Zero);return result; }
 }
 '@
 [FocusNative]::SetProcessDPIAware() | Out-Null
+# Keep native sizes and pointer coordinates physical on mixed-DPI monitors.
+$previousDpiContext=[FocusNative]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
+if($previousDpiContext -eq [IntPtr]::Zero){throw 'Per-monitor physical-coordinate context is unavailable.'}
 $previousForeground=[FocusNative]::GetForegroundWindow()
 $cursor = [Windows.Forms.Cursor]::Position
 $canMovePointer = [FocusNative]::SetCursorPos($cursor.X,$cursor.Y)
@@ -86,9 +103,20 @@ function Command($value) {
  return WaitFor (Join-Path $folder 'smoke-result.json') {param($v)$true} 'command result'
 }
 function ClickAt($window,[int]$x,[int]$y) {
+ for($activationAttempt=0;$activationAttempt -lt 3 -and [FocusNative]::GetForegroundWindow() -ne $window;$activationAttempt++) {
+  [FocusNative]::Activate($window);[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 150
+  if([FocusNative]::GetForegroundWindow() -eq $window){break}
+  $activationRect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$activationRect)|Out-Null
+  [FocusNative]::SetCursorPos($activationRect.Left+60,$activationRect.Top+18)|Out-Null;[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 150
+  if(![FocusNative]::PointerHits($window)){throw ('Native pointer does not hit expected companion: '+[FocusNative]::Describe($window))}
+  [FocusNative]::mouse_event(2,0,0,0,[UIntPtr]::Zero);Start-Sleep -Milliseconds 80;[FocusNative]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+  [Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 700
+ }
+ if([FocusNative]::GetForegroundWindow() -ne $window){throw ('Interactive desktop refused the companion foreground: '+[FocusNative]::Describe($window))}
  $rect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$rect)|Out-Null
  [FocusNative]::SetForegroundWindow($window)|Out-Null;[FocusNative]::SetCursorPos($rect.Left+$x,$rect.Top+$y)|Out-Null
  Start-Sleep -Milliseconds 350
+ if(![FocusNative]::PointerHits($window)){throw ("Native target pointer missed companion: "+[FocusNative]::Describe($window))}
  [FocusNative]::mouse_event(2,0,0,0,[UIntPtr]::Zero);Start-Sleep -Milliseconds 80;[FocusNative]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
  Start-Sleep -Milliseconds 500
 }
@@ -97,9 +125,14 @@ function Capture($window,$name) {
  $bitmap=[Drawing.Bitmap]::new($r.Right-$r.Left,$r.Bottom-$r.Top);$graphics=[Drawing.Graphics]::FromImage($bitmap)
  try {$graphics.CopyFromScreen($r.Left,$r.Top,0,0,$bitmap.Size);$bitmap.Save((Join-Path $folder ($name+'.png')))}finally{$graphics.Dispose();$bitmap.Dispose()}
 }
+function MovePointer($window,[int]$x,[int]$y) {
+ $pointerRect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$pointerRect)|Out-Null
+ [FocusNative]::SetCursorPos($pointerRect.Left+$x,$pointerRect.Top+$y)|Out-Null
+}
 function ResizeWindow($window,[int]$width,[int]$height) {
+ # Preserve the player's original monitor; do not force tests over unrelated windows.
  for($attempt=0;$attempt -lt 5;$attempt++) {
-  [FocusNative]::SetWindowPos($window,[IntPtr]::Zero,100,100,$width,$height,0x14)|Out-Null
+  [FocusNative]::SetWindowPos($window,[IntPtr]::Zero,0,0,$width,$height,0x16)|Out-Null
   Start-Sleep -Milliseconds 700
   $r=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$r)|Out-Null
   if(($r.Right-$r.Left) -eq $width -and ($r.Bottom-$r.Top) -eq $height){return}
@@ -135,14 +168,18 @@ function BurstSubmit($name) {
  ResumeMain
 }
 function VerifyReset($label) {
- Tap 27;[FocusNative]::SetCursorPos(20,20)|Out-Null;Start-Sleep -Milliseconds 700
+ Tap 27;MovePointer $window -30 -30;Start-Sleep -Milliseconds 700
  $v=ReadJson $viewPath
  foreach($f in $v.feedback){Check ([Math]::Abs($f.scaleX-1) -lt .01 -and [Math]::Abs($f.scaleY-1) -lt .01 -and [Math]::Abs($f.offset) -lt .05) ($label+" resets "+$f.name)}
  WriteJson (Join-Path $folder ($label+'-feedback.json')) $v
 }
 function RestoreFromTaskbar {
  Add-Type -AssemblyName UIAutomationClient;Add-Type -AssemblyName UIAutomationTypes
- $taskbar=[System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty,'Shell_TrayWnd'))
+ $desktop=[System.Windows.Automation.AutomationElement]::RootElement
+ $bars=@($desktop.FindAll([System.Windows.Automation.TreeScope]::Children,[System.Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.ClassName -in @('Shell_TrayWnd','Shell_SecondaryTrayWnd')})
+ $sameMonitor=@($bars|Where-Object {$bounds=$_.Current.BoundingRectangle;$bounds.Right -gt $testMonitor.Left -and $bounds.Left -lt $testMonitor.Right -and $bounds.Bottom -gt $testMonitor.Top -and $bounds.Top -lt $testMonitor.Bottom})
+ Check ($sameMonitor.Count -eq 1) 'unique taskbar on the companion original monitor'
+ $taskbar=$sameMonitor[0]
  $elements=@($taskbar.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition))
  $dump=@($elements|ForEach-Object{@{name=$_.Current.Name;id=$_.Current.AutomationId;class=$_.Current.ClassName;bounds=$_.Current.BoundingRectangle.ToString()}})
  WriteJson (Join-Path $folder 'taskbar-elements.json') $dump
@@ -150,7 +187,7 @@ function RestoreFromTaskbar {
  Check ($candidates.Count -eq 1) 'unique player taskbar group'
  $rect=$candidates[0].Current.BoundingRectangle
  [FocusNative]::SetCursorPos([int]($rect.X+$rect.Width/2),[int]($rect.Y+$rect.Height/2))|Out-Null
- Start-Sleep -Milliseconds 200;[FocusNative]::mouse_event(2,0,0,0,[UIntPtr]::Zero);Start-Sleep -Milliseconds 80;[FocusNative]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+ Start-Sleep -Milliseconds 200;Check ([FocusNative]::PointerProcess() -eq $taskbar.Current.ProcessId) 'physical pointer reaches the original-monitor taskbar';[FocusNative]::mouse_event(2,0,0,0,[UIntPtr]::Zero);Start-Sleep -Milliseconds 80;[FocusNative]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
  Start-Sleep -Milliseconds 1000
  $root=[System.Windows.Automation.AutomationElement]::RootElement
  $popups=@($root.FindAll([System.Windows.Automation.TreeScope]::Children,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty,'TaskListThumbnailWnd')))
@@ -173,13 +210,15 @@ try {
  $children=@(Get-CimInstance Win32_Process | Where-Object {$_.ParentProcessId -eq $main.Id -and $_.ExecutablePath -eq $exe})
  $child=Get-Process -Id $children[0].ProcessId
  $window=[FocusNative]::Window($child.Id)
+ [FocusNative]::InputTarget=$window
+ $testMonitor=[Windows.Forms.Screen]::FromHandle($window).Bounds
  Check ($window -ne [IntPtr]::Zero) 'actual companion window'
  Start-Sleep -Milliseconds 1000
  CheckTaskbar 'opened'
  ResizeWindow $window 420 300
  $view=WaitFor $viewPath {param($v)$v.width -eq 420 -and $v.height -eq 300} 'normal client size'
  ClickAt $window 200 170;Check ([FocusNative]::GetForegroundWindow() -eq $window) 'native keyboard focus'
- [FocusNative]::SetCursorPos(20,20)|Out-Null
+ MovePointer $window -30 -30
  foreach($size in @(@(420,300),@(240,180))) {
   ResizeWindow $window $size[0] $size[1]
   $view=WaitFor $viewPath {param($v)$v.width -eq $size[0] -and $v.height -eq $size[1]} 'client resize'
@@ -275,6 +314,7 @@ finally {
  try{foreach($name in $key.GetValueNames()){if($name -notin $backup.name){$key.DeleteValue($name,$false)}};foreach($v in $backup){$key.SetValue($v.name,$v.value,$v.kind)}}finally{$key.Dispose()}
  if(!$existed){[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKey($registryPath,$false)}
  [FocusNative]::SetCursorPos($cursor.X,$cursor.Y)|Out-Null
+ [FocusNative]::SetThreadDpiAwarenessContext($previousDpiContext)|Out-Null
  if($previousForeground -ne [IntPtr]::Zero){[FocusNative]::SetForegroundWindow($previousForeground)|Out-Null}
  WriteJson (Join-Path $folder 'result.json') @{utc=[DateTime]::UtcNow.ToString('O');passed=($null -eq $failure);checks=$checks;notVerified=$notVerified;failure=$failure;restoredPlayerPrefs=$true}
  Write-Output "Evidence: $folder"

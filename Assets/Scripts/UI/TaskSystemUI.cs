@@ -64,10 +64,23 @@ public partial class TaskSystemUI : MonoBehaviour
     private bool refocusQuick;
     private TaskConfirmDialog confirmation;
     private TaskResultNotice resultNotice;
+    private RewardFlightUI rewardFlight;
     public TaskFilterDialog filterDialogTemplate;
     private TaskFilterDialog filters;
     private float nextClockCheck;
     private bool editing;
+    private string savedDraftState;
+    private int draftRevision;
+    private sealed class BrowseState
+    {
+        public string search = "", selected;
+        public TaskDifficulty? difficulty;
+        public string[] tags = Array.Empty<string>();
+        public float scrollOffset;
+    }
+    // Session-only browsing context. The saved default is used only on first entry.
+    private readonly Dictionary<TaskTab, BrowseState> browseStates = new Dictionary<TaskTab, BrowseState>();
+    private float? pendingScrollOffset;
     private readonly List<RaycastResult> outsideClickHits = new List<RaycastResult>();
     private string outsideClickSelection;
 
@@ -126,13 +139,35 @@ public partial class TaskSystemUI : MonoBehaviour
     }
     private void OnEnable()
     {
-        if(Service!=null) { Service.RefreshDate(); Service.Changed += Refresh; if (calendar && calendar.Active) Refresh(); else SelectTab(Service.Settings.DefaultTaskTab); }
+        if(Service!=null) { Service.RefreshDate(); Service.Changed += Refresh; RestoreBrowseState(CurrentTab); Refresh(); }
     }
-    public bool PrepareToLeavePage()
+    public bool PrepareToLeavePage(Action continueNavigation = null)
     {
         if(!CommitQuickAdd()) return false;
+        if(!PrepareToDiscardDraft(continueNavigation)) return false;
+        outsideClickSelection=null; RememberBrowseState();
         CancelDraft(); CloseModal(); confirmation?.Dismiss();
         return true;
+    }
+    // A navigation request must not silently overwrite the editor's isolated draft.
+    // Explicit Cancel remains an intentional discard; Save still owns validation/persistence.
+    public bool PrepareToDiscardDraft(Action continueNavigation)
+    {
+        if(!editing || savedDraftState == ReadDraftState()) return true;
+        if(confirmation.Root.activeSelf) return false;
+        int revision=draftRevision;
+        CloseModal(); resultNotice.Dismiss();
+        confirmation.Show("Discard changes?", "Your edits have not been saved.\nKeep editing to save them, or discard and continue.", () => {
+            if(!editing || revision!=draftRevision) return;
+            CancelDraft();
+            continueNavigation?.Invoke();
+        }, "Discard", "Keep editing");
+        return false;
+    }
+    private string ReadDraftState()
+    {
+        var draft=editor.ReadDraft(out var completed);
+        return JsonUtility.ToJson(draft)+"\n"+string.Join(",",completed.OrderBy(id=>id));
     }
     private void OnApplicationFocus(bool focus) { if (!focus) CloseTaskContext(); if (focus && isActiveAndEnabled && Service != null) { Service.RefreshDate(); Refresh(); } }
     private void OnDestroy() { if (contextMenu) Destroy(contextMenu.gameObject); if (Service != null) Service.Changed -= Refresh; if(filters) Destroy(filters.gameObject); if(resultNotice) Destroy(resultNotice.gameObject); if(confirmation?.Root) Destroy(confirmation.Root); }
@@ -158,6 +193,11 @@ public partial class TaskSystemUI : MonoBehaviour
     {
         if(ContextOpen || (calendar && calendar.Active) || editing || SelectedKey==null || !detailsRoot.gameObject.activeInHierarchy
             || (filters && filters.gameObject.activeSelf) || confirmation.Root.activeSelf) return;
+        // Global navigation and Settings preserve the task the user was viewing.
+        if(target && !target.IsChildOf(transform)) return;
+        if(target && tabButtons.Length>0 && target.IsChildOf(tabButtons[0].transform.parent)) return;
+        if(target && calendar && ((calendar.listMode && target.IsChildOf(calendar.listMode.transform))
+            || (calendar.calendarMode && target.IsChildOf(calendar.calendarMode.transform)))) return;
         if(target && target.IsChildOf(detailsRoot)) return;
         for(var current=target; current && current.IsChildOf(listContent); current=current.parent)
             if(current.name.StartsWith("Task_",StringComparison.Ordinal)) return;
@@ -178,15 +218,35 @@ public partial class TaskSystemUI : MonoBehaviour
         else resultNotice.Show(message);
     }
     private void CloseModal() { CloseTaskContext(); if(filters) filters.Dismiss(); }
-    private void OnDisable() { StopContextFocus(); if (Service != null) Service.Changed -= Refresh; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
+    private void OnDisable() { outsideClickSelection=null; RememberBrowseState(); StopContextFocus(); if (Service != null) Service.Changed -= Refresh; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
     private void Confirm(string title,string message,Action accepted,string confirmLabel="Confirm")
     {
         CloseModal(); confirmation.Show(title,message,accepted,confirmLabel);
     }
     public void SelectTab(TaskTab tab)
     {
+        if(!Enum.IsDefined(typeof(TaskTab),tab)) return;
         if(!CommitQuickAdd()) return;
-        CancelDraft(); CurrentTab=tab; SelectedKey=null; difficultyFilter=null; tagFilters.Clear(); search.SetTextWithoutNotify(""); Refresh();
+        if(!PrepareToDiscardDraft(()=>SelectTab(tab))) return;
+        outsideClickSelection=null;
+        RememberBrowseState(); CancelDraft();
+        if(CurrentTab!=tab) { CurrentTab=tab; RestoreBrowseState(tab); }
+        Refresh();
+    }
+    private void RememberBrowseState()
+    {
+        if(Service==null || rows==null) return;
+        browseStates[CurrentTab]=new BrowseState {
+            search=search.text, selected=SelectedKey, difficulty=difficultyFilter,
+            tags=tagFilters.ToArray(), scrollOffset=pendingScrollOffset ?? rows.ScrollOffset
+        };
+    }
+    private void RestoreBrowseState(TaskTab tab)
+    {
+        if(!browseStates.TryGetValue(tab,out var state)) state=new BrowseState();
+        search.SetTextWithoutNotify(state.search); SelectedKey=state.selected; difficultyFilter=state.difficulty;
+        tagFilters.Clear(); tagFilters.UnionWith(state.tags);
+        pendingScrollOffset=state.scrollOffset;
     }
     public void Refresh()
     {
@@ -195,16 +255,11 @@ public partial class TaskSystemUI : MonoBehaviour
         if(committingQuick) { pendingRefresh=true; return; }
         pendingRefresh=false;
         if (calendar && calendar.Active) { calendar.Refresh(); return; }
-        var data=Service.Snapshot;
+        var data=Service.BrowseSnapshot(CurrentTab == TaskTab.History);
         tagFilters.RemoveWhere(id=>!data.tags.Any(t=>t.id==id));
         for(int i=0;i<5;i++)
         {
-            int count = (TaskTab)i switch {
-                TaskTab.Tags => data.tags.Count,
-                TaskTab.History => data.history.Count(h=>!h.revoked),
-                TaskTab.Todo => QueryTodo(data).Count,
-                _ => Service.QuerySnapshot(data,(TaskTab)i).Count
-            };
+            int count = Service.BrowseCount(data, (TaskTab)i);
             bool active=i==(int)CurrentTab;
             Color color=active ? TaskUIBuilder.Blue : new Color32(121,143,173,255);
             tabCounts[i].text=count.ToString(); tabCounts[i].color=Color.white;
@@ -242,6 +297,10 @@ public partial class TaskSystemUI : MonoBehaviour
         if(selected==null) SelectedKey=null;
         if(editing) editor.RefreshCatalog(data.tags); else RenderDetails(selected);
         LayoutRebuilder.MarkLayoutForRebuild(listContent);
+        if(pendingScrollOffset.HasValue && listContent.gameObject.activeInHierarchy) {
+            float offset=pendingScrollOffset.Value; pendingScrollOffset=null;
+            rows.RestoreScrollOffset(offset);
+        }
     }
     private void RenderRow(TaskView view)
     {
@@ -307,7 +366,7 @@ public partial class TaskSystemUI : MonoBehaviour
         else
         {
             checkbox.interactable=Service.Eligible(view.task);
-            checkbox.onClick.AddListener(()=> { if(CommitQuickAdd()) CompleteSelected(view.task.id); });
+            checkbox.onClick.AddListener(()=> { if(CommitQuickAdd()) CompleteForDate(view.task.id,null,checkbox.transform as RectTransform); });
         }
         var button=row.GetComponent<Button>() ?? row.AddComponent<Button>(); button.onClick.RemoveAllListeners(); button.onClick.AddListener(()=>SelectTask(view.Key));
         BindTaskContext(row,view); BindTaskContext(checkbox.gameObject,view);
@@ -328,14 +387,32 @@ public partial class TaskSystemUI : MonoBehaviour
         }
         return prefix + date.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
     }
-    public void SelectTask(string key) { if(!CommitQuickAdd()) return; SelectedKey=key; editing=false; editor.gameObject.SetActive(false); detailsRoot.gameObject.SetActive(true); Refresh(); }
+    public void SelectTask(string key) {
+        if(!CommitQuickAdd() || !PrepareToDiscardDraft(()=>SelectTask(key))) return;
+        outsideClickSelection=null; CancelDraft();
+        if(!visible.Any(view=>view.Key==key)) RevealFilteredTask(key);
+        SelectedKey=key; detailsRoot.gameObject.SetActive(true); Refresh();
+        if(SelectedKey==key && (calendar==null || !calendar.Active)) rows?.RevealTask(key);
+    }
+    private void RevealFilteredTask(string key)
+    {
+        // Dashboard links explicitly request a task. Clear only the current filters
+        // that hide that target; ordinary tab navigation never clears filters.
+        var data=Service.TaskSnapshot;
+        var available=CurrentTab==TaskTab.Todo ? QueryTodo(data) : Service.QuerySnapshot(data,CurrentTab);
+        var target=available.FirstOrDefault(view=>view.Key==key);
+        if(target==null) return;
+        if(difficultyFilter.HasValue && difficultyFilter.Value!=target.task.difficulty) difficultyFilter=null;
+        tagFilters.RemoveWhere(id=>!target.task.tagIds.Contains(id));
+        var matches=CurrentTab==TaskTab.Todo ? QueryTodo(data,search.text) : Service.QuerySnapshot(data,CurrentTab,search.text);
+        if(!matches.Any(view=>view.Key==key)) search.SetTextWithoutNotify("");
+    }
     private void RenderDetails(TaskView view)
     {
         detailsRoot.gameObject.SetActive(!editing && view!=null);
         if(view==null) return;
         details.Render(view, ScheduleText, Service, BeginEdit, CompleteSelected,
-            id=>Confirm("Delete task?", "Completed history and rewards will be kept.",
-                ()=> { if(!Service.Delete(id)) Notify(Service.LastError,true); else Notify("Task deleted."); },"Delete"),
+            ConfirmDeleteTask,
             message=>Notify(message,true));
 
     }
@@ -356,13 +433,23 @@ public partial class TaskSystemUI : MonoBehaviour
         }
     }
     public void CompleteSelected(string id) => CompleteForDate(id, null);
-    public void CompleteForDate(string id, string expectedDay)
+    public void CompleteForDate(string id, string expectedDay, RectTransform origin = null)
     {
+        if(!origin) {
+            var selected=EventSystem.current?EventSystem.current.currentSelectedGameObject:null;
+            if(selected && selected.transform.IsChildOf(transform))origin=selected.transform as RectTransform;
+            else if(detailsRoot.gameObject.activeInHierarchy && SelectedKey==id)origin=detailsRoot;
+            else origin=listContent.Cast<Transform>().FirstOrDefault(t=>t.gameObject.activeInHierarchy && t.name=="Task_"+id) as RectTransform;
+        }
         Action complete=()=>
         {
             if (expectedDay != null && expectedDay != TaskService.DateKey(Service.LocalNow)) { Notify("The day has changed. Select today to complete this daily task.",true); Refresh(); return; }
             var before=Service.Query(TaskTab.Daily).Concat(Service.Query(TaskTab.Todo)).FirstOrDefault(v=>v.task.id==id);
-            if(!Service.Complete(id,true)) Notify(Service.LastError,true);
+            if(!rewardFlight)rewardFlight=GetComponentInParent<Canvas>().rootCanvas.GetComponentInChildren<RewardFlightUI>(true);
+            rewardFlight?.SetRewardOrigin(origin);
+            bool saved;
+            try {saved=Service.Complete(id,true);}finally {rewardFlight?.SetRewardOrigin(null);}
+            if(!saved) Notify(Service.LastError,true);
             else {
                 if(before==null || before.Completed) { Notify("Task already completed. No additional rewards."); return; }
                 SettingsAudio.Instance?.PlayTaskComplete();
@@ -380,6 +467,7 @@ public partial class TaskSystemUI : MonoBehaviour
     public void BeginAdd()
     {
         if(quickInput) { quickInput.Select(); quickInput.ActivateInputField(); return; }
+        if(!PrepareToDiscardDraft(BeginAdd)) return;
         CancelDraft();
         var now=Service.LocalNow;
         quickDraft=new QuestTask { title="",difficulty=TaskDifficulty.Normal,
@@ -443,8 +531,10 @@ public partial class TaskSystemUI : MonoBehaviour
     private void BeginEdit(TaskView view) => OpenDraft(view.task,view.occurrence.completedSubtaskIds,"Edit Task");
     private void OpenDraft(QuestTask task,IEnumerable<string> done,string title)
     {
+        if(!PrepareToDiscardDraft(()=>OpenDraft(task,done,title))) return;
         editing=true; detailsRoot.gameObject.SetActive(false); editor.gameObject.SetActive(true);
         editor.LoadDraft(PlayerDataStore.Copy(task),Service.TagCatalog,done);
+        savedDraftState=ReadDraftState(); draftRevision++;
         editor.transform.Find("Header/Heading").GetComponent<TMP_Text>().text=title;
         editor.transform.Find("Footer/Actions/SaveChangesButton").GetComponentInChildren<TMP_Text>().text=string.IsNullOrEmpty(task.id) ? "Add Task" : "Save Changes";
     }
@@ -453,13 +543,16 @@ public partial class TaskSystemUI : MonoBehaviour
         var draft=editor.ReadDraft(out var done);
         if (calendar && calendar.Active && !calendar.ValidateDraftDate(draft)) return;
         if(!Service.Upsert(draft,done,out var id)) { Notify(Service.LastError,true); return; }
-        SelectedKey=id; CancelDraft();
+        // Calendar owns its drawer selection independently of the retained List selection.
+        if(!calendar || !calendar.Active) SelectedKey=id;
+        CancelDraft();
         if (calendar && calendar.Active) calendar.FollowSaved(draft, id);
         Refresh(); Notify("Task saved.");
     }
     public void CancelDraft()
     {
         CloseTaskContext(); StopContextFocus();
+        savedDraftState=null; draftRevision++;
         editing=false; editor.datePicker.overlay.SetActive(false); editor.timePicker.overlay.SetActive(false);
         editor.gameObject.SetActive(false);
         if (calendar && calendar.Active) calendar.EndEdit();

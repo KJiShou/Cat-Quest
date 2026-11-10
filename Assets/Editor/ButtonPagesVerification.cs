@@ -56,6 +56,9 @@ public static class ButtonPagesVerification
             EditorApplication.isPlaying=true;return;
         }
         if(SessionState.GetBool(Flag,false)&&DateTime.UtcNow>DateTime.Parse(SessionState.GetString(Flag+".deadline",DateTime.UtcNow.AddMinutes(1).ToString("O")))){failures.Add("FAIL: timeout");Finish();return;}
+        // Keep the Game View rendering while an end-of-frame capture is pending,
+        // including when the Editor is behind another application.
+        if(run!=null&&EditorApplication.isPlaying){EditorApplication.QueuePlayerLoopUpdate();View.Repaint();}
         if(run==null||!EditorApplication.isPlaying||EditorApplication.timeSinceStartup<next||(capture&&capture.Pending))return;
         EditorApplication.QueuePlayerLoopUpdate();
         try{if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);else Finish();}
@@ -88,10 +91,26 @@ public static class ButtonPagesVerification
         typeof(DashboardRewardPlayVerification).GetMethod("Resolution",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic).Invoke(null,new object[]{1280,720});yield return .5;
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var service=GameDataManager.EnsureInstance().Tasks;
         if(!GameDataManager.Instance.SavePath.Contains("ButtonPagesVerification"))throw new Exception("Isolated save required");
+        // A page can update navigation while its hierarchy is still inactive.
+        var inactiveParent=new GameObject("Inactive navigation regression");inactiveParent.SetActive(false);
+        try {
+            var clone=UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Button_Normal.prefab"),inactiveParent.transform);
+            var button=clone.GetComponentInChildren<SidebarNavigationButton>(true);
+            var original=button.targetGraphic.color;
+            button.SetPageSelected(true);button.SetPageSelected(false);
+            if(button.targetGraphic.color!=original)throw new Exception("Navigation lost its authored background before Awake");
+            inactiveParent.SetActive(true);
+            button.SetPageSelected(true);button.SetPageSelected(false);
+            if(button.targetGraphic.color!=original)throw new Exception("Navigation lost its authored background after Awake");
+        } finally {UnityEngine.Object.DestroyImmediate(inactiveParent);}
         service.Upsert(new QuestTask{title="Button alignment test",daily=true,scheduled=true,date=TaskService.DateKey(service.LocalNow)},null,out var id);
         if(!service.SaveTag(null,"Study","#5879FF",out var tagId))throw new Exception(service.LastError);
         var contexts=new List<(string name,Action open)>();
         for(int i=0;i<nav.pages.Length;i++){int index=i;contexts.Add((((MainMenuPage)i).ToString(),()=>{if(!nav.ShowPage((MainMenuPage)index))throw new Exception("Page inaccessible: "+(MainMenuPage)index);}));}
+        var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
+        var expander=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance).GetValue(sidebar);
+        contexts.Insert(1,("Dashboard-expanded",()=>{nav.ShowPage(MainMenuPage.Tasks);nav.ShowPage(MainMenuPage.Dashboard);expander.isOn=true;}));
+        contexts.Insert(2,("Dashboard-collapsed",()=>{expander.isOn=false;}));
         foreach(TaskTab tab in Enum.GetValues(typeof(TaskTab))){var selected=tab;contexts.Add(("Tasks-"+tab,()=>{nav.ShowPage(MainMenuPage.Tasks);nav.taskSystem.SelectTab(selected);}));}
         contexts.Add(("Task-details",()=>{nav.taskSystem.SelectTab(TaskTab.Daily);nav.taskSystem.SelectTask(id);}));
         contexts.Add(("Task-edit",()=>typeof(TaskSystemUI).GetMethod("BeginEdit",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(nav.taskSystem,new object[]{service.Query(TaskTab.Daily).First()})));
@@ -118,11 +137,18 @@ public static class ButtonPagesVerification
         contexts.Add(("Chat-review",()=>{UnityEngine.Object.FindFirstObjectByType<TutorialController>().CloseHelp();nav.ShowPage(MainMenuPage.Chat);nav.pages[(int)MainMenuPage.Chat].GetComponent<AiChatPage>().OpenDraft(new AiTaskDraft{task=new QuestTask{title="Review button appearance"}});}));
         contexts.Add(("Chat-clear",()=>{var chat=nav.pages[(int)MainMenuPage.Chat].GetComponent<AiChatPage>();chat.cancelDraft.onClick.Invoke();chat.clear.onClick.Invoke();}));
         capture=new GameObject("Button audit screenshots").AddComponent<RewardScreenshotCapture>();
-        foreach(var context in contexts.Where(c=>!SessionState.GetBool(Flag+".dashboardOnly",false)||c.name=="Dashboard")){
+        foreach(var context in contexts.Where(c=>!SessionState.GetBool(Flag+".dashboardOnly",false)||c.name.StartsWith("Dashboard"))){
             context.open();yield return .7;
             File.WriteAllText(Folder+"/progress.txt",context.name);
             foreach(var width in new[]{1920,1280}){Resolution(width,width==1920?1080:720);yield return .5;capture.Begin(Path.GetFullPath(Folder+"/"+context.name+"-"+width+".png"));yield return .2;}
             var buttons=Selectable.allSelectablesArray.OfType<Button>().Where(b=>b.gameObject.activeInHierarchy).ToArray();
+            foreach(var b in buttons) {
+                if(!b.GetComponent<JuicyButton>())failures.Add(context.name+" missing JuicyButton: "+PathOf(b.transform));
+                var animator=b.GetComponent<Animator>();
+                if(b.transition==Selectable.Transition.Animation || (animator && animator.runtimeAnimatorController && animator.runtimeAnimatorController.name=="Button_Nav"))
+                    failures.Add(context.name+" legacy button animation: "+PathOf(b.transform));
+            }
+            var poses=buttons.Select(b=>(rect:(RectTransform)b.transform,scale:b.transform.localScale,position:((RectTransform)b.transform).anchoredPosition)).ToArray();
             var feedback=buttons.Select(b=>b.GetComponent<JuicyButton>()).Where(x=>x && x.isActiveAndEnabled).ToArray();checkedButtons+=buttons.Length;
             foreach(var f in feedback){f.OnPointerExit(new PointerEventData(EventSystem.current));f.OnDeselect(new BaseEventData(EventSystem.current));}yield return .6;
             var graphics=buttons.SelectMany(b=>b.GetComponentsInChildren<Graphic>()).Distinct().ToArray();
@@ -137,6 +163,22 @@ public static class ButtonPagesVerification
             Check(context.name,"keyboard-selected",samples);
             foreach(var f in feedback){f.OnSubmit(new BaseEventData(EventSystem.current));f.SendMessage("OnApplicationFocus",false,SendMessageOptions.RequireReceiver);}
             yield return .2;Check(context.name,"focus-reset",samples);
+            foreach(var f in feedback) {
+                for(int repeat=0;repeat<8;repeat++) {
+                    f.OnPointerDown(new PointerEventData(EventSystem.current));
+                    f.OnPointerUp(new PointerEventData(EventSystem.current));
+                }
+                f.enabled=false;f.enabled=true;
+                if(f.DrawScale!=Vector2.one || f.DrawOffset!=0)failures.Add(context.name+" disable did not reset feedback: "+PathOf(f.transform));
+            }
+            var interactable=buttons.Select(b=>b.interactable).ToArray();
+            foreach(var b in buttons)b.interactable=false;
+            foreach(var f in feedback){f.OnPointerEnter(new PointerEventData(EventSystem.current));f.OnPointerDown(new PointerEventData(EventSystem.current));f.OnSubmit(new BaseEventData(EventSystem.current));}
+            yield return .5;
+            foreach(var f in feedback)if(Vector2.Distance(f.DrawScale,Vector2.one)>.001f || Mathf.Abs(f.DrawOffset)>.001f)failures.Add(context.name+" disabled button animated: "+PathOf(f.transform));
+            for(int i=0;i<buttons.Length;i++)buttons[i].interactable=interactable[i];
+            foreach(var pose in poses)if(Vector3.Distance(pose.rect.localScale,pose.scale)>.001f || Vector2.Distance(pose.rect.anchoredPosition,pose.position)>.001f)
+                failures.Add(context.name+" button hit area moved: "+PathOf(pose.rect));
         }
     }
 }

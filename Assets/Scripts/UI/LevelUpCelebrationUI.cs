@@ -69,12 +69,13 @@ public sealed class LevelUpCelebrationUI : MonoBehaviour
             panel.SetActive(true); continueButton.interactable=false;
         }
         elapsed+=Time.unscaledDeltaTime;
-        fade.alpha=Mathf.Clamp01(elapsed/.22f);
+        bool reduced=UiMotion.Reduced;
+        fade.alpha=reduced?1:Mathf.Clamp01(elapsed/.22f);
         float t=Mathf.Clamp01(elapsed/.55f)-1;
         float pop=1+2.70158f*t*t*t+1.70158f*t*t;
-        badge.localScale=badgeScale*Mathf.LerpUnclamped(.82f,1,pop);
-        rays.localRotation=rayRotation*Quaternion.Euler(0,0,elapsed*9);
-        if(elapsed>=.55f && !continueButton.interactable) {
+        badge.localScale=reduced?badgeScale:badgeScale*Mathf.LerpUnclamped(.82f,1,pop);
+        rays.localRotation=reduced?rayRotation:rayRotation*Quaternion.Euler(0,0,elapsed*9);
+        if((reduced||elapsed>=.55f) && !continueButton.interactable) {
             continueButton.interactable=true;
             if(EventSystem.current) EventSystem.current.SetSelectedGameObject(continueButton.gameObject);
         }

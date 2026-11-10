@@ -118,3 +118,25 @@ public static class FocusStatistics
     static DateTime Min(DateTime a, DateTime b) => a < b ? a : b;
     static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 }
+
+public sealed partial class TaskService
+{
+    // Query already creates independent series and bucket arrays; copying the entire
+    // save first would also serialize unrelated tasks, equipment and battle history.
+    public FocusStatistics.Result QueryFocusStatistics(DateTime date, FocusStatisticsPeriod period, TimeZoneInfo zone)
+        => FocusStatistics.Query(store.Data.focusSessions, store.Data.tags, date, period, zone);
+
+    public List<QuestTag> FocusStatisticsTagCatalog()
+    {
+        var tags = new Dictionary<string, QuestTag>(StringComparer.Ordinal);
+        foreach (var tag in store.Data.tags)
+            if (!string.IsNullOrEmpty(tag.id) && !tags.ContainsKey(tag.id))
+                tags.Add(tag.id, new QuestTag { id = tag.id, name = tag.name, colorHex = tag.colorHex });
+        foreach (var session in store.Data.focusSessions)
+            if (session.tagIds != null)
+                foreach (string id in session.tagIds)
+                    if (!string.IsNullOrEmpty(id) && !tags.ContainsKey(id))
+                        tags.Add(id, new QuestTag { id = id, colorHex = "#5CA6CE" });
+        return tags.Values.OrderBy(tag => tag.id, StringComparer.Ordinal).ToList();
+    }
+}

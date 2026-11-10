@@ -54,8 +54,9 @@ public static class BossStageVerification
             if(step>=1&&step<=12){
                 int id=1+(step-1)%3;
                 if(step==7)Resolution(1280,720);
-                panel.SelectStage(id);
-                Check(panel.actors.Ready,"Actors not ready for "+id);
+                if(panel.SelectedBoss!=id){panel.SelectStage(id);next=EditorApplication.timeSinceStartup+.1;return;}
+                if(panel.arena.IsLoading){next=EditorApplication.timeSinceStartup+.1;return;}
+                Check(panel.arena.IsReady&&panel.actors.Ready,"Actors not ready for "+id);
                 Check(panel.actors.Boss.name==(id==1?"Cyclope":id==2?"Orc":"Demon"),"Wrong actor");
                 Check(panel.arena.Stage.name.StartsWith(id==1?panel.arena.stagePrefab.name:id==2?"OldForestBossStage":"LavaDungeonBossStage"),"Wrong environment");
                 if(step<=3||step>=7&&step<=9)Capture("stage-"+id+"-"+(step<=3?1920:1280));

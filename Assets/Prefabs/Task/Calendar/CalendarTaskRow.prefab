@@ -354,7 +354,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 98.368, y: -34.209}
-  m_SizeDelta: {x: 100, y: 52.885}
+  m_SizeDelta: {x: 100, y: 53}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &7896214791796989494
 MonoBehaviour:
@@ -1080,7 +1080,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 84.7705, y: -6.772314}
-  m_SizeDelta: {x: 119.541, y: 14.53}
+  m_SizeDelta: {x: 119.541, y: 28}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &2433030196018797006
 CanvasRenderer:
@@ -1137,12 +1137,12 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 16
-  m_fontSizeBase: 16
+  m_fontSize: 20
+  m_fontSizeBase: 20
   m_fontWeight: 400
   m_enableAutoSizing: 0
-  m_fontSizeMin: 18
-  m_fontSizeMax: 72
+  m_fontSizeMin: 20
+  m_fontSizeMax: 20
   m_fontStyle: 0
   m_HorizontalAlignment: 1
   m_VerticalAlignment: 512
@@ -1196,11 +1196,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
   m_IgnoreLayout: 0
   m_MinWidth: 100
-  m_MinHeight: -1
+  m_MinHeight: 28
   m_PreferredWidth: 700
-  m_PreferredHeight: -1
+  m_PreferredHeight: 28
   m_FlexibleWidth: -1
-  m_FlexibleHeight: -1
+  m_FlexibleHeight: 0
   m_LayoutPriority: 1
 --- !u!1 &7297126525574605655
 GameObject:
@@ -1499,8 +1499,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: tags
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: dc2cc93475f76427c86a8262bee36b88, type: 2}
-  m_sharedMaterial: {fileID: 2269793554123077917, guid: dc2cc93475f76427c86a8262bee36b88, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 6752661ed6a62474eac09581f267b44f, type: 2}
+  m_sharedMaterial: {fileID: 3428413888806566473, guid: 6752661ed6a62474eac09581f267b44f, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -1775,7 +1775,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 60, y: -46.112686}
-  m_SizeDelta: {x: 100, y: 13.544628}
+  m_SizeDelta: {x: 100, y: 28}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1908666520832097451
 MonoBehaviour:
@@ -1791,11 +1791,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
   m_IgnoreLayout: 0
   m_MinWidth: 100
-  m_MinHeight: 0
+  m_MinHeight: 28
   m_PreferredWidth: 700
-  m_PreferredHeight: 20
+  m_PreferredHeight: 28
   m_FlexibleWidth: -1
-  m_FlexibleHeight: -1
+  m_FlexibleHeight: 0
   m_LayoutPriority: 1
 --- !u!114 &2482099994284405909
 MonoBehaviour:

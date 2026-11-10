@@ -34,6 +34,7 @@ using UnityEngine;
     static TaskService Service(Store store)=>new TaskService(store,new Clock());
     public static void Run()
     {
+        VerifyFailureFeedbackState();
         {
             var store = new Store(); var service = Service(store); var focus = new FocusController(service);
             Check(service.SaveTag(null, "Focus test tag", out var tag), service.LastError);
@@ -101,6 +102,41 @@ using UnityEngine;
         var canvas=UnityEditor.PrefabUtility.LoadPrefabContents("Assets/Prefabs/Canvas.prefab");
         try { var panel=canvas.GetComponentsInChildren<FocusPanelUI>(true).First(p=>!p.quickStart);Check(panel.focusDuration && panel.restDuration && panel.focusDuration.minValue==1 && panel.focusDuration.maxValue==60 && panel.restDuration.minValue==1 && panel.restDuration.maxValue==60 && panel.questList && panel.rewards,"Focus UI unbound");Check(canvas.GetComponentInChildren<PetWidgetToggle>(true),"Header widget toggle unbound"); }
         finally { UnityEditor.PrefabUtility.UnloadPrefabContents(canvas); }
+    }
+
+    public static void VerifyFailureFeedbackState()
+    {
+        var store = new Store(); var service = Service(store); var focus = new FocusController(service);
+        Check(string.IsNullOrEmpty(focus.ErrorMessage), "Fresh Focus shows an operation error");
+        store.fail = true;
+        Check(!focus.Start() && focus.Phase == FocusPhase.Ready && store.Data.focusSessions.Count == 0,
+            "Failed start created a session");
+        Check(focus.ErrorMessage == "Simulated save failure", "Start failure lost its specific reason");
+        Check(focus.Configure(new FocusSessionOptions { mode = FocusTimerMode.Stopwatch })
+            && focus.ErrorMessage == "Simulated save failure", "Editing settings hid an unresolved start error");
+        Check(!focus.Start() && focus.ErrorMessage == "Simulated save failure", "Repeated failed start hid the error");
+        store.fail = false;
+        Check(focus.Start() && string.IsNullOrEmpty(focus.ErrorMessage), "Successful start did not clear the failure");
+        for (int i = 0; i < 300; i++) focus.Advance(1);
+        int experience = store.Data.experience;
+        store.fail = true;
+        Check(!focus.EndEarly() && focus.Phase == FocusPhase.Saving && store.Data.experience == experience,
+            "Failed save granted rewards or lost the pending result");
+        Check(focus.ErrorMessage == "Simulated save failure" && !focus.RetrySettlement()
+            && focus.ErrorMessage == "Simulated save failure", "Failed settlement retry lost its specific reason");
+        store.fail = false;
+        Check(focus.RetrySettlement() && focus.Phase == FocusPhase.Finished && string.IsNullOrEmpty(focus.ErrorMessage),
+            "Successful settlement did not clear the failure");
+        int savedExperience = store.Data.experience;
+        Check(!focus.RetrySettlement() && store.Data.experience == savedExperience
+            && string.IsNullOrEmpty(focus.ErrorMessage), "Duplicate retry changed rewards/error state");
+        Check(focus.Start(), "Cannot start cancellation feedback check");
+        store.fail = true;
+        Check(!focus.Cancel() && focus.Phase == FocusPhase.Saving && !string.IsNullOrEmpty(focus.ErrorMessage),
+            "Failed cancellation did not retain its error");
+        store.fail = false;
+        Check(focus.RetrySettlement() && focus.Phase == FocusPhase.Interrupted && string.IsNullOrEmpty(focus.ErrorMessage)
+            && store.Data.experience == savedExperience, "Cancellation retry changed rewards or retained an error");
     }
 
     static void VerifyLevelRewards()

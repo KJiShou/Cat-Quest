@@ -27,17 +27,32 @@ public static class FocusNative {
  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int height,uint flags);
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+ [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+ [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a,uint b,bool attach);
+ [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+ public static void Activate(IntPtr target) {uint pid;uint other=GetWindowThreadProcessId(GetForegroundWindow(),out pid),own=GetCurrentThreadId();bool attached=own!=other&&AttachThreadInput(own,other,true);try{ShowWindow(target,9);SetForegroundWindow(target);}finally{if(attached)AttachThreadInput(own,other,false);}}
  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
  [DllImport("user32.dll")] public static extern void mouse_event(uint flags,uint x,uint y,uint data,UIntPtr extra);
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int mode);
  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+ [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
  [DllImport("ntdll.dll")] public static extern int NtSuspendProcess(IntPtr h);
  [DllImport("ntdll.dll")] public static extern int NtResumeProcess(IntPtr h);
- public static IntPtr Window(int id) { IntPtr result=IntPtr.Zero; long area=0; EnumWindows((h,p)=> { uint pid; GetWindowThreadProcessId(h,out pid); Rect r; GetWindowRect(h,out r); long a=(long)(r.Right-r.Left)*(r.Bottom-r.Top); if(pid==id && IsWindowVisible(h) && a>area){area=a;result=h;} return true; },IntPtr.Zero);return result; }
+ [StructLayout(LayoutKind.Sequential)] public struct NativePoint { public int X,Y; }
+ [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(NativePoint point);
+ [DllImport("user32.dll")] static extern bool GetCursorPos(out NativePoint point);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h,System.Text.StringBuilder value,int count);
+ public static string ClassName(IntPtr h){var value=new System.Text.StringBuilder(256);GetClassName(h,value,256);return value.ToString();}
+ public static bool PointerHits(IntPtr target){NativePoint p;GetCursorPos(out p);uint a,b;GetWindowThreadProcessId(target,out a);GetWindowThreadProcessId(WindowFromPoint(p),out b);return a==b;}
+ public static string Describe(IntPtr target){NativePoint p;GetCursorPos(out p);Rect r;GetWindowRect(target,out r);var hit=WindowFromPoint(p);uint pid;GetWindowThreadProcessId(hit,out pid);return "target="+target+" class="+ClassName(target)+" rect="+r.Left+","+r.Top+","+r.Right+","+r.Bottom+" foreground="+GetForegroundWindow()+" cursor="+p.X+","+p.Y+" pointWindow="+hit+" pointClass="+ClassName(hit)+" pointPID="+pid;}
+ public static IntPtr Window(int id) { IntPtr result=IntPtr.Zero; long area=0; EnumWindows((h,p)=> { uint pid; GetWindowThreadProcessId(h,out pid); Rect r; GetWindowRect(h,out r); long a=(long)(r.Right-r.Left)*(r.Bottom-r.Top); if(pid==id && IsWindowVisible(h) && ClassName(h)=="UnityWndClass" && a>area){area=a;result=h;} return true; },IntPtr.Zero);return result; }
 }
 '@
 [FocusNative]::SetProcessDPIAware() | Out-Null
+# Keep native sizes and pointer coordinates physical on mixed-DPI monitors.
+$previousDpiContext=[FocusNative]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
+if($previousDpiContext -eq [IntPtr]::Zero){throw 'Per-monitor physical-coordinate context is unavailable.'}
 $cursor = [Windows.Forms.Cursor]::Position
 $canMovePointer = [FocusNative]::SetCursorPos($cursor.X,$cursor.Y)
 if(!$canMovePointer){$notVerified.Add('Windows rejected SetCursorPos in this execution desktop: actual hover, pin/unpin and pointer clicks are not verified.')}
@@ -77,9 +92,20 @@ function HostCommand($state,$action,$owner=$state.ownerId,$session=$state.sessio
  Start-Sleep -Milliseconds 300
 }
 function ClickAt($window,[int]$x,[int]$y) {
+ for($activationAttempt=0;$activationAttempt -lt 3 -and [FocusNative]::GetForegroundWindow() -ne $window;$activationAttempt++) {
+  [FocusNative]::Activate($window);[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 150
+  if([FocusNative]::GetForegroundWindow() -eq $window){break}
+  $activationRect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$activationRect)|Out-Null
+  [FocusNative]::SetCursorPos($activationRect.Left+60,$activationRect.Top+18)|Out-Null;[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 150
+  if(![FocusNative]::PointerHits($window)){throw ('Native pointer does not hit expected companion: '+[FocusNative]::Describe($window))}
+  [FocusNative]::mouse_event(2,0,0,0,[UIntPtr]::Zero);Start-Sleep -Milliseconds 80;[FocusNative]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+  [Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 700
+ }
+ if([FocusNative]::GetForegroundWindow() -ne $window){throw ('Interactive desktop refused the companion foreground: '+[FocusNative]::Describe($window))}
  $rect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$rect)|Out-Null
  [FocusNative]::SetForegroundWindow($window)|Out-Null;[FocusNative]::SetCursorPos($rect.Left+$x,$rect.Top+$y)|Out-Null
  Start-Sleep -Milliseconds 350
+ if(![FocusNative]::PointerHits($window)){throw ("Native target pointer missed companion: "+[FocusNative]::Describe($window))}
  [FocusNative]::mouse_event(2,0,0,0,[UIntPtr]::Zero);Start-Sleep -Milliseconds 80;[FocusNative]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
  Start-Sleep -Milliseconds 500
 }
@@ -88,9 +114,14 @@ function Capture($window,$name) {
  $bitmap=[Drawing.Bitmap]::new($r.Right-$r.Left,$r.Bottom-$r.Top);$graphics=[Drawing.Graphics]::FromImage($bitmap)
  try {$graphics.CopyFromScreen($r.Left,$r.Top,0,0,$bitmap.Size);$bitmap.Save((Join-Path $folder ($name+'.png')))}finally{$graphics.Dispose();$bitmap.Dispose()}
 }
+function MovePointer($window,[int]$x,[int]$y) {
+ $pointerRect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$pointerRect)|Out-Null
+ [FocusNative]::SetCursorPos($pointerRect.Left+$x,$pointerRect.Top+$y)|Out-Null
+}
 function ResizeWindow($window,[int]$width,[int]$height) {
+ # Preserve the player's original monitor; do not force tests over unrelated windows.
  for($attempt=0;$attempt -lt 5;$attempt++) {
-  [FocusNative]::SetWindowPos($window,[IntPtr]::Zero,100,100,$width,$height,0x14)|Out-Null
+  [FocusNative]::SetWindowPos($window,[IntPtr]::Zero,0,0,$width,$height,0x16)|Out-Null
   Start-Sleep -Milliseconds 700
   $r=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$r)|Out-Null
   if(($r.Right-$r.Left) -eq $width -and ($r.Bottom-$r.Top) -eq $height){return}
@@ -113,6 +144,7 @@ try {
  $child=Get-Process -Id $children[0].ProcessId
  $window=[FocusNative]::Window($child.Id)
  Check ($window -ne [IntPtr]::Zero) 'actual companion window'
+ if($canMovePointer){ClickAt $window 200 170;Check ([FocusNative]::GetForegroundWindow() -eq $window) 'companion foreground before native interaction sequence'}
  $r=Command @{action='advance';seconds=14400}
  $view=WaitFor $viewPath {param($v)$v.timer -like '4:00:*'} 'four-hour count-up'
  Check ($r.phase -eq 'Focusing' -and $r.exp -eq 100 -and $r.fish -eq 39) 'four-hour stopwatch remains active with capped preview'
@@ -125,16 +157,16 @@ try {
  Check (!(Test-Path (Join-Path $r.companionDirectory 'companion-session.json')) -and !(Get-ChildItem $r.companionDirectory -Filter 'command-*.json')) 'no legacy IPC files'
  ResizeWindow $window 420 300
  $view=WaitFor $viewPath {param($v)$v.width -eq 420 -and $v.height -eq 300} 'normal size'
- if($canMovePointer){[FocusNative]::SetCursorPos(250,250)|Out-Null};Start-Sleep -Milliseconds 700;Capture $window 'companion-normal'
+ if($canMovePointer){MovePointer $window 150 150};Start-Sleep -Milliseconds 700;Capture $window 'companion-normal'
  if($canMovePointer){
-  [FocusNative]::SetCursorPos(20,20)|Out-Null;Start-Sleep -Milliseconds 700;Capture $window 'companion-normal-idle'
+  MovePointer $window -30 -30;Start-Sleep -Milliseconds 700;Capture $window 'companion-normal-idle'
   ClickAt $window 327 20
   $view=WaitFor $viewPath {param($v)!$v.pinned} 'unpin'
  }
  ResizeWindow $window 240 180
  $view=WaitFor $viewPath {param($v)$v.width -eq 240 -and $v.height -eq 180} 'minimum size'
  Check ($view.pinned -eq !$canMovePointer) 'native resize preserves pin state'
- if($canMovePointer){[FocusNative]::SetCursorPos(220,200)|Out-Null};Start-Sleep -Milliseconds 700;Capture $window 'companion-minimum'
+ if($canMovePointer){MovePointer $window 120 100};Start-Sleep -Milliseconds 700;Capture $window 'companion-minimum'
  if($canMovePointer){ClickAt $window 181 20}else{[FocusNative]::ShowWindow($window,2)|Out-Null;Start-Sleep -Milliseconds 500}
  Check ([FocusNative]::IsIconic($window)) 'native minimize'
  Start-Sleep -Milliseconds 500;[FocusNative]::ShowWindow($window,9)|Out-Null
@@ -185,6 +217,7 @@ finally {
  try{foreach($name in $key.GetValueNames()){if($name -notin $backup.name){$key.DeleteValue($name,$false)}};foreach($v in $backup){$key.SetValue($v.name,$v.value,$v.kind)}}finally{$key.Dispose()}
  if(!$existed){[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKey($registryPath,$false)}
  [FocusNative]::SetCursorPos($cursor.X,$cursor.Y)|Out-Null
+ [FocusNative]::SetThreadDpiAwarenessContext($previousDpiContext)|Out-Null
  WriteJson (Join-Path $folder 'result.json') @{utc=[DateTime]::UtcNow.ToString('O');passed=($null -eq $failure);checks=$checks;notVerified=$notVerified;failure=$failure;restoredPlayerPrefs=$true}
  Write-Output "Evidence: $folder"
 }

@@ -18,6 +18,7 @@ public sealed class SettingsToggleVisual : MonoBehaviour
     void Refresh(bool immediate)
     {
         if (!handle || !toggle) return;
+        immediate |= UiMotion.Reduced;
         float x = toggle.isOn ? travel : -travel;
         handle.anchoredPosition = new Vector2(immediate ? x : Mathf.Lerp(handle.anchoredPosition.x, x, 1 - Mathf.Exp(-24 * Time.unscaledDeltaTime)), 0);
         if (track) { track.sprite = toggle.isOn ? onSprite : offSprite; track.color = toggle.isOn ? onColor : offColor; }

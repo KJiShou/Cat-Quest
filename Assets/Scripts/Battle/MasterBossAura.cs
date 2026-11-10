@@ -10,6 +10,7 @@ public sealed class MasterBossAura : MonoBehaviour
     Transform owner;
     Vector3 offset, restScale;
     float age;
+    bool motionKnown,reducedLast;
     public void Bind(Transform boss,Transform cat,int bossId)
     {
         if(owner==boss)return;
@@ -26,11 +27,19 @@ public sealed class MasterBossAura : MonoBehaviour
             ps.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);
             var main=ps.main;main.startColor=new Color(color.r,color.g,color.b,ps==halo?.65f:.7f);
             var renderer=ps.GetComponent<ParticleSystemRenderer>();renderer.sortingLayerID=sprites[0].sortingLayerID;renderer.sortingOrder=order-1;
-            ps.Play(true);
+            if(!UiMotion.Reduced)ps.Play(true);
         }
         Follow();
     }
-    void Follow(){if(owner){transform.position=owner.position+offset;transform.rotation=Quaternion.identity;transform.localScale=restScale*(1+breathAmount*Mathf.Sin(age*2*Mathf.PI/Mathf.Max(.1f,breathPeriod)));}}
-    void LateUpdate(){age+=Time.unscaledDeltaTime;Follow();}
-    void OnDisable(){age=0;transform.localScale=restScale;}
+    void Follow(){if(owner){transform.position=owner.position+offset;transform.rotation=Quaternion.identity;transform.localScale=restScale*(UiMotion.Reduced?1:1+breathAmount*Mathf.Sin(age*2*Mathf.PI/Mathf.Max(.1f,breathPeriod)));}}
+    void LateUpdate(){
+        bool reduced=UiMotion.Reduced;
+        if(!motionKnown||reduced!=reducedLast){
+            motionKnown=true;reducedLast=reduced;
+            if(reduced){halo.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);motes.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);}
+            else if(owner){halo.Play(true);motes.Play(true);}
+        }
+        if(!reduced)age+=Time.unscaledDeltaTime;Follow();
+    }
+    void OnDisable(){motionKnown=false;age=0;transform.localScale=restScale;}
 }

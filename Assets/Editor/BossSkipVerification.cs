@@ -96,13 +96,38 @@ public static class BossSkipVerification
         }
         if(panel.IsReturningFromResult)return;
         if(step==4){panel.CloseResult();Resolution(1280,720);}
-        if(step==5){manager.PlayerData.experience=1800;manager.SaveData();panel.SelectStage(2);Begin(panel);}
+        if(step==5){
+            if(panel.SelectedBoss!=2){manager.PlayerData.experience=1800;manager.SaveData();panel.SelectStage(2);next=EditorApplication.timeSinceStartup+.1;return;}
+            if(panel.arena.IsLoading){next=EditorApplication.timeSinceStartup+.1;return;}
+            Check(panel.arena.IsReady,"Orc arena failed to load");Begin(panel);
+        }
         if(step==6){FocusLayoutVerification.Click(ui.skip);Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&panel.resultPanels[1].activeSelf,"Skip fabricated a win");Capture("defeat-1280");}
         if(step==7)panel.CloseResult();
         if(step==8){manager.PlayerData.experience=3000;manager.SaveData();panel.SelectStage(1);Begin(panel);saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);ui.skip.onClick.Invoke();Check(panel.actionLabel.text=="Retry Save"&&!ui.skip.gameObject.activeSelf,"Save failure not retryable");Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Running,"Failed save committed outcome");}
         if(step==9){saveLock.Dispose();saveLock=null;panel.Action();Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Victory&&service.Snapshot.bossProgress[0].wins==wins+1,"Retry did not settle once");panel.CloseResult();}
-        if(step==10){Begin(panel);nav.ShowPage(MainMenuPage.Tasks);Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Stopped,"Page close lifecycle incorrect");nav.ShowPage(MainMenuPage.Boss);Check(!ui.skip.gameObject.activeSelf,"Stale skip on reopen");}
-        if(step==11){File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: single-click skip, deterministic win/loss, duplicate guard, save retry and page close/reopen.");EditorApplication.isPlaying=false;return;}
+        if(step==10){
+            Begin(panel);spent=service.Tickets;
+            Check(!nav.ShowPage(MainMenuPage.Tasks)&&nav.CurrentPage==MainMenuPage.Boss&&panel.confirmation.activeSelf&&panel.IsBattling,"Leaving a live battle must ask before stopping");
+            Check(EventSystem.current.currentSelectedGameObject==panel.cancel.gameObject,"Keep fighting must have initial focus");
+            panel.cancel.onClick.Invoke();panel.Confirm();
+            Check(panel.IsBattling&&nav.CurrentPage==MainMenuPage.Boss&&service.Tickets==spent,"Cancel/stale confirmation must keep the battle and ticket unchanged");
+            nav.ShowPage(MainMenuPage.Tasks);nav.ShowPage(MainMenuPage.Dashboard);
+            saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
+            panel.Confirm();panel.Confirm();
+            Check(nav.CurrentPage==MainMenuPage.Boss&&panel.actionLabel.text=="Retry Save"&&service.Snapshot.battles.Last().outcome==BattleOutcome.Running,"Failed stop must remain on Boss with retry");
+            Check(!nav.ShowPage(MainMenuPage.Dashboard)&&nav.CurrentPage==MainMenuPage.Boss,"An unsaved result must block another destination");
+        }
+        if(step==11){
+            saveLock.Dispose();saveLock=null;panel.Action();
+            Check(nav.CurrentPage==MainMenuPage.Tasks&&service.Snapshot.battles.Last().outcome==BattleOutcome.Stopped&&service.Tickets==spent,"Successful retry must stop once and use the original destination");
+            var reloaded=new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock());
+            Check(reloaded.Snapshot.battles.Last().outcome==BattleOutcome.Stopped&&reloaded.Tickets==spent,"Stopped entry and spent ticket must survive reload");
+            panel.Confirm();nav.ShowPage(MainMenuPage.Boss);Check(!ui.skip.gameObject.activeSelf&&!panel.confirmation.activeSelf,"Stale stop/skip after reopen");
+            Begin(panel);nav.ShowPage(MainMenuPage.Tasks);panel.SkipBattle();
+            Check(nav.CurrentPage==MainMenuPage.Boss&&!panel.confirmation.activeSelf&&service.Snapshot.battles.Last().outcome==BattleOutcome.Victory,"A completed battle must invalidate unconfirmed navigation");
+            panel.Confirm();Check(nav.CurrentPage==MainMenuPage.Boss&&panel.resultPanels[0].activeSelf,"Stale leave confirmation must not hide the result");
+        }
+        if(step==12){File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: single-click skip, deterministic win/loss, duplicate guard, save retry; navigation confirmation/cancel/default focus; failed stop remains visible, retry navigates once, original destination retained, reload; natural result invalidates stale leave; page close/reopen.");EditorApplication.isPlaying=false;return;}
         step++;next=EditorApplication.timeSinceStartup+1;
     }
 }

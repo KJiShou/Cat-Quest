@@ -25,16 +25,55 @@ public sealed class BossArenaPreview : MonoBehaviour
     SpriteRenderer cat;
     RawImage view;
     RenderTexture target;
+    PreviewPixels.ResizeGate resizeGate;
     GameObject activePrefab;
+    ResourceRequest loading;
+    int requestedStage = 1, loadedStage;
+    public bool IsLoading => loading != null;
+    public bool IsReady => stage && loadedStage == requestedStage && !IsLoading && LoadError == null;
+    public string LoadError { get; private set; }
+    public event System.Action StageChanged;
 
     public void SelectStage(int id)
     {
-        GameObject prefab;
-        if (id == 2) prefab = oldForestStagePrefab = StagePrefabResource.Resolve(oldForestStagePrefab, oldForestStageResource);
-        else if (id == 3) prefab = lavaDungeonStagePrefab = StagePrefabResource.Resolve(lavaDungeonStagePrefab, lavaDungeonStageResource);
-        else prefab = null;
-        if (!prefab) prefab = stagePrefab = StagePrefabResource.Resolve(stagePrefab, stageResource);
-        if (stage && activePrefab == prefab) return;
+        CancelLoading();requestedStage = id;LoadError = null;
+        var prefab = id == 2 ? oldForestStagePrefab : id == 3 ? lavaDungeonStagePrefab : stagePrefab;
+        string path = id == 2 ? oldForestStageResource : id == 3 ? lavaDungeonStageResource : stageResource;
+        if (!prefab && string.IsNullOrEmpty(path)) { prefab = stagePrefab; path = stageResource; }
+        if (prefab) { ShowStage(prefab); return; }
+        if (stage) stage.SetActive(false);
+        ReleaseTarget();
+        if (string.IsNullOrEmpty(path)) { FailLoading(); return; }
+        if (!isActiveAndEnabled) return;
+        loading = Resources.LoadAsync<StagePrefabResource>(path);
+        loading.completed += StageLoaded;
+        StageChanged?.Invoke();
+    }
+    void StageLoaded(AsyncOperation operation)
+    {
+        if (operation != loading || !isActiveAndEnabled) return;
+        loading.completed -= StageLoaded;
+        var entry = loading.asset as StagePrefabResource;loading = null;
+        if (!entry || !entry.prefab) { FailLoading(); return; }
+        if (requestedStage == 2) oldForestStagePrefab = entry.prefab;
+        else if (requestedStage == 3) lavaDungeonStagePrefab = entry.prefab;
+        else stagePrefab = entry.prefab;
+        ShowStage(entry.prefab);
+    }
+    void FailLoading()
+    {
+        LoadError = "Could not load this arena. Retry to continue. No ticket was used.";
+        StageChanged?.Invoke();
+    }
+    void CancelLoading()
+    {
+        if (loading != null) loading.completed -= StageLoaded;
+        loading = null;
+    }
+    void ShowStage(GameObject prefab)
+    {
+        loadedStage = requestedStage;
+        if (stage && activePrefab == prefab) { stage.SetActive(isActiveAndEnabled);UpdateTarget();StageChanged?.Invoke();return; }
         ReleaseTarget();
         masterAura = null;
         if (stage) { stage.SetActive(false); Destroy(stage); }
@@ -47,14 +86,15 @@ public sealed class BossArenaPreview : MonoBehaviour
         cat = stage.transform.Find("Ninja Cat")?.GetComponentInChildren<SpriteRenderer>();
         stage.SetActive(isActiveAndEnabled);
         UpdateTarget();
+        StageChanged?.Invoke();
     }
 
     void OnEnable()
     {
         view = GetComponent<RawImage>();
         view.raycastTarget = false;
-        if (!stage) SelectStage(1);
-        if (stage) stage.SetActive(true);
+        if (!stage || loadedStage != requestedStage || LoadError != null) SelectStage(requestedStage);
+        if (IsReady) stage.SetActive(true);
         UpdateTarget();
     }
     public bool TryGetCatHeadViewport(out Vector3 point)
@@ -69,12 +109,14 @@ public sealed class BossArenaPreview : MonoBehaviour
     void LateUpdate() => UpdateTarget();
     void UpdateTarget()
     {
-        if (!stageCamera || !view) return;
+        if (!stageCamera || !view || !IsReady) return;
+        // Keep the battle stage and simulation alive; only suspend its invisible camera.
+        if (WindowsAppWindow.IsMinimized) { stageCamera.enabled = false; return; }
         var size = view.rectTransform.rect.size;
         if (size.x <= 0 || size.y <= 0) return;
         float aspect = size.x / size.y;
         var pixels = PreviewPixels.For(view, 900);
-        if (!target || target.width != pixels.x || target.height != pixels.y)
+        if (resizeGate.Ready(target,pixels))
         {
             ReleaseTarget();
             target = new RenderTexture(pixels.x, pixels.y, 24) { name = "Boss Arena View" };
@@ -88,12 +130,14 @@ public sealed class BossArenaPreview : MonoBehaviour
     }
     void OnDisable()
     {
+        CancelLoading();
         if (stageCamera) stageCamera.enabled = false;
         if (stage) stage.SetActive(false);
         ReleaseTarget();
     }
     void OnDestroy()
     {
+        CancelLoading();
         ReleaseTarget();
         if (stage) Destroy(stage);
     }

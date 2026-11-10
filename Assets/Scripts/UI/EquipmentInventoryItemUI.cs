@@ -8,4 +8,5 @@ public sealed class EquipmentInventoryItemUI : MonoBehaviour
     public Image background,icon;
     public TMP_Text level;
     public GameObject equipped;
+    public GameObject upgradeAvailable;
 }

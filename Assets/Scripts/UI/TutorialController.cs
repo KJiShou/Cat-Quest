@@ -48,6 +48,9 @@ public sealed class TutorialController : MonoBehaviour
     float pollAt, noticeUntil;
     RectTransform target;
     readonly Vector3[] corners = new Vector3[4];
+    // Keep persisted step identities; only their teaching order changes.
+    static readonly int[] TaskPageOrder = { 5, 6, 7, 0, 1, 2, 3, 4, 8 };
+    int TaskPagePosition => Array.IndexOf(TaskPageOrder, Mathf.Clamp(progress.taskPageStep, 0, 8));
     public bool IsTyping => typing != null;
     public string CurrentTopic => shown;
     public RectTransform CurrentTarget => target;
@@ -163,6 +166,16 @@ public sealed class TutorialController : MonoBehaviour
     void ShowTasks()
     {
         int step = Mathf.Clamp(progress.taskPageStep, 0, 8);
+        // An unfinished older guide also gets to useful work before the tab tour.
+        // This changes explanation progress only; drafts and saved tasks stay intact.
+        if(progress.taskStep < 3 && step != 5 && step != 6) {
+            if(!Save(p => p.taskPageStep = 5)) return;
+            step = 5;
+        }
+        if(step == 5 && !tasks.TutorialAddTarget) {
+            if(tasks.calendar) tasks.calendar.SetMode(TaskDisplayMode.List);
+            tasks.SelectTab(TaskTab.Today);
+        }
 
         RectTransform anchor; string text;
         switch(step)
@@ -219,7 +232,7 @@ public sealed class TutorialController : MonoBehaviour
                 text = "Use tags to label what you are working on and review your Focus time later. Tags are optional. Focus never marks a task complete for you. Press Continue when you are ready."; break;
             case 5:
                 anchor = focusPage.start.transform as RectTransform;
-                text = "Pomodoro asks you to finish the planned session. Cancel gives no rewards. Other modes offer End Early, which saves rewards for time earned under the existing limits. Cancelled or interrupted sessions give no rewards."; break;
+                text = "Each session earns one Ticket per full 25 minutes, within the daily limit. Short sessions do not combine for Tickets. End Early saves earned rewards and adds to your daily Focus goal. Pomodoro Cancel and interruptions give no rewards."; break;
             default:
                 anchor = focusPage.start.transform as RectTransform;
                 text = "You are ready. Click Start Focus in the highlighted area to begin. Switching pages or apps will keep it running. Skip this guide if you are not ready to start."; break;
@@ -236,7 +249,7 @@ public sealed class TutorialController : MonoBehaviour
         RectTransform anchor; string text;
         switch(step) {
             case 0: anchor = equipmentPage.TutorialBackpack;
-                text = "This Backpack holds equipment you have collected. An empty Backpack is normal at first. Each normal Boss has its own mastery: wins 5, 10 and 15 each let you claim one unowned piece from that Boss's set in the stage selector."; break;
+                text = "This Backpack holds your collected equipment. An empty Backpack is normal at first. Each normal Boss has fixed mastery rewards: 5 wins unlock the Weapon, 10 wins the Body Armour, and 15 wins the Head Accessory. Claim each earned piece in the stage selector."; break;
             case 1: anchor = equipmentPage.TutorialSlots;
                 text = "Your cat has three equipment slots. A Weapon improves ATK, Body Armour improves DEF, and a Head Accessory improves attack speed. You can wear one item in each slot. Empty slots mean you have not equipped an item there yet."; break;
             case 2: anchor = equipmentPage.TutorialFilters;
@@ -269,7 +282,7 @@ public sealed class TutorialController : MonoBehaviour
             case 3: anchor = bossPage.stageChoices[1].transform as RectTransform;
                 text = "Later bosses have extra requirements. Boss 2 needs a Boss 1 victory and Lv.10. Boss 3 needs a Boss 2 victory and Lv.20. Skipping this guide does not bypass these conditions."; break;
             case 4: anchor = bossPage.masteryBars[0].transform.parent as RectTransform;
-                text = "Each normal boss has its own mastery. Wins 5, 10 and 15 each allow one unowned piece from that boss's three-piece equipment set. Claim earned rewards here when they are available."; break;
+                text = "Each normal Boss has its own fixed mastery rewards: 5 wins unlock the Weapon, 10 wins the Body Armour, and 15 wins the Head Accessory. Open the reward chests here to claim earned pieces."; break;
             case 5: anchor = bossPage.masterChoice.transform as RectTransform;
                 text = "Your first Boss 3 victory opens Master Stage. It cycles through stronger bosses, and only victory advances the stage. Master Stage does not grant normal-boss mastery equipment."; break;
             default: anchor = bossPage.action.transform as RectTransform;
@@ -309,7 +322,7 @@ public sealed class TutorialController : MonoBehaviour
             if(Save(p => { p.dismissed = false; if(p.taskStep >= 4) { p.taskStep = 0; p.taskPageStep = 0; p.taskId = null; } })) { snoozed = false; pollAt = 0; }
             return;
         }
-        if(index == 1) { if(!Save(p => p.focusStep = 0)) return; if(service.CanAccess(ProgressionFeature.Focus)) navigation.ShowPage(MainMenuPage.Focus); ShowFocus(); }
+        if(index == 1) { if(!Save(p => p.focusStep = 0)) return; if(service.CanAccess(ProgressionFeature.Focus) && !navigation.ShowPage(MainMenuPage.Focus)) { manualTopic = null; return; } ShowFocus(); }
         else if(index == 2) Show("help-rewards", "Complete real tasks to earn EXP and Fish Coins within daily allowances. Completed work is recorded even at the cap. Claim completed Daily Reward goals separately. The first claim opens equipment management.", null, "Close");
         else if(index == 3) { if(!Save(p => p.bossStep = 0)) return; if(service.CanAccess(ProgressionFeature.Boss) && !navigation.ShowPage(MainMenuPage.Boss)) { manualTopic = null; return; } ShowBoss(); }
         else if(index == 5) { manualTopic = "settings"; settingsStep = 0; ShowSettings(); }
@@ -333,9 +346,9 @@ public sealed class TutorialController : MonoBehaviour
             case 3: anchor = settings.dashboardRankings[0].transform.parent as RectTransform;
                 text = "Choose the ranking shown on your Dashboard: Boss Stage, Tasks Completed, Focus Minutes or Power. This choice does not enable statistics uploads."; break;
             case 4: anchor = settings.defaultTaskTabs[0].transform.parent as RectTransform;
-                text = "Choose which tab opens when you enter Tasks: Today, Daily Tasks or Todo. Your tasks stay saved whichever starting tab you prefer."; break;
+                text = "Choose the starting Tasks tab for each launch: Today, Daily Tasks or Todo. Later visits keep your current tab, search, filters and scroll position."; break;
             case 5: anchor = settings.showDashboardTasks.transform.parent.parent as RectTransform;
-                text = "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session."; break;
+                text = "These switches show or hide individual Dashboard cards. Hiding a card does not delete its data or stop an active Focus session. Reduce motion limits decorative effects without changing your progress."; break;
             case 6: anchor = settings.tagsButton.transform as RectTransform;
                 text = "Manage tags opens your tag collection. Add tags, rename them and choose their colours here. Tasks and Focus use those same tag colours."; break;
             case 7: anchor = settings.accountButton.transform as RectTransform;
@@ -352,7 +365,7 @@ public sealed class TutorialController : MonoBehaviour
     }
     bool CanGoBack => progress != null && shown != null && (
         (manualTopic == "settings" && settingsStep > 0)
-        || (shown.StartsWith("task-page-") && progress.taskPageStep > 0)
+        || (shown.StartsWith("task-page-") && TaskPagePosition > 0)
         || (shown.StartsWith("focus-step-") && progress.focusStep > 0)
         || (shown.StartsWith("equipment-step-") && progress.equipmentStep > 0)
         || (shown.StartsWith("boss-step-") && progress.bossStep > 0)
@@ -364,7 +377,8 @@ public sealed class TutorialController : MonoBehaviour
         if(manualTopic == "settings") { settingsStep--; Hide(); ShowSettings(); return; }
         Action show;
         if(shown.StartsWith("task-page-")) {
-            if(!Save(p => p.taskPageStep--)) return; show = ShowTasks;
+            int previous = TaskPageOrder[TaskPagePosition - 1];
+            if(!Save(p => p.taskPageStep = previous)) return; show = ShowTasks;
         } else if(shown.StartsWith("focus-step-")) {
             if(!Save(p => p.focusStep--)) return; show = ShowFocus;
         } else if(shown.StartsWith("equipment-step-")) {
@@ -407,8 +421,9 @@ public sealed class TutorialController : MonoBehaviour
         if(shown != null && shown.StartsWith("task-page-"))
         {
             if(progress.taskPageStep == 6 && progress.taskStep != 3) return;
-            if(progress.taskPageStep < 8) {
-                if(!Save(p => p.taskPageStep++)) return;
+            if(TaskPagePosition < TaskPageOrder.Length - 1) {
+                int following = TaskPageOrder[TaskPagePosition + 1];
+                if(!Save(p => p.taskPageStep = following)) return;
                 if(!advancingFromTarget) Hide();
                 ShowTasks();
             } else { if(!Save(p => { p.taskStep = 4; if(!p.read.Contains("tasks"))p.read.Add("tasks"); }))return; Hide(); }
@@ -427,7 +442,7 @@ public sealed class TutorialController : MonoBehaviour
         }
         if(manualTopic != null) { manualTopic = null; Hide(); snoozed = true; return; }
         string key = shown;
-        if(key == "task-0") { if(!Save(p => p.taskStep = 1)) return; }
+        if(key == "task-0") { if(!Save(p => { p.taskStep = 1; p.taskPageStep = 5; })) return; }
         else if(key == "task-open") { navigation.ShowPage(MainMenuPage.Tasks); return; }
         else if(key == "task-missing") { if(!Save(p => { p.taskStep = 2; p.taskId = null; })) return; }
         else if(key == "task-saved") { if(!Save(p => { p.taskStep = 4; if(!p.read.Contains("tasks")) p.read.Add("tasks"); })) return; }
@@ -505,8 +520,14 @@ public sealed class TutorialController : MonoBehaviour
         var targetRect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
         Vector2 best = default;
         float bestScore = float.PositiveInfinity;
-        const float gap = 24;
         for(int side = 0; side < 4; side++) {
+            float gap = 24;
+            // Wide task rows put the card below their pointing arrow. Reserve
+            // that arrow's existing extent so it cannot cover the nameplate.
+            if(pointer && pointer.gameObject.activeSelf &&
+                ((side == 2 && pointer.anchoredPosition.y < min.y) || (side == 3 && pointer.anchoredPosition.y > max.y)))
+                gap = Mathf.Max(gap, Mathf.Abs(pointer.anchoredPosition.y - (side == 2 ? min.y : max.y))
+                    + pointer.rect.height * Mathf.Abs(pointer.localScale.y) * .5f + 12);
             Vector2 candidate = side == 0 ? new Vector2(max.x + gap, (min.y + max.y - height) * .5f)
                 : side == 1 ? new Vector2(min.x - gap - width, (min.y + max.y - height) * .5f)
                 : side == 2 ? new Vector2((min.x + max.x - width) * .5f, min.y - gap - height)

@@ -31,11 +31,15 @@ Cyclope 蓝、Orc 紫、Demon 黄，背包、已穿戴和领取采用 SimpleCasu
 
 Auto Select 枚举拥有的搭配并包含套装效果，同 Power 保留现搭配，点击直接原子提交最优，不弹确认，仍受解锁和战斗限制。属性行显示真实 HP/ATK/DEF/ASPD 及独立 +gear，零加成时单独的加成标签留空，没有填充条或暗示最大值，速度按每秒显示。
 
+Auto Select 在悬停或键盘选中时说明“Highest Power · includes sets”。成功保存后显示勾选图标；搭配有变化时另显示真实 Power 差值并短暂高亮相关槽位，相同搭配只显示勾选。保存失败保留错误提示，不显示成功反馈。减少动态效果时保留勾选和 Power 差值，停止槽位高亮。空背包使用状态图标、必要的等级／胜场门槛及操作按钮，按当前进度进入 Daily Rewards、Tasks、Boss 或已获得的 Mastery 领取；空筛选提供 All equipment。不显示装饰加号或重复说明段落。悬停／详情使用独立装备快照，不复制任务与 Focus 历史。
+
 物品详情是 `Assets/Prefabs/EquipmentItemDetail.prefab`，源于 SimpleCasual Light/Equipment_Popup_Detail。EquipmentPageUI 提供物品、等级、当前下一加成、套装和鱼币成本，EquipmentItemDetailUI 保留绑定并限制键盘到有效操作。背景关闭且不穿透，卡内点击和拖动不关闭。装备卸装直接执行并反馈，点击鱼币直接升级，失败在详情显示。熟练度宝箱直接领取，另一个未拥有物品详情仍保留 Claim 确认。保留 Fredoka，两处 Canvas EquipmentPageUI 引用共用详情，Boss 选择面板独立。
+
+EquipmentPageUI 复用一个 TaskDialogKeyboard 管理最上层详情、熟练度或确认弹窗。Tab／Shift+Tab 只循环当前可见且可用的操作；Escape 关闭顶层界面（存在悬停预览时先关闭预览）。确认默认选中 Cancel，取消后返回原操作；最后一个弹窗关闭后恢复仍有效的入口焦点。背景关闭或离页会释放键盘控制并清空待确认回调。只调整输入处理，保留现有布局和领取、装备、升级规则。
 
 Dashboard 与 Cat Home 共用 `Assets/Prefabs/EquipmentStats.prefab`，来源为 Light Equipment/Panel_Left/Stats_Group 及项目字体颜色，显示含套装的最终属性与 CombatStats.Power。槽底共用阶色，详情、熟练度和确认遮罩覆盖根 Canvas 阻挡顶栏侧栏，并由页面管理生命周期。升级价使用顶栏鱼币图标。
 
-`Assets/Prefabs/EquipmentInventory.prefab` 适配 Light/Equipment Right_Panel，独立筛选条、六列四行网格、等级徽章和 Auto Select。无售卖、容量、Inventory/Equipment 大标题或蓝色已保存消息。空锁提示中性，绿点表示已装备，EquipmentInventoryUI 持有模板和响应网格，EquipmentPageUI 负责数据操作。
+`Assets/Prefabs/EquipmentInventory.prefab` 适配 Light/Equipment Right_Panel，独立筛选条、六列四行网格、等级徽章和 Auto Select。无售卖、容量、Inventory/Equipment 大标题或蓝色已保存消息。空背包和锁定状态使用现有项目图标及简短操作标签，绿点表示已装备，EquipmentInventoryUI 持有模板和响应网格，EquipmentPageUI 负责数据操作。
 
 两个角色卡的战力使用 Light/Character_Detail_2 的 Middle_Character_Group/Platform/Power 拳头数字徽章，保留原文本对象、字体和真实绑定，用图标替代 Total Power 标签。
 

@@ -17,6 +17,8 @@ public static class RewardLimitTooltipVerification
     static int step;
     static double next;
     static RewardScreenshotCapture capture;
+    static string pendingCapture;
+    static int captureWidth, captureHeight;
     static string FolderNow => SessionState.GetString(Flag + ".folder", Folder);
     static bool Before => SessionState.GetBool(Flag + ".before", false);
     static EditorWindow View => EditorWindow.GetWindow(typeof(Editor).Assembly.GetType("UnityEditor.GameView"));
@@ -33,7 +35,7 @@ public static class RewardLimitTooltipVerification
         EditorApplication.update += Poll;
         EditorApplication.playModeStateChanged += state => {
             if (!SessionState.GetBool(Flag, false)) return;
-            if (state == PlayModeStateChange.EnteredPlayMode) { step = 0; next = EditorApplication.timeSinceStartup + 3; }
+            if (state == PlayModeStateChange.EnteredPlayMode) { step = 0; pendingCapture = null; next = EditorApplication.timeSinceStartup + 3; }
             if (state == PlayModeStateChange.EnteredEditMode) {
                 SessionState.SetBool(Flag, false);
                 Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", SessionState.GetBool(Flag+".hadStore",false)?SessionState.GetString(Flag+".store",""):null);
@@ -48,11 +50,30 @@ public static class RewardLimitTooltipVerification
         };
     }
     static void Check(bool condition, string error) { if (!condition) throw new Exception(error); }
-    static void Resolution(int width, int height) => typeof(DashboardRewardPlayVerification).GetMethod("Resolution", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { width, height });
+    static void Resolution(int width, int height)
+    {
+        typeof(DashboardRewardPlayVerification).GetMethod("Resolution", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { width, height });
+        SessionState.SetInt(Flag+".width",width);SessionState.SetInt(Flag+".height",height);
+    }
     static void Capture(string name)
     {
         if (!capture) capture = new GameObject("Reward Tooltip Capture").AddComponent<RewardScreenshotCapture>();
-        capture.Begin(Path.GetFullPath(FolderNow + "/" + name + ".png"));
+        pendingCapture=Path.GetFullPath(FolderNow + "/" + name + ".png");
+        captureWidth=SessionState.GetInt(Flag+".width",0);captureHeight=SessionState.GetInt(Flag+".height",0);
+        capture.Begin(pendingCapture);
+    }
+    static void CheckCapturedSize()
+    {
+        if(pendingCapture==null)return;
+        byte[] header;
+        using(var reader=new BinaryReader(File.OpenRead(pendingCapture)))header=reader.ReadBytes(24);
+        Check(header.Length==24&&header[0]==137&&header[1]==80&&header[2]==78&&header[3]==71
+            &&header[12]==73&&header[13]==72&&header[14]==68&&header[15]==82,"Capture is not a PNG IHDR: "+pendingCapture);
+        int width=(header[16]<<24)|(header[17]<<16)|(header[18]<<8)|header[19];
+        int height=(header[20]<<24)|(header[21]<<16)|(header[22]<<8)|header[23];
+        Check(width==captureWidth&&height==captureHeight,$"Capture dimensions {width}x{height}, requested {captureWidth}x{captureHeight}: {pendingCapture}");
+        File.AppendAllText(FolderNow+"/image-sizes.txt",$"{Path.GetFileName(pendingCapture)} {width}x{height}\n");
+        pendingCapture=null;
     }
     static void Poll()
     {
@@ -63,7 +84,7 @@ public static class RewardLimitTooltipVerification
                 File.WriteAllText(FolderNow+"/result.txt","FAIL: Reward Tooltip Play Mode verification exceeded 180 seconds.");EditorApplication.isPlaying=false;return;
             }
             if (EditorApplication.timeSinceStartup < next || (capture && capture.Pending)) return;
-            try { Tick(); } catch (Exception e) { File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\n"+e); EditorApplication.isPlaying = false; }
+            try { CheckCapturedSize(); Tick(); } catch (Exception e) { File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\n"+e); EditorApplication.isPlaying = false; }
             return;
         }
         if (EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists("Temp/verify-reward-tooltip.request")) return;
@@ -111,9 +132,15 @@ public static class RewardLimitTooltipVerification
             if(step==1){Bounds(tip);Content(tip,RewardLimitKind.Fish);Capture("fish-empty-1920");}
             if(step==2){
                 var service=manager.Tasks;
-                manager.PlayerData.rewardDays.Add(new RewardDay{day=service.TodayRewards.day,taskExperience=75,taskFishCoins=30,focusMinutes=120,focusTickets=2});
+                Check(File.ReadAllText(manager.SavePath)==File.ReadAllText(FolderNow+"/before-save.json"),"Empty-allowance hover mutated save");
+                manager.PlayerData.rewardDays.Add(new RewardDay{day=TaskService.DateKey(service.LocalNow),taskExperience=75,taskFishCoins=30,focusMinutes=120,focusTickets=2});
+                // Read projections observe committed snapshots, not direct fixture mutations.
+                Check(manager.TrySaveData(out var error),"Could not commit partial allowance fixture: "+error);
+                var committed=service.TodayRewards;
+                Check(committed.taskExperience==75&&committed.taskFishCoins==30&&committed.focusMinutes==120&&committed.focusTickets==2,"Committed partial allowance projection incorrect");
+                File.Copy(manager.SavePath,FolderNow+"/partial-save.json");
                 fish.OnPointerEnter(pointer);
-                Check(tip.taskBar.normalizedValue==.5f&&tip.focusBar.normalizedValue==.5f,"Partial allowance bars incorrect");
+                Check(tip.taskBar.normalizedValue==.5f&&tip.focusBar.normalizedValue==.5f,$"Partial allowance bars incorrect: task={tip.taskBar.value}/{tip.taskBar.maxValue}, focus={tip.focusBar.value}/{tip.focusBar.maxValue}");
             }
             if(step==3){Bounds(tip);Content(tip,RewardLimitKind.Fish);Capture("fish-1920");}
             if(step==4){ticket.OnPointerEnter(pointer);fish.OnPointerExit(pointer);Check(tip.gameObject.activeSelf,"Stale exit hid other target");}
@@ -129,7 +156,7 @@ public static class RewardLimitTooltipVerification
                 fish.OnPointerEnter(pointer);tip.SendMessage("OnApplicationFocus",false);Check(!tip.gameObject.activeSelf,"Focus loss stuck");
                 fish.OnPointerEnter(pointer);fish.enabled=false;Check(!tip.gameObject.activeSelf,"Disable stuck");fish.enabled=true;
                 fish.OnPointerEnter(pointer);fish.OnPointerDown(pointer);Check(!tip.gameObject.activeSelf,"Press stuck");
-                Check(File.ReadAllText(manager.SavePath)==File.ReadAllText(FolderNow+"/before-save.json"),"Hover mutated save");
+                Check(File.ReadAllText(manager.SavePath)==File.ReadAllText(FolderNow+"/partial-save.json"),"Hover mutated save");
                 fish.OnPointerEnter(pointer);nav.ShowPage(nav.CurrentPage==MainMenuPage.Dashboard?MainMenuPage.Tasks:MainMenuPage.Dashboard);
             }
             if(step==9){Check(!tip.gameObject.activeSelf,"Page change stuck");Resolution(1280,720);}
@@ -216,8 +243,14 @@ public static class RewardLimitTooltipVerification
     static void Finish(string result){File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" "+result);EditorApplication.isPlaying=false;}
     static void Bounds(RewardLimitTooltip tip){
         Canvas.ForceUpdateCanvases();
+        // Editor.update can expose another Editor view's Screen dimensions.
+        var canvas=tip.GetComponentInParent<Canvas>().rootCanvas;
+        var viewport=canvas.pixelRect;
+        var camera=canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera;
+        int width=SessionState.GetInt(Flag+".width",0),height=SessionState.GetInt(Flag+".height",0);
+        Check(viewport.width==width&&viewport.height==height,$"Tooltip viewport {viewport.width}x{viewport.height}, requested {width}x{height}");
         var corners=new Vector3[4];tip.card.GetWorldCorners(corners);
-        foreach(var corner in corners){var p=RectTransformUtility.WorldToScreenPoint(null,corner);Check(p.x>=0&&p.y>=0&&p.x<=Screen.width&&p.y<=Screen.height,"Tooltip outside screen");}
+        foreach(var corner in corners){var p=RectTransformUtility.WorldToScreenPoint(camera,corner);Check(p.x>=viewport.xMin&&p.y>=viewport.yMin&&p.x<=viewport.xMax&&p.y<=viewport.yMax,$"Tooltip outside viewport {viewport}: {p}");}
         foreach(var text in tip.GetComponentsInChildren<TMPro.TMP_Text>()){text.ForceMeshUpdate();Check(!text.isTextOverflowing,"Text clipped: "+text.text);}
         Check(!tip.GetComponent<CanvasGroup>().blocksRaycasts,"Tooltip blocks input");
         Check(tip.GetComponentsInChildren<Graphic>().All(g=>!g.raycastTarget),"Tooltip graphics block input");

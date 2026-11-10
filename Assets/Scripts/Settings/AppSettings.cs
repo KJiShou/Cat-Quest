@@ -4,6 +4,8 @@ using System;
 public sealed class AppSettings
 {
     public bool notificationsEnabled = true;
+    // Missing in older saves: preserve the existing feedback by default.
+    public bool reduceMotion;
     public float soundVolume = 1f;
     public float musicVolume = 1f;
     public TaskTab defaultTaskTab = TaskTab.Today;

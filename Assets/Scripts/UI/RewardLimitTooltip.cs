@@ -10,6 +10,7 @@ public sealed class RewardLimitTooltip : MonoBehaviour
     public Slider taskBar, focusBar, ticketBar;
     public TMP_Text taskValue, focusValue, ticketValue;
     public float twoRowHeight = 292, ticketHeight = 198;
+    public float focusSessionTicketHeight = 220;
     TaskService service;
     RewardLimitHoverTarget source;
     MainMenuNavigation navigation;
@@ -47,10 +48,11 @@ public sealed class RewardLimitTooltip : MonoBehaviour
     {
         if (service == null || !source) return;
         var day = service.TodayRewards;
-        bool tickets = source.kind == RewardLimitKind.Tickets;
+        bool focusTickets = source.kind == RewardLimitKind.FocusSessionTickets;
+        bool tickets = source.kind == RewardLimitKind.Tickets || focusTickets;
         bool experience = source.kind == RewardLimitKind.Experience;
-        title.text = tickets ? "Daily Ticket limit" : experience ? "Daily EXP limits" : "Daily Fish limits";
-        card.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, tickets ? ticketHeight : twoRowHeight);
+        title.text = focusTickets ? "Focus Tickets" : tickets ? "Daily Ticket limit" : experience ? "Daily EXP limits" : "Daily Fish limits";
+        card.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, focusTickets ? focusSessionTicketHeight : tickets ? ticketHeight : twoRowHeight);
         taskRewards.gameObject.SetActive(!tickets);
         focusRewards.gameObject.SetActive(!tickets);
         taskBar.gameObject.SetActive(!tickets);
@@ -71,13 +73,14 @@ public sealed class RewardLimitTooltip : MonoBehaviour
         // level changes can yield different totals; a full bar must still mean no time remains.
         SetBar(focusBar, day.focusMinutes, service.FocusDailyMinuteLimit);
         focusValue.text = $"{day.focusMinutes} / {service.FocusDailyMinuteLimit} rewarded min";
-        ticketRewards.text = "Task + Focus";
-        int ticketLimit = TaskService.TaskTicketCap + TaskService.FocusTicketCap;
-        SetBar(ticketBar, day.taskTickets + day.focusTickets, ticketLimit);
-        ticketValue.text = $"{day.taskTickets + day.focusTickets} / {ticketLimit} Tickets";
+        ticketRewards.text = focusTickets ? "Today" : "Task + Focus";
+        int ticketLimit = (focusTickets ? 0 : TaskService.TaskTicketCap) + TaskService.FocusTicketCap;
+        int ticketUsed = (focusTickets ? 0 : day.taskTickets) + day.focusTickets;
+        SetBar(ticketBar, ticketUsed, ticketLimit);
+        ticketValue.text = $"{ticketUsed} / {ticketLimit} Tickets";
         var sessionCurrency = TaskService.FocusCurrencyForMinutes(service.FocusSessionMinuteLimit, focusLevel);
         int sessionLimit = experience ? sessionCurrency.experience : sessionCurrency.fishCoins;
-        note.text = tickets ? "First Task: 1 · Focus: 3/day\nResets at midnight · Level bonuses extra" : $"Session: {sessionLimit} {currency} / {service.FocusSessionMinuteLimit} min\nResets at midnight · Bonuses are extra";
+        note.text = focusTickets ? "1 Ticket per full 25 min in one session.\nShort sessions do not combine." : tickets ? "First Task: 1 · Focus: 3/day\nResets at midnight · Level bonuses extra" : $"Session: {sessionLimit} {currency} / {service.FocusSessionMinuteLimit} min\nResets at midnight · Bonuses are extra";
     }
     static void SetBar(Slider bar, int value, int limit)
     {

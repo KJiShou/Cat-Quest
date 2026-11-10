@@ -49,13 +49,14 @@ public static class FocusStatisticsVerification
             EditorApplication.QueuePlayerLoopUpdate();
             if(DateTime.UtcNow.Ticks>long.Parse(SessionState.GetString(Flag+".deadline","0"))){Finish("FAIL: timeout");return;}
             if(flow==null||EditorApplication.timeSinceStartup<next||(capture&&capture.Pending))return;
-            try{if(flow.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(flow.Current);else Finish("PASS: statistics boundaries/legacy/DST/deduplication, Focus domain regression, day/week/month/year stacked graphs, distinct matching legend/mesh colours, segment hover, optional tag filtering, keyboard and raycast controls, empty/reopen, 1920x1080 and 1280x720. Screenshots and button motion captured.");}
+            try{if(flow.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(flow.Current);else Finish("PASS: "+(SessionState.GetBool(Flag+".uiOnly",false)?"UI-only; domain checks intentionally excluded from this run. ":"statistics boundaries/legacy/DST/deduplication and Focus domain regression; ")+"day/week/month/year stacked graphs, distinct matching legend/mesh colours, segment hover, optional tag filtering, keyboard and raycast controls, empty/reopen, 1920x1080 and 1280x720. Screenshots and button motion captured.");}
             catch(Exception e){Finish("FAIL: "+e);Debug.LogException(e);}return;
         }
         if(EditorApplication.isPlayingOrWillChangePlaymode||!File.Exists("Temp/verify-focus-statistics.request"))return;
-        File.Delete("Temp/verify-focus-statistics.request");
+        bool uiOnly=File.ReadAllText("Temp/verify-focus-statistics.request").Trim()=="ui-only";
+        SessionState.SetBool(Flag+".uiOnly",uiOnly);File.Delete("Temp/verify-focus-statistics.request");
         string folder="Library/FocusStatisticsVerification/"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");Directory.CreateDirectory(folder);SessionState.SetString(Flag+".folder",folder);
-        try{DataChecks();FocusImplementationVerification.Run();File.WriteAllText(folder+"/domain.txt","PASS "+DateTime.UtcNow.ToString("O")+": boundaries, actual duration, duplicates, cancellation, old saves, tag identity, DST and FocusImplementationVerification aggregate.");}
+        try{if(!uiOnly){DataChecks();FocusImplementationVerification.Run();}File.WriteAllText(folder+"/domain.txt",uiOnly?"SKIPPED explicitly: ui-only request; run the relevant domain aggregate separately.":"PASS "+DateTime.UtcNow.ToString("O")+": boundaries, actual duration, duplicates, cancellation, old saves, tag identity, DST and FocusImplementationVerification aggregate.");}
         catch(Exception e){File.WriteAllText(folder+"/result.txt","FAIL domain: "+e);return;}
         string previous=Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");SessionState.SetBool(Flag+".hadStore",previous!=null);SessionState.SetString(Flag+".store",previous??"");
         SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(EditorSceneManager.playModeStartScene));SessionState.SetInt(Flag+".size",(int)Size.GetValue(View));SessionState.SetInt(Flag+".count",Count(Group(),"GetCustomCount"));SessionState.SetBool(Flag+".paused",EditorApplication.isPaused);

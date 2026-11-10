@@ -55,6 +55,10 @@ public sealed class BossPageUI : MonoBehaviour
     Coroutine returnRoutine;
     public Animator endTransition,startTransition;
     bool walkingOut,resultAwaitingConfirmation;
+    System.Action leavePage;
+    string leaveAttemptId,confirmationAttemptId;
+    bool leaveConfirmed;
+    TaskDialogKeyboard confirmationKeyboard;
     public bool IsReturningFromResult => returningFromResult;
     public BattleSimulation Simulation => simulation;
     public bool IsBattling => attempt!=null && !settlementPending;
@@ -74,7 +78,7 @@ public sealed class BossPageUI : MonoBehaviour
         for(int i=0;i<stageChoices.Length;i++){int id=i+1;stageChoices[i].onClick.AddListener(()=>SelectStage(id,0));}
         masterChoice.onClick.AddListener(()=>{int n=service.MasterStage;SelectStage(1+(n-1)%3,n);});
         confirm.onClick.AddListener(Confirm);
-        cancel.onClick.AddListener(()=>{confirmation.SetActive(false);if(UnityEngine.EventSystems.EventSystem.current)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(action.gameObject);});
+        cancel.onClick.AddListener(DismissConfirmation);
         foreach(var button in resultContinue)button.onClick.AddListener(CloseResult);
         for(int i=0;i<masteryBars.Length;i++){
             int boss=i+1;var frame=masteryBars[i].transform.parent;
@@ -86,7 +90,7 @@ public sealed class BossPageUI : MonoBehaviour
             });
         }
     }
-    void OnEnable(){resetPreview=true;if(service!=null){service.Changed+=Refresh;SelectHighestUnlockedStage();Refresh();}}
+    void OnEnable(){resetPreview=true;arena.StageChanged+=ArenaChanged;if(service!=null){service.Changed+=Refresh;SelectHighestUnlockedStage();Refresh();}}
     void Start(){EnsureActors();Refresh();}
     void SelectHighestUnlockedStage()
     {
@@ -96,7 +100,14 @@ public sealed class BossPageUI : MonoBehaviour
         for(int id=3;id>=1;id--)
             if(service.BossUnlockError(id)==null){SelectStage(id);return;}
     }
-    void EnsureActors(){if(arena.Stage){actors.Bind(arena.Stage);arena.ShowMasterAura(actors.Boss,actors.Cat,selected,master>0);}}
+    void EnsureActors(){if(arena.IsReady){actors.Bind(arena.Stage);arena.ShowMasterAura(actors.Boss,actors.Cat,selected,master>0);}}
+    void ArenaChanged()
+    {
+        if(!isActiveAndEnabled||attempt!=null)return;
+        if(arena.IsReady){EnsureActors();actors.Select(selected);arena.ShowMasterAura(actors.Boss,actors.Cat,selected,master>0);message.text="";}
+        else message.text=arena.LoadError??"Loading arena…";
+        Refresh();
+    }
     bool SyncMasterSelection()
     {
         // Keep the completed stage visible until its result is dismissed.
@@ -109,7 +120,7 @@ public sealed class BossPageUI : MonoBehaviour
     public void SelectStage(int id,int stage=0)
     {
         if(resultAwaitingConfirmation||returningFromResult||attempt!=null||victoryResultAt>0)return;
-        returnToIdleAt=0;resetPreview=false;selected=id;master=stage;actors.ResetPose();arena.SelectStage(id);EnsureActors();actors.Select(id);arena.ShowMasterAura(actors.Boss,actors.Cat,id,stage>0);stagePicker.SetActive(false);message.text="";simulation=null;Refresh();
+        returnToIdleAt=0;resetPreview=false;selected=id;master=stage;actors.ResetPose();simulation=null;stagePicker.SetActive(false);arena.SelectStage(id);
     }
     string Name => selected==1?"Cyclope":selected==2?"Orc":"Demon";
     public void ShowStages() { if(resultAwaitingConfirmation||returningFromResult||IsBattling||victoryResultAt>0)return; RefreshStages(); stagePicker.SetActive(true); }
@@ -148,16 +159,20 @@ public sealed class BossPageUI : MonoBehaviour
             if((returnToIdleAt>0||returningFromResult) && simulation!=null)SetHealth(simulation.CatHp,simulation.Cat.hp,simulation.BossHp,simulation.Boss.hp,true);
             else {var b=BattleRules.Boss(selected,master);SetHealth(c.hp,c.hp,b.hp,b.hp);}
         }
-        actionLabel.text=settlementPending?"Retry Save":attempt!=null?"Stop":"Challenge";
+        actionLabel.text=settlementPending?"Retry Save":attempt!=null?"Stop":arena.IsLoading?"Loading…":arena.LoadError!=null?"Retry Load":"Challenge";
         stageButton.interactable=!resultAwaitingConfirmation&&!returningFromResult&&attempt==null&&victoryResultAt<=0;
-        action.interactable=!resultAwaitingConfirmation&&!returningFromResult&&victoryResultAt<=0;
+        action.interactable=!resultAwaitingConfirmation&&!returningFromResult&&victoryResultAt<=0&&(attempt!=null||arena.IsReady||arena.LoadError!=null);
         if(skipUI)skipUI.RefreshState();
     }
     public void Action()
     {
         if(resultAwaitingConfirmation||returningFromResult||victoryResultAt>0)return;
         if(settlementPending){Settle(pendingOutcome);return;}
+        if(attempt==null&&!arena.IsReady){if(arena.LoadError!=null)arena.SelectStage(selected);else message.text="Loading arena…";return;}
+        if(confirmation.activeSelf)return;
+        ClearLeaveRequest();
         confirmStop=attempt!=null;
+        confirmationAttemptId=attempt?.id;
         if(!confirmStop){
             var error=service.BattleEntryError(selected,master);
             if(error!=null){message.text=error;return;}
@@ -173,16 +188,48 @@ public sealed class BossPageUI : MonoBehaviour
         confirm.GetComponentInChildren<TMP_Text>().text=confirmStop?"Stop battle":"Challenge";
         cancel.GetComponentInChildren<TMP_Text>().text=confirmStop?"Keep fighting":"Cancel";
         confirmation.SetActive(true);
-        if(UnityEngine.EventSystems.EventSystem.current)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(cancel.gameObject);
+        confirmationKeyboard=confirmation.GetComponent<TaskDialogKeyboard>()??confirmation.AddComponent<TaskDialogKeyboard>();
+        confirmationKeyboard.Open(new[]{cancel,confirm},DismissConfirmation);
+    }
+    public bool PrepareToLeavePage(System.Action continueNavigation)
+    {
+        if(attempt==null)return true;
+        if(settlementPending){
+            message.text=(service.LastError??"Battle result has not been saved.")+" Retry Save before leaving.";
+            Refresh();return false;
+        }
+        // The first requested destination owns this prompt. Repeated navigation
+        // cannot replace its action or confirm a different attempt.
+        if(confirmation.activeSelf)return false;
+        Action();
+        if(confirmation.activeSelf&&confirmStop){leavePage=continueNavigation;leaveAttemptId=attempt.id;}
+        return false;
+    }
+    void ClearLeaveRequest()
+    {
+        leavePage=null;leaveAttemptId=null;leaveConfirmed=false;
+    }
+    void DismissConfirmation()
+    {
+        ClearLeaveRequest();confirmationAttemptId=null;
+        confirmation.SetActive(false);
+        if(isActiveAndEnabled&&UnityEngine.EventSystems.EventSystem.current)
+            UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(action.gameObject);
     }
     public void Confirm()
     {
-        if(resultAwaitingConfirmation||returningFromResult||victoryResultAt>0)return;
+        if(!confirmation.activeSelf||resultAwaitingConfirmation||returningFromResult||victoryResultAt>0)return;
+        if(confirmStop&&(attempt==null||attempt.id!=confirmationAttemptId)){DismissConfirmation();return;}
         confirmation.SetActive(false);
-        if(confirmStop){Settle(BattleOutcome.Stopped);return;}
+        confirmationAttemptId=null;
+        if(confirmStop){
+            leaveConfirmed=leavePage!=null&&leaveAttemptId==attempt.id;
+            Settle(settlementPending?pendingOutcome:simulation!=null&&simulation.Outcome!=BattleOutcome.Running?simulation.Outcome:BattleOutcome.Stopped);
+            return;
+        }
         if(attempt!=null)return;
         EnsureActors();
-        if(!actors.Ready){message.text="Battle scene is not ready.";return;}
+        if(!arena.IsReady||!actors.Ready){message.text="Battle scene is not ready. No ticket was used.";return;}
         if(!service.BeginBattle(selected,master,out var entry)){message.text=service.LastError;return;}
         SettingsAudio.Instance?.SetBattleMusic(true);
         attempt=entry;simulation=new BattleSimulation(entry.cat,entry.boss);
@@ -232,8 +279,15 @@ public sealed class BossPageUI : MonoBehaviour
         if(rewardFlights)rewardFlights.SetRewardOrigin(resultValues[0].rectTransform, resultFishValue ? resultFishValue.rectTransform : null,presentationDelay);
         try { saved=service.ResolveBattle(attempt.id,outcome); }
         finally { if(rewardFlights)rewardFlights.SetRewardOrigin(null); }
-        if(!saved){actors.Finish(BattleOutcome.Error);settlementPending=true;message.text=service.LastError;Refresh();return;}
+        if(!saved){
+            if(!leaveConfirmed)DismissConfirmation();
+            actors.Finish(BattleOutcome.Error);settlementPending=true;message.text=service.LastError;Refresh();return;
+        }
         var receipt=service.BattleReceipt(attempt.id);
+        var continueNavigation=leaveConfirmed&&leaveAttemptId==attempt.id?leavePage:null;
+        // A natural finish while the prompt is open invalidates its stop action.
+        // Clear before invoking navigation so repeated confirmation cannot replay it.
+        DismissConfirmation();
         if(receipt.outcome==BattleOutcome.Victory&&presentationDelay>0){
             actors.CelebrateVictory();victoryResultAt=Time.unscaledTime+presentationDelay;
             arena.ShowMasterAura(actors.Boss,actors.Cat,selected,false);
@@ -259,6 +313,7 @@ public sealed class BossPageUI : MonoBehaviour
         returnToIdleAt=receipt.outcome==BattleOutcome.Victory?float.PositiveInfinity:Time.unscaledTime+2f;
         attempt=null;approaching=false;settlementPending=false;Refresh();
         if(simulation!=null)SetHealth(simulation.CatHp,simulation.Cat.hp,simulation.BossHp,simulation.Boss.hp,true);
+        if(isActiveAndEnabled)continueNavigation?.Invoke();
     }
     public void CloseResult()
     {
@@ -324,6 +379,8 @@ public sealed class BossPageUI : MonoBehaviour
     void ShowResultPanel(int index)
     {
         resultPanels[index].SetActive(true);resultPanels[index].transform.SetAsLastSibling();
+        var keyboard=resultPanels[index].GetComponent<TaskDialogKeyboard>();
+        if(keyboard)keyboard.Open(new[]{resultContinue[index]},CloseResult);
         SettingsAudio.Instance?.PlayBattleResult(index==0?BattleOutcome.Victory:BattleOutcome.Defeat);
     }
     void LateUpdate()
@@ -340,12 +397,16 @@ public sealed class BossPageUI : MonoBehaviour
     }
     void OnApplicationFocus(bool focused)
     {
-        if(focused||!returningFromResult)return;
+        if(focused)return;
+        if(confirmation.activeSelf)DismissConfirmation();else ClearLeaveRequest();
+        if(!returningFromResult)return;
         CancelReturn();SyncMasterSelection();Refresh();
     }
     void OnApplicationQuit(){quitting=true;if(attempt!=null)service.ResolveBattle(attempt.id,settlementPending?pendingOutcome:simulation!=null&&simulation.Outcome!=BattleOutcome.Running?simulation.Outcome:BattleOutcome.Error);}
     void OnDisable()
     {
+        arena.StageChanged-=ArenaChanged;
+        ClearLeaveRequest();confirmationAttemptId=null;
         CancelReturn();walkingOut=false;resultAwaitingConfirmation=false;
         victoryResultAt=0;
         SettingsAudio.Instance?.SetBattleMusic(false);

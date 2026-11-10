@@ -17,6 +17,7 @@ public sealed class FocusScenePreview : MonoBehaviour
     Vector3 cameraHome;
     RawImage view;
     RenderTexture texture;
+    PreviewPixels.ResizeGate resizeGate;
     CharacterEquipmentAura equipmentAura;
     public int targetHeight = 720;
     public float minimumOrthographicSize = 10, horizontalHalfWidth = 13;
@@ -75,11 +76,13 @@ public sealed class FocusScenePreview : MonoBehaviour
     void UpdateTarget()
     {
         if (!PreviewCamera || !view) return;
+        // Rendering may stop while the native window is minimized; Focus and IPC keep running.
+        if (WindowsAppWindow.IsMinimized) { PreviewCamera.enabled = false; return; }
         var size = view.rectTransform.rect.size;
         if (size.x <= 0 || size.y <= 0) return;
         float aspect = size.x / size.y;
         var pixels = PreviewPixels.For(view, targetHeight);
-        if (!texture || texture.width != pixels.x || texture.height != pixels.y)
+        if (resizeGate.Ready(texture,pixels))
         {
             ReleaseTexture();
             texture = new RenderTexture(pixels.x, pixels.y, 24) { name = "Focus Training View" };

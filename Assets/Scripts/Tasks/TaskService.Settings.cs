@@ -3,6 +3,7 @@ using System;
 public sealed partial class TaskService
 {
     public AppSettings Settings => PlayerDataStore.Copy(store.Data.settings);
+    public bool ReduceMotion => store.Data.settings != null && store.Data.settings.reduceMotion;
     public bool SaveSettings(AppSettings settings)
     {
         if (settings == null || float.IsNaN(settings.soundVolume) || float.IsInfinity(settings.soundVolume)

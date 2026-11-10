@@ -4,6 +4,21 @@ using System.Collections.Generic;
 [Serializable]
 public class PlayerData
 {
+    public PlayerData DetachedCopy()
+    {
+        // Keep the small remainder on Unity serialization; avoid JSON for large histories.
+        var header = (PlayerData)MemberwiseClone();
+        header.tasks = null; header.tags = null; header.occurrences = null;
+        header.history = null; header.focusSessions = null;
+        var copy = UnityEngine.JsonUtility.FromJson<PlayerData>(UnityEngine.JsonUtility.ToJson(header));
+        if (tutorial == null) copy.tutorial = null;
+        copy.tasks = tasks?.ConvertAll(v => v?.DetachedCopy());
+        copy.tags = tags?.ConvertAll(v => v?.DetachedCopy());
+        copy.occurrences = occurrences?.ConvertAll(v => v?.DetachedCopy());
+        copy.history = history?.ConvertAll(v => v?.DetachedCopy());
+        copy.focusSessions = focusSessions?.ConvertAll(v => v?.DetachedCopy());
+        return copy;
+    }
     public TutorialProgress tutorial;
     public string username;
     public int version = 5;
@@ -30,10 +45,17 @@ public class PlayerData
 
 public enum TaskDifficulty { Easy, Normal, Hard }
 public enum TaskTab { Today, Daily, Todo, Tags, History }
-[Serializable] public class QuestTag { public string id; public string name; public string colorHex = TagColors.DefaultHex; }
-[Serializable] public class QuestSubtask { public string id; public string title; }
+[Serializable] public class QuestTag { public QuestTag DetachedCopy() => (QuestTag)MemberwiseClone(); public string id; public string name; public string colorHex = TagColors.DefaultHex; }
+[Serializable] public class QuestSubtask { public QuestSubtask DetachedCopy() => (QuestSubtask)MemberwiseClone(); public string id; public string title; }
 [Serializable] public class QuestTask
 {
+    public QuestTask DetachedCopy()
+    {
+        var copy = (QuestTask)MemberwiseClone();
+        copy.tagIds = tagIds == null ? null : new List<string>(tagIds);
+        copy.subtasks = subtasks?.ConvertAll(v => v?.DetachedCopy());
+        return copy;
+    }
     public string id;
     public string title;
     public string description;
@@ -51,6 +73,12 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
 }
 [Serializable] public class TaskOccurrence
 {
+    public TaskOccurrence DetachedCopy()
+    {
+        var copy = (TaskOccurrence)MemberwiseClone();
+        copy.completedSubtaskIds = completedSubtaskIds == null ? null : new List<string>(completedSubtaskIds);
+        return copy;
+    }
     public string taskId;
     public string day; // Local date for daily tasks; "once" for ordinary tasks.
     public bool completed;
@@ -59,6 +87,14 @@ public enum TaskTab { Today, Daily, Todo, Tags, History }
 }
 [Serializable] public class TaskCompletion
 {
+    public TaskCompletion DetachedCopy()
+    {
+        var copy = (TaskCompletion)MemberwiseClone();
+        copy.snapshot = snapshot?.DetachedCopy();
+        copy.tagNames = tagNames == null ? null : new List<string>(tagNames);
+        copy.tagColors = tagColors == null ? null : new List<string>(tagColors);
+        return copy;
+    }
     public string id;
     public string taskId;
     public string day;
@@ -98,6 +134,13 @@ public enum FocusSessionStatus { Running, Completed, EndedEarly, Cancelled, Inva
 public enum FocusTimerMode { Pomodoro, Stopwatch, Countdown }
 [Serializable] public class FocusSession
 {
+    public FocusSession DetachedCopy()
+    {
+        var copy = (FocusSession)MemberwiseClone();
+        copy.tagIds = tagIds == null ? null : new List<string>(tagIds);
+        copy.tagNames = tagNames == null ? null : new List<string>(tagNames);
+        return copy;
+    }
     // Zero in legacy receipts means the original level-one reward rules.
     public int rewardLevel;
     public FocusTimerMode mode;

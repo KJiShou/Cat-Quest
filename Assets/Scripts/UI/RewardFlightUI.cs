@@ -37,13 +37,21 @@ public sealed class RewardFlightUI : MonoBehaviour
     float pointerTime = -10;
     bool initialized;
     RectTransform rewardOrigin, fishRewardOrigin;
+    Vector2? frozenOrigin,frozenFishOrigin;
     float rewardDelay;
     public int ActiveCount { get; private set; }
     public bool IsAnimating => ActiveCount > 0 || pulse[0] > 0 || pulse[1] > 0 || pulse[2] > 0;
 
     // Scoped by the caller around settlement; only committed balance changes fly.
     public void SetRewardOrigin(RectTransform origin, RectTransform fishOrigin = null, float delay = 0)
-    { rewardOrigin = origin; fishRewardOrigin = fishOrigin; rewardDelay = Mathf.Max(0,delay); }
+    {
+        rewardOrigin = origin; fishRewardOrigin = fishOrigin; rewardDelay = Mathf.Max(0,delay);
+        // Task rows may be recycled by an earlier Changed subscriber during commit.
+        frozenOrigin=OriginPoint(origin);frozenFishOrigin=OriginPoint(fishOrigin);
+    }
+    Vector2? OriginPoint(RectTransform origin) => origin&&surface&&canvas
+        ? Local(RectTransformUtility.WorldToScreenPoint(canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera,
+            origin.TransformPoint(origin.rect.center))) : (Vector2?)null;
 
     void Start()
     {
@@ -117,13 +125,24 @@ public sealed class RewardFlightUI : MonoBehaviour
     void Changed()
     {
         int[] totals = { service.FishCoins, service.Tickets, service.Experience };
+        if(UiMotion.Reduced) {
+            // Finish outstanding presentation immediately; balances remain service-owned.
+            foreach(var f in flights){f.active=false;f.icon.gameObject.SetActive(false);}ActiveCount=0;
+            for(int kind=0;kind<3;kind++) {
+                int gain=Math.Max(0,totals[kind]-observed[kind])+pending[kind];
+                observed[kind]=displayed[kind]=totals[kind];pending[kind]=0;
+                if(gain>0)RecordArrival(kind,gain);
+            }
+            return;
+        }
         var origin = Time.unscaledTime - pointerTime < .8f ? pointerOrigin : surface.rect.center + new Vector2(0, -40);
         for (int kind = 0; kind < 3; kind++)
         {
             var source = kind == 0 && fishRewardOrigin ? fishRewardOrigin : rewardOrigin;
-            var flightOrigin = source ? Local(RectTransformUtility.WorldToScreenPoint(
+            var frozen=kind==0&&frozenFishOrigin.HasValue?frozenFishOrigin:frozenOrigin;
+            var flightOrigin = frozen ?? (source ? Local(RectTransformUtility.WorldToScreenPoint(
                 canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera,
-                source.TransformPoint(source.rect.center))) : origin + new Vector2((kind - 1) * 55, 0);
+                source.TransformPoint(source.rect.center))) : origin + new Vector2((kind - 1) * 55, 0));
             int delta = totals[kind] - observed[kind];
             observed[kind] = totals[kind];
             if (delta <= 0) { displayed[kind] = Math.Max(0, totals[kind] - pending[kind]); continue; }
@@ -197,8 +216,8 @@ public sealed class RewardFlightUI : MonoBehaviour
             if (pulse[i] <= 0) continue;
             float u = 1 - pulse[i] / StackDuration;
             float fade = Mathf.Clamp01((u - .65f) / .35f);
-            gain.rectTransform.anchoredPosition = Destination(i) + new Vector2(45, -35 - fade * 18);
-            gain.rectTransform.localScale = Vector3.one * (1 + .22f * Mathf.Sin(Mathf.Clamp01(u * 5) * Mathf.PI));
+            gain.rectTransform.anchoredPosition = Destination(i) + new Vector2(45, -35 - (UiMotion.Reduced?0:fade * 18));
+            gain.rectTransform.localScale = UiMotion.Reduced?Vector3.one:Vector3.one * (1 + .22f * Mathf.Sin(Mathf.Clamp01(u * 5) * Mathf.PI));
             gain.color = new Color(0f, .6f, 1f, 1-fade);
         }
     }

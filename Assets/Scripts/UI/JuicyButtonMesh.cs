@@ -17,11 +17,12 @@ public sealed class JuicyButtonMesh : BaseMeshEffect
     float rewardAge = .32f, rewardStart = 1;
     bool rewardReveal;
     public float RewardScale { get; private set; } = 1;
-    public void PlayRewardPulse() { rewardReveal = false; rewardStart = RewardScale; rewardAge = 0; }
-    public void PlayRewardReveal() { rewardReveal = true; rewardAge = 0; RewardScale = .35f; Refresh(); }
+    public void PlayRewardPulse() { if(UiMotion.Reduced){ResetRewardPulse();return;} rewardReveal = false; rewardStart = RewardScale; rewardAge = 0; }
+    public void PlayRewardReveal() { if(UiMotion.Reduced){ResetRewardPulse();return;} rewardReveal = true; rewardAge = 0; RewardScale = .35f; Refresh(); }
     public void ResetRewardPulse() { rewardReveal = false; rewardAge = .32f; RewardScale = 1; Refresh(); }
     void Update()
     {
+        if(UiMotion.Reduced){if(rewardAge<.32f||rewardReveal||RewardScale!=1)ResetRewardPulse();return;}
         if (rewardReveal) {
             rewardAge = Mathf.Min(.55f, rewardAge + Time.unscaledDeltaTime);
             if (rewardAge < .18f)

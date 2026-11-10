@@ -1,15 +1,18 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
 using UnityEngine.EventSystems;
+using UnityEngine.Rendering;
 
 public sealed class CompanionWindowUI : MonoBehaviour
 {
+    [Serializable] public sealed class CameraCount { public string name,type,hierarchy,scene,targetAtFirstRender;public int instanceId; public long renders,textureRenders; }
     [Serializable] public sealed class FeedbackState { public string name; public bool active,interactable; public float scaleX,scaleY,offset,x,y,width,height; }
-    [Serializable] public sealed class ViewState { public string lastAck; public bool lastAccepted; public int sentCommands,snapshots,connections,ackCount; public string selected; public bool keyboard; public FeedbackState[] feedback; public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha; }
+    [Serializable] public sealed class ViewState { public string lastAck; public bool lastAccepted,reduceMotion; public int sentCommands,snapshots,connections,ackCount; public string selected; public bool keyboard; public FeedbackState[] feedback; public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha;public string utc;public int frameCount;public long cameraRenders,textureCameraRenders;public CameraCount[] cameras; }
     public FocusScenePreview preview;
     public TMP_Text timer,title;
     public RectTransform controls,header,sceneFrame,dragHandle,timerBacking;
@@ -34,6 +37,30 @@ public sealed class CompanionWindowUI : MonoBehaviour
     Button[] keyboardButtons;
     PointerEventData pointerExit;
     bool IsCompact=>Screen.width<360 || Screen.height<260;
+    Dictionary<int,CameraCount> verificationCameras;
+    long verificationCameraRenders,verificationTextureCameraRenders;
+    void OnEnable()
+    {
+        if(!CompanionProtocol.HasArgument("--companion-smoke"))return;
+        if(verificationCameras==null)verificationCameras=new Dictionary<int,CameraCount>();
+        RenderPipelineManager.beginCameraRendering+=CountVerificationCamera;
+    }
+    void CountVerificationCamera(ScriptableRenderContext context,Camera camera)
+    {
+        if(!camera)return;
+        int id=camera.GetInstanceID();
+        if(!verificationCameras.TryGetValue(id,out var count)) {
+            string hierarchy=camera.name;for(var parent=camera.transform.parent;parent;parent=parent.parent)hierarchy=parent.name+"/"+hierarchy;
+            count=new CameraCount{name=camera.name,type=camera.cameraType.ToString(),hierarchy=hierarchy,scene=camera.gameObject.scene.name,instanceId=id,targetAtFirstRender=camera.targetTexture?camera.targetTexture.name:""};verificationCameras.Add(id,count);
+        }
+        count.renders++;verificationCameraRenders++;
+        if(camera.targetTexture){count.textureRenders++;verificationTextureCameraRenders++;}
+    }
+    CameraCount[] VerificationCameraCounts()
+    {
+        if(verificationCameras==null)return Array.Empty<CameraCount>();
+        var result=new CameraCount[verificationCameras.Count];verificationCameras.Values.CopyTo(result,0);return result;
+    }
     void Start()
     {
         Application.runInBackground=true;Application.targetFrameRate=30;
@@ -98,6 +125,7 @@ public sealed class CompanionWindowUI : MonoBehaviour
             snapshots++;
             snapshotReceivedAt = now;
             state = incoming;
+            UiMotion.ApplyCompanion(state.reduceMotion);
             if (!string.IsNullOrEmpty(state.requestId)) {
                 ackCount++;
                 lastAck = state.requestId;
@@ -118,7 +146,7 @@ public sealed class CompanionWindowUI : MonoBehaviour
         preview.Bind(state);
         RefreshState();
     }
-    void OnDestroy() { pipe?.Dispose(); }
+    void OnDestroy() { pipe?.Dispose();UiMotion.ApplyCompanion(false); }
     void RefreshTimer()
     {
         bool up = state.mode == FocusTimerMode.Stopwatch && state.phase != FocusPhase.Resting;
@@ -194,7 +222,7 @@ public sealed class CompanionWindowUI : MonoBehaviour
         confirmingSession=state.sessionId;string session=confirmingSession;
         cancelConfirmation.Show(cancelSession, ()=>{if(state.connected&&state.phase==FocusPhase.Focusing&&state.sessionId==session)Send(cancelSession ? "cancel" : "end");});
     }
-    void OnDisable(){if(cancelConfirmation)cancelConfirmation.Dismiss();}
+    void OnDisable(){RenderPipelineManager.beginCameraRendering-=CountVerificationCamera;if(cancelConfirmation)cancelConfirmation.Dismiss();}
     static void SetCaption(Button b,string text){b.GetComponentInChildren<TMP_Text>().text=text;}
     public void ApplyLayout(bool compact,bool showControls)
     {
@@ -247,13 +275,17 @@ public sealed class CompanionWindowUI : MonoBehaviour
         }
         return result;
     }
+    double verificationQuietUntil;
     void WriteVerification()
     {
+        // Only called with --companion-smoke. Silence the file probe, not the pipe,
+        // during bounded process measurements; automatically resume afterwards.
+        if(Now<verificationQuietUntil)return;
         try
         {
             var battle=preview.Stage?preview.Stage.GetComponentInChildren<FocusTrainingBattle>():null;
             var aura=preview.Stage?preview.Stage.GetComponentInChildren<CharacterEquipmentAura>():null;
-            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{ackCount=ackCount,lastAck=lastAck,lastAccepted=lastAccepted,sentCommands=sentCommands,snapshots=snapshots,connections=connections,selected=EventSystem.current&&EventSystem.current.currentSelectedGameObject?EventSystem.current.currentSelectedGameObject.name:"",keyboard=keyboardNavigation,feedback=FeedbackSnapshot(),auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
+            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{utc=DateTime.UtcNow.ToString("O"),frameCount=Time.frameCount,cameraRenders=verificationCameraRenders,textureCameraRenders=verificationTextureCameraRenders,cameras=VerificationCameraCounts(),reduceMotion=UiMotion.Reduced,ackCount=ackCount,lastAck=lastAck,lastAccepted=lastAccepted,sentCommands=sentCommands,snapshots=snapshots,connections=connections,selected=EventSystem.current&&EventSystem.current.currentSelectedGameObject?EventSystem.current.currentSelectedGameObject.name:"",keyboard=keyboardNavigation,feedback=FeedbackSnapshot(),auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
             string request = Path.Combine(directory,"pipe-command.request");
             var command = CompanionProtocol.Read<CompanionCommand>(request);
             if (command != null) { File.Delete(request); SendCommand(command); }
@@ -263,6 +295,8 @@ public sealed class CompanionWindowUI : MonoBehaviour
                 if(action=="cancel")EndFocus();
                 else if(action=="confirm-cancel")cancelConfirmation.Confirm();
                 else if(action=="keep-focus")cancelConfirmation.Dismiss();
+                else if(action.StartsWith("performance-quiet:") && int.TryParse(action.Substring("performance-quiet:".Length),out int seconds))
+                    verificationQuietUntil=Now+Mathf.Clamp(seconds,1,45);
             }
             string capture=Path.Combine(directory,"capture.request");if(File.Exists(capture)){File.Delete(capture);ScreenCapture.CaptureScreenshot(Path.Combine(directory,"companion-capture.png"));}
         }

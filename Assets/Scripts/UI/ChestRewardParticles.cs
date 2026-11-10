@@ -11,6 +11,7 @@ public sealed class ChestRewardParticles : MaskableGraphic
     Quaternion restRotation;
     float elapsed;
     bool focused=true;
+    bool reducedLast;
     RectTransform reward;
     JuicyButtonMesh rewardPulse;
     public bool IsCelebrating => reward;
@@ -20,6 +21,7 @@ public sealed class ChestRewardParticles : MaskableGraphic
     // Presentation follows committed ownership; reuse the shared mesh-only pulse.
     public void PlayCollected(Image icon)
     {
+        if(UiMotion.Reduced){StopCollected();ResetChest();return;}
         gameObject.SetActive(true);
         ResetChest();reward=icon.rectTransform;elapsed=0;
         rewardPulse=icon.GetComponent<JuicyButtonMesh>();
@@ -42,6 +44,9 @@ public sealed class ChestRewardParticles : MaskableGraphic
     protected override void OnEnable(){base.OnEnable();focused=Application.isFocused;elapsed=0;raycastTarget=false;SetVerticesDirty();}
     void Update()
     {
+        bool reduced=UiMotion.Reduced;
+        if(reduced!=reducedLast){reducedLast=reduced;ResetChest();SetVerticesDirty();}
+        if(reduced){StopCollected();return;}
         if(!focused)return;
         elapsed+=Time.unscaledDeltaTime;
         if(reward){
@@ -63,7 +68,7 @@ public sealed class ChestRewardParticles : MaskableGraphic
 
     protected override void OnPopulateMesh(VertexHelper mesh)
     {
-        mesh.Clear();if(reward){DrawCollected(mesh);return;}if(!chest)return;
+        mesh.Clear();if(UiMotion.Reduced)return;if(reward){DrawCollected(mesh);return;}if(!chest)return;
         var bounds=chest.rect;
         float size=Mathf.Min(bounds.width,bounds.height);
         // The opening of SimpleCasual's open chest is just above the front gold rim.

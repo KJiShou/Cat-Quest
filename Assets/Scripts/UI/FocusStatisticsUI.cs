@@ -26,6 +26,9 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     readonly Dictionary<string,Color> chartColors = new Dictionary<string,Color>();
     FocusStatistics.Series[] displayedSeries = Array.Empty<FocusStatistics.Series>();
     readonly List<Button> rows = new List<Button>();
+    readonly Dictionary<string,Button> rowsByTag = new Dictionary<string,Button>();
+    TaskService colorService;
+    int colorVersion = -1;
     UnityEngine.Events.UnityAction[] periodActions;
     DateTime observedDay;
     void Awake()
@@ -65,9 +68,8 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     public void Refresh()
     {
         observedDay=service.LocalNow.Date;
-        var data=service.Snapshot;
-        BuildColors(data);
-        Data=FocusStatistics.Query(data.focusSessions,data.tags,Date,Period,TimeZoneInfo.Local);
+        BuildColors();
+        Data=service.QueryFocusStatistics(Date,Period,TimeZoneInfo.Local);
         range.text=Period==FocusStatisticsPeriod.Year?Data.start.ToString("yyyy"):Period==FocusStatisticsPeriod.Month?Data.start.ToString("MMMM yyyy",CultureInfo.InvariantCulture)
             :Period==FocusStatisticsPeriod.Day?Data.start.ToString("ddd, dd MMM yyyy",CultureInfo.InvariantCulture):Data.start.ToString("dd MMM",CultureInfo.InvariantCulture)+" - "+Data.end.AddDays(-1).ToString("dd MMM yyyy",CultureInfo.InvariantCulture);
         total.text=FocusStatistics.Duration(Data.seconds);
@@ -76,13 +78,21 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         previous.interactable=Data.start.Year>1;
         Tint(today,Data.start==FocusStatistics.Start(observedDay,Period));
         for(int i=0;i<periods.Length;i++)Tint(periods[i],i==(int)Period);
-        foreach(var row in rows){row.gameObject.SetActive(false);Destroy(row.gameObject);}rows.Clear();
+        foreach(var row in rows)
+            if(row && !Data.tags.Any(tag=>tag.id==row.name))row.gameObject.SetActive(false);
+        rows.Clear();
         foreach(var tag in Data.tags)
         {
-            var row=Instantiate(tagTemplate,tagContent);row.name=tag.id;row.gameObject.SetActive(true);
+            if(!rowsByTag.TryGetValue(tag.id,out var row))
+            {
+                row=Instantiate(tagTemplate,tagContent);row.name=tag.id;
+                string id=tag.id;row.onClick.AddListener(()=>{SelectedTag=id;RefreshGraph();});
+                rowsByTag.Add(id,row);
+            }
+            row.transform.SetAsLastSibling();row.gameObject.SetActive(true);
             var label=row.GetComponentInChildren<TMP_Text>();label.richText=false;label.textWrappingMode=TextWrappingModes.NoWrap;label.overflowMode=TextOverflowModes.Ellipsis;label.text=tag.name+"\n"+FocusStatistics.Duration(tag.seconds);
             row.transform.Find("Swatch").GetComponent<Image>().color=chartColors[tag.id];
-            string id=tag.id;row.onClick.AddListener(()=>{SelectedTag=id;RefreshGraph();});rows.Add(row);
+            rows.Add(row);
         }
         if(!Data.tags.Any(t=>t.id==SelectedTag))SelectedTag=null;
         RefreshGraph();
@@ -114,23 +124,29 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         detail.richText=false;
         detail.text=Data.labels[index]+(Period==FocusStatisticsPeriod.Day?":00":"")+" / "+(tag?.name??selected?.name??"Total")+" / "+FocusStatistics.Duration(seconds);
     }
-    void BuildColors(PlayerData data)
+    void BuildColors()
     {
+        int version=service.ReadVersion;
+        if(ReferenceEquals(colorService,service) && colorVersion==version)return;
         chartColors.Clear();
         chartColors[FocusStatistics.Untagged]=new Color32(115,139,157,255);
         // Include the whole catalog/history so changing the date cannot recolor a tag.
-        var ids=data.tags.Select(t=>t.id).Concat(data.focusSessions.SelectMany(s=>s.tagIds??new List<string>()))
-            .Where(id=>!string.IsNullOrEmpty(id)).Distinct().OrderBy(id=>id,StringComparer.Ordinal);
-        foreach(var id in ids)
+        foreach(var tag in service.FocusStatisticsTagCatalog())
         {
+            string id=tag.id;
             if(chartColors.ContainsKey(id))continue;
-            var tag=data.tags.FirstOrDefault(t=>t.id==id);
-            Color candidate=Color.Lerp(TagColors.Background(tag?.colorHex??"#5CA6CE"),TaskUIBuilder.Ink,.15f);
+            Color candidate=Color.Lerp(TagColors.Background(tag.colorHex??"#5CA6CE"),TaskUIBuilder.Ink,.15f);
             uint hash=2166136261;foreach(char c in id)hash=unchecked((hash^c)*16777619);
             for(int attempt=0;attempt<32 && chartColors.Values.Any(c=>Vector3.Distance(new Vector3(c.r,c.g,c.b),new Vector3(candidate.r,candidate.g,candidate.b))<.24f);attempt++)
                 candidate=Color.HSVToRGB((hash%360/360f+attempt*.618034f)%1f,.65f,.83f);
             chartColors[id]=candidate;
         }
+        // A reset/import may remove historical tags; retire only those pooled rows.
+        foreach(string id in rowsByTag.Keys.Where(id=>!chartColors.ContainsKey(id)).ToArray())
+        {
+            var row=rowsByTag[id];row.gameObject.SetActive(false);Destroy(row.gameObject);rowsByTag.Remove(id);
+        }
+        colorService=service;colorVersion=version;
     }
     static void Tint(Button button,bool selected) {
         if(button.targetGraphic)button.targetGraphic.color=selected?new Color32(96,115,168,255):new Color32(231,239,250,255);

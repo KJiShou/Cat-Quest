@@ -21,6 +21,8 @@ public sealed class FocusFishSpectators : MonoBehaviour
     readonly List<Vector2> positions = new List<Vector2>();
     readonly List<Vector2> entryPositions = new List<Vector2>();
     readonly List<float> entryTimes = new List<float>();
+    readonly List<ParticleSystem[]> bubbles = new List<ParticleSystem[]>();
+    bool lastReduced;
     FocusRunner runner;
     public IFocusPresentation Presentation { get; set; }
     void Update()
@@ -28,6 +30,7 @@ public sealed class FocusFishSpectators : MonoBehaviour
         if (Presentation == null && !runner) runner = FindFirstObjectByType<FocusRunner>();
         int count = Presentation != null ? Presentation.SpectatorFishCount : runner ? runner.Controller.SpectatorFishCount : TaskService.FocusFishForSeconds(previewElapsedSeconds);
         SetFishCount(count);
+        if(lastReduced!=UiMotion.Reduced){lastReduced=UiMotion.Reduced;foreach(var group in bubbles)SetBubbles(group);}
         AnimateFish(Time.time);
     }
 
@@ -45,6 +48,7 @@ public sealed class FocusFishSpectators : MonoBehaviour
             positions.RemoveAt(last);
             entryPositions.RemoveAt(last);
             entryTimes.RemoveAt(last);
+            bubbles.RemoveAt(last);
         }
         while (fish.Count < count)
         {
@@ -55,7 +59,15 @@ public sealed class FocusFishSpectators : MonoBehaviour
             positions.Add(ChoosePosition());
             entryPositions.Add(ChooseEntry(positions[positions.Count - 1]));
             entryTimes.Add(Time.time);
+            var effects=go.GetComponentsInChildren<ParticleSystem>(true);bubbles.Add(effects);SetBubbles(effects);
             go.transform.localPosition = entryPositions[entryPositions.Count - 1];
+        }
+    }
+    static void SetBubbles(ParticleSystem[] effects)
+    {
+        foreach(var effect in effects) {
+            if(UiMotion.Reduced)effect.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);
+            else if(effect.main.playOnAwake)effect.Play(true);
         }
     }
 
@@ -95,9 +107,9 @@ public sealed class FocusFishSpectators : MonoBehaviour
     {
         for (int i = 0; i < fish.Count; i++)
         {
-            float bob = Mathf.Sin(time * 1.5f + i * 1.3f) * .09f;
+            float bob = UiMotion.Reduced?0:Mathf.Sin(time * 1.5f + i * 1.3f) * .09f;
             var sprite = fish[i];
-            float progress = Mathf.Clamp01((time - entryTimes[i]) / Mathf.Max(.1f, swimInDuration));
+            float progress = UiMotion.Reduced?1:Mathf.Clamp01((time - entryTimes[i]) / Mathf.Max(.1f, swimInDuration));
             float ease = 1 - Mathf.Pow(1 - progress, 3);
             Vector2 location = Vector2.Lerp(entryPositions[i], positions[i], ease);
             sprite.transform.parent.localPosition = new Vector3(location.x, location.y + bob, 0);

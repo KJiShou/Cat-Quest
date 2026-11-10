@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -27,6 +28,19 @@ public sealed class CharacterHomePreview : MonoBehaviour
     private Texture originalTexture;
     private Vector2 halfSize;
     private bool initialized;
+    private PreviewPixels.ResizeGate resizeGate;
+    // Dashboard and Cat Home share the authored forest camera. Disabled pages keep
+    // their binding so its original state is captured once, not from another page.
+    private sealed class CameraBinding
+    {
+        public Camera camera;
+        public bool originalEnabled;
+        public RenderTexture originalTarget;
+        public readonly HashSet<CharacterHomePreview> users = new HashSet<CharacterHomePreview>();
+        public readonly HashSet<CharacterHomePreview> activeUsers = new HashSet<CharacterHomePreview>();
+    }
+    private static readonly Dictionary<Camera, CameraBinding> sharedCameras = new Dictionary<Camera, CameraBinding>();
+    private CameraBinding cameraBinding;
 
     private void OnEnable()
     {
@@ -41,13 +55,59 @@ public sealed class CharacterHomePreview : MonoBehaviour
         view.enabled = previewCamera && character;
         if (placeholder) placeholder.enabled = !view.enabled;
         if (!previewCamera || !character) return;
+        if (Application.isPlaying && !ownedStage) BindCamera();
         if (!initialized)
         {
-            originalTarget = previewCamera.targetTexture;
+            originalTarget = cameraBinding != null ? cameraBinding.originalTarget : previewCamera.targetTexture;
             originalTexture = view.texture;
             initialized = true;
         }
         if (!fixedFraming || halfSize == Vector2.zero) { halfSize = character.bounds.extents; fixedCenter = character.bounds.center; }
+    }
+
+    private void BindCamera()
+    {
+        if (cameraBinding != null && cameraBinding.camera != previewCamera) UnbindCamera();
+        if (cameraBinding == null)
+        {
+            if (!sharedCameras.TryGetValue(previewCamera, out cameraBinding))
+            {
+                cameraBinding = new CameraBinding { camera = previewCamera, originalEnabled = previewCamera.enabled, originalTarget = previewCamera.targetTexture };
+                sharedCameras.Add(previewCamera, cameraBinding);
+            }
+            cameraBinding.users.Add(this);
+        }
+        cameraBinding.activeUsers.Add(this);
+        RefreshCamera(cameraBinding);
+    }
+
+    private static void RefreshCamera(CameraBinding binding, CharacterHomePreview releasing = null)
+    {
+        if (!binding.camera) return;
+        if (binding.activeUsers.Count == 0) binding.camera.targetTexture = binding.originalTarget;
+        else if (releasing && binding.camera.targetTexture == releasing.texture)
+        {
+            // An outgoing page must not leave the other active consumer on its target.
+            binding.camera.targetTexture = binding.originalTarget;
+            foreach (var owner in binding.activeUsers)
+                if (owner && owner.texture) { binding.camera.targetTexture = owner.texture; break; }
+        }
+        binding.camera.enabled = binding.originalEnabled && binding.activeUsers.Count > 0 && !WindowsAppWindow.IsMinimized;
+    }
+
+    private void UnbindCamera()
+    {
+        if (cameraBinding == null) return;
+        var binding = cameraBinding;
+        cameraBinding = null;
+        binding.activeUsers.Remove(this);
+        binding.users.Remove(this);
+        if (binding.users.Count == 0)
+        {
+            if (binding.camera) { binding.camera.targetTexture = binding.originalTarget; binding.camera.enabled = binding.originalEnabled; }
+            sharedCameras.Remove(binding.camera);
+        }
+        else RefreshCamera(binding, this);
     }
 
     private void CreatePreview()
@@ -94,13 +154,14 @@ public sealed class CharacterHomePreview : MonoBehaviour
     private void LateUpdate()
     {
         if (!previewCamera || !character || !view) return;
+        if (WindowsAppWindow.IsMinimized) { previewCamera.enabled = false; return; }
         SyncLayout();
         var rect = view.rectTransform.rect;
         if (rect.width <= 0 || rect.height <= 0) return;
         float aspect = rect.width / rect.height;
         var pixels = PreviewPixels.For(view, 720);
         int width = pixels.x, height = pixels.y;
-        if (!texture || texture.width != width || texture.height != height)
+        if (resizeGate.Ready(texture,pixels))
         {
             ReleaseTexture();
             texture = new RenderTexture(width, height, 24) { name = "Character Home Preview" };
@@ -108,6 +169,7 @@ public sealed class CharacterHomePreview : MonoBehaviour
         }
         previewCamera.targetTexture = texture;
         if (ownedStage) previewCamera.enabled = true;
+        else if (cameraBinding != null) RefreshCamera(cameraBinding);
         view.texture = texture;
         previewCamera.orthographic = true;
         previewCamera.aspect = aspect;
@@ -122,7 +184,8 @@ public sealed class CharacterHomePreview : MonoBehaviour
     private void OnDisable()
     {
         if (ownedStage) ownedStage.SetActive(false);
-        if (previewCamera) previewCamera.targetTexture = originalTarget;
+        if (cameraBinding != null) { cameraBinding.activeUsers.Remove(this); RefreshCamera(cameraBinding, this); }
+        else if (initialized && previewCamera) previewCamera.targetTexture = originalTarget;
         if (view) view.texture = originalTexture;
         // Keep the same target across page switches; recreating it disrupts the preview's rendering state.
         if (!Application.isPlaying) ReleaseTexture();
@@ -130,7 +193,8 @@ public sealed class CharacterHomePreview : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (previewCamera) previewCamera.targetTexture = originalTarget;
+        if (cameraBinding != null) UnbindCamera();
+        else if (initialized && previewCamera) previewCamera.targetTexture = originalTarget;
         if (view) view.texture = originalTexture;
         ReleaseTexture();
         if (ownedStage) Destroy(ownedStage);

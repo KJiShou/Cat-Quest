@@ -48,12 +48,13 @@ public sealed class PlayerHealthFeedback : MonoBehaviour
     void ApplyColor()
     {
         fill.color=useColorStates?(target<=.25f?panic:target<=.5f?warning:healthy):healthy;
-        if(useColorStates && target>0 && target<=.25f)fill.color=Color.Lerp(panic,new Color(1,.65f,.65f),(.5f+.5f*Mathf.Sin(Time.unscaledTime*9))*.28f);
+        if(!UiMotion.Reduced && useColorStates && target>0 && target<=.25f)fill.color=Color.Lerp(panic,new Color(1,.65f,.65f),(.5f+.5f*Mathf.Sin(Time.unscaledTime*9))*.28f);
     }
     // Called after the head-follow position is assigned, so shake never accumulates/drifts.
     public void Tick(float delta)
     {
         Initialize();
+        if(UiMotion.Reduced){Snap(target);return;}
         float shown=Mathf.SmoothDamp(slider.normalizedValue,target,ref velocity,drainTime,Mathf.Infinity,delta);
         if(Mathf.Abs(shown-target)<.0005f)shown=target;
         slider.SetValueWithoutNotify(shown);

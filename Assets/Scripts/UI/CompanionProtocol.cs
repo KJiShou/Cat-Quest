@@ -7,6 +7,7 @@ using UnityEngine;
     public string ownerId, sessionId, questTitle, message, playerName;
     public string requestId;
     public bool accepted;
+    public bool reduceMotion;
     public FocusPhase phase;
     public FocusTimerMode mode;
     public double elapsedSeconds;

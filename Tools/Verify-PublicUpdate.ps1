@@ -24,7 +24,9 @@ try {
     if($key){$existed=$true;try{foreach($name in $key.GetValueNames()){$backup+=@{name=$name;kind=$key.GetValueKind($name);value=$key.GetValue($name)}}}finally{$key.Dispose()}}
     Json (Join-Path $folder 'test-save.json') @{version=5;username='Public Update Verification';experience=3000;tickets=3;fishCoins=47;settings=@{notificationsEnabled=$false;soundVolume=0;musicVolume=0}}
     $arguments='--focus-smoke --smoke-dir "'+$folder+'" -force-d3d11 -logFile "'+$folder+'/Player.log" -screen-fullscreen 0 -screen-width 1280 -screen-height 720'
-    $main=Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory ([IO.Path]::GetDirectoryName($exe)) -WindowStyle Hidden -PassThru
+    # This is the interactive Player being verified. Hidden startup can trigger
+    # Unity 6000.3.10f1 D3D11 presentation errors when its window becomes visible.
+    $main=Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory ([IO.Path]::GetDirectoryName($exe)) -WindowStyle Normal -PassThru
     Wait {(Read $statePath).controlsBound} 'release player startup'
     $r=Read $statePath;$initial=$r.appVersion
     Check (!$r.developmentBuild) 'Actual non-development Windows player'

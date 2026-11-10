@@ -34,6 +34,7 @@ foreach ($required in @('CatQuest.exe','CatQuestUpdater.exe','UnityPlayer.dll'))
 $inventory = [ordered]@{format=1;version=$version;files=@($files | Sort-Object path)}
 $utf8 = New-Object Text.UTF8Encoding($false)
 [IO.File]::WriteAllText((Join-Path $build 'catquest-package.json'),($inventory | ConvertTo-Json -Depth 5),$utf8)
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [IO.Compression.ZipFile]::Open($zipPath,[IO.Compression.ZipArchiveMode]::Create)
 try {

@@ -31,11 +31,15 @@ Tasks 教学接管输入时，切换焦点或回看页签不会保存快速新�
 
 ## 分功能步骤
 
-**Tasks 共九步**：Today、Daily、Todo、Tags、搜索、加号、真实输入保存、完成勾选框、History。页签与加号需真实点击，Continue 不跳过。保存成功后才允许 Continue，成功本身不立即跳步。勾选只解释不完成。保留 taskStep 的真实保存收据，taskPageStep 独立记录讲解。
+**Tasks 共九步**：加号、真实输入保存、完成勾选框、Today、Daily、Todo、Tags、搜索、History。先创建真实任务，再了解页签；目标点击和保存成功不能被 Continue 跳过。保存成功后仍停留在收据步骤，勾选只解释不完成。保留 taskStep 的真实保存收据及 taskPageStep 的内容身份，讲解顺序改为 5、6、7、0、1、2、3、4、8。旧的未保存指南先转到创建步骤，不删除草稿或任务。
+
+这是可用性设计调整，尚未开展新用户实验；首次保存耗时、跳过率及理解度还没有实测结论。
 
 **Boss 共七步**：当前敌人、猫生命属性、选关、后续条件、熟练度、Master、Challenge/券确认。玩家先点选关，再进行中间说明，换步、Skip、禁用、离页或失焦只关闭教学自己打开的面板，恢复 bossStep。Challenge 必须真实点，原确认是权威，教学不确认入场、不领熟练度，等级胜利条件保持。
 
-**Focus 共七步**：番茄钟目的、模式、专注时长、休息、标签、结束取消、Start。Continue 推进说明，改设置不自动推进，最后需实际点击 Start Focus。进度原子保存，Help 重开序列，讲解结束不启动会话。
+Boss 熟练度与 Cat Home 背包说明明确每个普通 Boss 的固定奖励：5 胜武器、10 胜护甲、15 胜头饰，对应离线导师语音同步。说明不提供任选奖励，也不改变领取条件。
+
+**Focus 共七步**：番茄钟目的、模式、专注时长、休息、标签、结束取消及单局完整 25 分钟 Ticket 规则、Start。短局可累加每日 Focus 目标，但不会合并计算 Ticket。Continue 推进说明，改设置不自动推进，最后需实际点击 Start Focus。进度原子保存，Help 重开序列，讲解结束不启动会话。
 
 **Equipment 共七步**：熟练度和空背包、三槽、筛选、装备卸装、升级成本等级限制、Auto Select、套装。Continue 前进，Back 回看上一段。导航说明等 Continue 才进入 Cat Home，全程不启用装备操作或消费。equipmentStep 保存，Help > Rewards 进入并重启该指南，尊重既有已读收据。当前装备台词均已配上批准的离线 Master Loke 语音，返回步骤时通过 SettingsAudio 重播对应音频。
 
@@ -57,4 +61,4 @@ Tasks 教学接管输入时，切换焦点或回看页签不会保存快速新�
 
 截图不能单独证明动效或交互，审查本次图像、录像、日志和结果。旧 PASS 不是当前证据。
 
-Settings 教程显示真实设置界面，依次高亮通知、音效、音乐、排行榜、默认任务页、Dashboard 显示、标签、Account 和 AI。Continue 逐步介绍，不修改设置；结束或 Skip 后返回 Settings，失焦恢复后继续原步骤。
+Settings 教程显示真实设置界面，依次高亮通知、音效、音乐、排行榜、默认任务页、Dashboard 显示、标签、Account 和 AI。Dashboard 显示步骤另说明独立的 Reduce motion 设置只减少装饰效果，不改变进度。Continue 逐步介绍，不修改设置；结束或 Skip 后返回 Settings，失焦恢复后继续原步骤。

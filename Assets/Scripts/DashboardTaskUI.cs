@@ -17,6 +17,7 @@ public class DashboardTasksUI : MonoBehaviour
     private bool pendingRefresh;
     private bool pendingBlur;
     private TaskResultNotice resultNotice;
+    private RewardFlightUI rewardFlight;
 
     private TaskService service;
     private TaskUIBuilder ui;
@@ -41,7 +42,7 @@ public class DashboardTasksUI : MonoBehaviour
         return confirmation;
     }
 
-    private void RequestComplete(TaskView view)
+    private void RequestComplete(TaskView view,RectTransform origin)
     {
         if (view.Completed)
             return;
@@ -51,24 +52,35 @@ public class DashboardTasksUI : MonoBehaviour
             GetConfirmation().Show(
                 "Complete remaining subtasks?",
                 "Some subtasks are unfinished. Complete them all and collect rewards?",
-                () => CompleteTask(view.task.id));
+                () => CompleteTask(view.task.id,origin));
         }
         else
         {
-            CompleteTask(view.task.id);
+            CompleteTask(view.task.id,origin);
         }
     }
 
-    private void CompleteTask(string id)
+    private void CompleteTask(string id,RectTransform origin)
     {
-        if (!service.Complete(id, true))
+        int experience=service.Experience,coins=service.FishCoins,tickets=service.Tickets;
+        if(!rewardFlight)rewardFlight=GetComponentInParent<Canvas>().rootCanvas.GetComponentInChildren<RewardFlightUI>(true);
+        rewardFlight?.SetRewardOrigin(origin);
+        bool saved;
+        try {saved=service.Complete(id,true);}finally {rewardFlight?.SetRewardOrigin(null);}
+        if (!saved)
         {
             GetConfirmation().Show(
                 "Could not complete task",
                 service.LastError,
                 () => { });
         }
-        else SettingsAudio.Instance?.PlayTaskComplete();
+        else {
+            SettingsAudio.Instance?.PlayTaskComplete();
+            if(experience==service.Experience&&coins==service.FishCoins&&tickets==service.Tickets) {
+                if(!resultNotice)resultNotice=Instantiate(Resources.Load<TaskResultNotice>("TaskResultNotice"),GetComponentInParent<Canvas>().rootCanvas.transform);
+                resultNotice.Show("Task completed. No additional rewards; daily limits and previously earned rewards are unchanged.");
+            }
+        }
     }
 
     private void OnDestroy()
@@ -177,7 +189,11 @@ public class DashboardTasksUI : MonoBehaviour
         if (height<=0) height=rect.rect.height;
         foreach (var task in tasks) {
             rows.Add("task/"+task.Key, "task", height, ()=>Instantiate(rowPrefab,content).gameObject,
-                go=>go.GetComponent<DashboardTaskRow>().Bind(task,taskManager.editor.difficultySprites,OpenTask,RequestComplete,service.PreviewReward(task)));
+                go=>{
+                    var row=go.GetComponent<DashboardTaskRow>();
+                    row.Bind(task,taskManager.editor.difficultySprites,OpenTask,
+                        view=>RequestComplete(view,row.completeButton.transform as RectTransform),service.PreviewReward(task));
+                });
         }
         if (tasks.Length == 0) {
             rows.Add("empty/"+heading, "empty", 26, ()=>ui.Text(content,"",18,new Color32(121,143,173,255)).gameObject,

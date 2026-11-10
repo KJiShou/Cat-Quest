@@ -345,28 +345,12 @@ public static class TutorialVerification
         Click((RectTransform)nav.buttons[(int)MainMenuPage.Tasks].transform);yield return 1;
         Check(nav.CurrentPage==MainMenuPage.Tasks,"Target click did not open Tasks");
         Check(service.Tutorial.taskStep==2,"Task navigation not tracked");
-        for(int stepIndex=0;stepIndex<=5;stepIndex++)
-        {
-            Check(tutorial.CurrentTopic=="task-page-"+stepIndex,"Task explanation order: "+stepIndex);
-            if(tutorial.IsTyping)tutorial.Continue();
-            yield return .5;Check(tutorial.CurrentTopic=="task-page-"+stepIndex,"Task guide advanced without Continue");
-            Capture("task-step-"+stepIndex);yield return .3;
-            SpotlightBlocks(tutorial,nav.buttons[(int)MainMenuPage.Dashboard]);
-            Check(tutorial.back && tutorial.back.gameObject.activeSelf==(stepIndex>0),"Task Back visibility");
-            Check(tutorial.next.gameObject.activeSelf==(stepIndex==4),"Task Continue visibility");
-            if(stepIndex==4) {
-                Click((RectTransform)tutorial.back.transform);yield return .3;FinishSpeech(tutorial);
-                Check(tutorial.CurrentTopic=="task-page-3","Task Back did not return to previous explanation");
-                Click(tutorial.CurrentTarget);yield return .3;FinishSpeech(tutorial);
-                Check(tutorial.CurrentTopic=="task-page-4","Task target did not advance again after Back");
-            }
-            if(stepIndex==0) {
-                EventSystem.current.SetSelectedGameObject(nav.buttons[(int)MainMenuPage.Dashboard].gameObject);yield return .3;
-                Check(EventSystem.current.currentSelectedGameObject!=nav.buttons[(int)MainMenuPage.Dashboard].gameObject,"Keyboard escaped spotlight");
-            }
-            if(stepIndex==4)tutorial.Continue();else {Check(!tutorial.next.interactable,"Action step allowed Continue bypass");Click(tutorial.CurrentTarget);}
-            yield return .5;
-        }
+        Check(tutorial.CurrentTopic=="task-page-5","First Tasks explanation must offer a real task before the tab tour");
+        FinishSpeech(tutorial);yield return .2;
+        SpotlightBlocks(tutorial,nav.buttons[(int)MainMenuPage.Dashboard]);
+        Check(!tutorial.back.gameObject.activeSelf&&!tutorial.next.gameObject.activeSelf,"First add step waits for the real target click");
+        Capture("task-step-5-first");yield return .3;
+        Click(tutorial.CurrentTarget);yield return .5;
         Check(tutorial.tasks.QuickAddInput,"Target click did not open the task name field");
         Check(!tutorial.next.interactable,"Task save step advanced without a real save");
         Check(!tutorial.next.gameObject.activeSelf,"Task input still displays Continue before saving");
@@ -402,6 +386,28 @@ public static class TutorialVerification
             Visible((RectTransform)tutorial.next.transform);Visible((RectTransform)tutorial.skip.transform);
         }
         if(tutorial.IsTyping)tutorial.Continue();Capture("task-checkbox");yield return .3;tutorial.Continue();yield return .5;
+        for(int stepIndex=0;stepIndex<=4;stepIndex++)
+        {
+            Check(tutorial.CurrentTopic=="task-page-"+stepIndex,"Tabs are explained only after the real task is saved: "+stepIndex);
+            FinishSpeech(tutorial);yield return .3;
+            Check(tutorial.CurrentTopic=="task-page-"+stepIndex,"Task guide advanced without Continue");
+            Capture("task-step-"+stepIndex);yield return .3;
+            SpotlightBlocks(tutorial,nav.buttons[(int)MainMenuPage.Dashboard]);
+            Check(tutorial.back.gameObject.activeSelf,"Tab explanations retain Back to the earlier creation steps");
+            Check(tutorial.next.gameObject.activeSelf==(stepIndex==4),"Task Continue visibility");
+            if(stepIndex==4) {
+                Click((RectTransform)tutorial.back.transform);yield return .3;FinishSpeech(tutorial);
+                Check(tutorial.CurrentTopic=="task-page-3","Task Back did not return to Tags explanation");
+                Click(tutorial.CurrentTarget);yield return .3;FinishSpeech(tutorial);
+                Check(tutorial.CurrentTopic=="task-page-4","Task target did not advance again after Back");
+            }
+            if(stepIndex==0) {
+                EventSystem.current.SetSelectedGameObject(nav.buttons[(int)MainMenuPage.Dashboard].gameObject);yield return .3;
+                Check(EventSystem.current.currentSelectedGameObject!=nav.buttons[(int)MainMenuPage.Dashboard].gameObject,"Keyboard escaped spotlight");
+            }
+            if(stepIndex==4)tutorial.Continue();else {Check(!tutorial.next.interactable,"Action step allowed Continue bypass");Click(tutorial.CurrentTarget);}
+            yield return .5;
+        }
         Check(tutorial.CurrentTopic=="task-page-8","Task History explanation missing");
         FinishSpeech(tutorial);Click(tutorial.CurrentTarget);yield return .5;
         Check(service.Tutorial.taskStep==4&&service.Snapshot.history.Count==0,"Task guide fabricated completion");

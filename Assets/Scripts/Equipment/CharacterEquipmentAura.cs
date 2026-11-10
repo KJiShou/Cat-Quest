@@ -32,7 +32,10 @@ public sealed class CharacterEquipmentAura : MonoBehaviour
 
     void Awake() { character = GetComponentInParent<SpriteRenderer>(); }
     void OnEnable() { Connect(); }
-    void Update() { if (!remote && service == null) Connect(); }
+    void Update() {
+        if (!remote && service == null) Connect();
+        if(circle && circle.activeSelf==UiMotion.Reduced)circle.SetActive(!UiMotion.Reduced);
+    }
     void Connect()
     {
         if (remote || service != null || !GameDataManager.Instance) return;
@@ -96,6 +99,7 @@ public sealed class CharacterEquipmentAura : MonoBehaviour
             renderer.gameObject.layer = character ? character.gameObject.layer : gameObject.layer;
             if (character) { renderer.sortingLayerID = character.sortingLayerID; renderer.sortingOrder = character.sortingOrder - 1; }
         }
+        circle.SetActive(!UiMotion.Reduced);
     }
     void LateUpdate()
     {

@@ -19,7 +19,7 @@ public sealed class DashboardEquipmentUI : MonoBehaviour
     void OnEnable(){if(service!=null){service.Changed+=Refresh;Refresh();}}
     void OnDisable(){if(service!=null)service.Changed-=Refresh;}
     void Refresh(){
-        var d=service.Snapshot;
+        var d=service.EquipmentSnapshot;
         for(int i=0;i<slots.Length;i++){
             string id=EquipmentRules.Equipped(d,(EquipmentSlot)i);bool owned=d.equipment.Any(x=>x.id==id);
             slots[i].interactable=service.EquipmentUnlocked;icons[i].sprite=owned?equippedIcons[i]:emptySlotIcons[i];icons[i].color=owned?Color.white:new Color32(161,172,198,255);

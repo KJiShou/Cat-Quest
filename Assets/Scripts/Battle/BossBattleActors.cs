@@ -200,8 +200,9 @@ public sealed class BossBattleActors : MonoBehaviour
     public void Hit(bool catAttacks)
     {
         if(!combatActive||!Ready||!isActiveAndEnabled)return;
-        if(catAttacks){bossFlash=.13f;bossRecoil.Trigger(boss,cat,bossRenderers);PlaySlash();}
-        else {catFlash=.13f;catRecoil.Trigger(cat,boss,catRenderers);}
+        if(catAttacks){bossFlash=.13f;if(!UiMotion.Reduced){bossRecoil.Trigger(boss,cat,bossRenderers);PlaySlash();}}
+        else {catFlash=.13f;if(!UiMotion.Reduced)catRecoil.Trigger(cat,boss,catRenderers);}
+        if(UiMotion.Reduced)return;
         // Simultaneous hits share one bounded freeze instead of extending it.
         if(!IsHitStopped){
             catResumeSpeed=catAnimator.speed;bossResumeSpeed=bossAnimator.speed;
@@ -289,11 +290,11 @@ public sealed class BossBattleActors : MonoBehaviour
             deathStarted=true;if(!exiting)Play(catAnimator,"Idle");Play(bossAnimator,"Die",.55f);
         }
         if(victoryCamera){
-            float zoom=Mathf.SmoothStep(0,1,victoryAge/.4f)*(1-Mathf.SmoothStep(0,1,(victoryAge-1.25f)/.55f));
+            float zoom=UiMotion.Reduced?0:Mathf.SmoothStep(0,1,victoryAge/.4f)*(1-Mathf.SmoothStep(0,1,(victoryAge-1.25f)/.55f));
             victoryCamera.orthographicSize=cameraSize*(1-.06f*zoom);
             victoryCamera.fieldOfView=cameraFov*(1-.06f*zoom);
         }
-        if(stageCamera&&victoryAge<.45f){
+        if(!UiMotion.Reduced&&stageCamera&&victoryAge<.45f){
             cameraPosition=stageCamera.localPosition;
             float strength=1-victoryAge/.45f;
             stageCamera.localPosition=cameraPosition+new Vector3(Mathf.Sin(victoryAge*65),Mathf.Sin(victoryAge*49)*.45f,0)*(.085f*strength*strength);
@@ -308,6 +309,7 @@ public sealed class BossBattleActors : MonoBehaviour
     void Update()
     {
         catRecoil.Remove();bossRecoil.Remove();RemoveCameraOffset();
+        if(UiMotion.Reduced){ReleaseHitStop(true);shakeRemaining=0;catRecoil.Clear();bossRecoil.Clear();StopSlash();}
         if(victoryPlaying)return;
         if(IsHitStopped){
             stoppedTime+=Time.unscaledDeltaTime;

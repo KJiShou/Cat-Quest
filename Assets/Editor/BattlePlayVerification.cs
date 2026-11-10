@@ -47,9 +47,10 @@ public static class BattlePlayVerification
                 GameDataManager.Instance.PlayerData.tickets=10;GameDataManager.Instance.PlayerData.experience=2025;GameDataManager.Instance.SaveData();
                 nav.ShowPage(MainMenuPage.Boss);
             }
-            if(step==1){Check(panel.actors.Ready,"Actors not ready");panel.stageButton.onClick.Invoke();Capture("stage-select-1920");}
-            if(step==2){panel.SelectStage(2);Check(panel.actors.Boss.name.StartsWith("Orc"),"Orc not selected");panel.Action();Check(!panel.confirmation.activeSelf,"Locked stage entered");Capture("orc-preview");}
-            if(step==3){panel.SelectStage(3);Check(panel.actors.Boss.name.StartsWith("Demon"),"Demon not selected");panel.SelectStage(1);Resolution(1280,720);}
+            if(step>=1&&step<=4&&panel.arena.IsLoading){next=EditorApplication.timeSinceStartup+.1;return;}
+            if(step==1){Check(panel.arena.IsReady&&panel.actors.Ready,"Actors not ready");panel.stageButton.onClick.Invoke();Capture("stage-select-1920");}
+            if(step==2){if(panel.SelectedBoss!=2){panel.SelectStage(2);next=EditorApplication.timeSinceStartup+.1;return;}Check(panel.arena.IsReady&&panel.actors.Boss.name.StartsWith("Orc"),"Orc not selected");panel.Action();Check(!panel.confirmation.activeSelf,"Locked stage entered");Capture("orc-preview");}
+            if(step==3){if(panel.SelectedBoss!=3){panel.SelectStage(3);next=EditorApplication.timeSinceStartup+.1;return;}Check(panel.arena.IsReady&&panel.actors.Boss.name.StartsWith("Demon"),"Demon not selected");panel.SelectStage(1);Resolution(1280,720);}
             if(step==4){panel.stageButton.onClick.Invoke();Capture("stage-select-1280");}
             if(step==5){panel.SelectStage(1);var animator=panel.actors.Boss.GetComponentInChildren<Animator>();bossRestRotation=animator.transform.localRotation;bossRestScale=animator.transform.localScale;Capture("battle-ready-1280");}
             if(step==6){tickets=GameDataManager.Instance.PlayerData.tickets;startX=panel.actors.Cat.position.x;panel.Action();Check(panel.confirmation.activeSelf,"Entry confirmation missing");Capture("confirm-1280");}
@@ -74,7 +75,7 @@ public static class BattlePlayVerification
                 var stats=GameDataManager.Instance.Tasks.CatStats;stats.aspd=2;panel.actors.ResetPose();panel.actors.StartCombat(stats,BattleRules.Boss(1));
                 Check(Math.Abs(panel.actors.CatAnimationSpeed-normalSpeed*2)<.001,"Double ASPD did not double animation speed");Capture("attack-speed-2x");
             }
-            if(step==13){panel.SelectStage(1);panel.Action();panel.Confirm();nav.ShowPage(MainMenuPage.Dashboard);Check(GameDataManager.Instance.PlayerData.battles.Last().outcome==BattleOutcome.Stopped,"Leaving page must stop without refund");nav.ShowPage(MainMenuPage.Boss);}
+            if(step==13){panel.SelectStage(1);panel.Action();panel.Confirm();Check(!nav.ShowPage(MainMenuPage.Dashboard)&&panel.confirmation.activeSelf&&panel.IsBattling,"Leaving page must confirm before stopping");panel.Confirm();Check(nav.CurrentPage==MainMenuPage.Dashboard&&GameDataManager.Instance.PlayerData.battles.Last().outcome==BattleOutcome.Stopped,"Confirmed departure must stop without refund");nav.ShowPage(MainMenuPage.Boss);}
             if(step==14){
                 CheckRestored(panel);
                 GameDataManager.Instance.PlayerData.experience=0;GameDataManager.Instance.SaveData();

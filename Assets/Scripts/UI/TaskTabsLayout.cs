@@ -8,7 +8,7 @@ public sealed class TaskTabsLayout : MonoBehaviour
 {
     public TaskSystemUI owner;
     float lastWidth = -1;
-    string lastCounts;
+    readonly string[] lastCounts = new string[5];
     void OnEnable() { lastWidth = -1; }
     void LateUpdate() => Apply();
 
@@ -18,9 +18,14 @@ public sealed class TaskTabsLayout : MonoBehaviour
         var bar = (RectTransform)transform;
         float width = bar.rect.width;
         if (width <= 0) return;
-        string counts = string.Join("/", System.Array.ConvertAll(owner.tabCounts, t => t ? t.text : ""));
-        if (Mathf.Abs(width-lastWidth) < .1f && counts == lastCounts) return;
-        lastWidth = width; lastCounts = counts;
+        bool countsChanged = false;
+        for (int i = 0; i < lastCounts.Length; i++)
+        {
+            string count = owner.tabCounts[i] ? owner.tabCounts[i].text ?? "" : "";
+            if (lastCounts[i] != count) { lastCounts[i] = count; countsChanged = true; }
+        }
+        if (Mathf.Abs(width-lastWidth) < .1f && !countsChanged) return;
+        lastWidth = width;
         var barLayout = GetComponent<HorizontalLayoutGroup>(); if (barLayout) barLayout.enabled = false;
         float cell = width / 5;
         bool stacked = cell < 205;

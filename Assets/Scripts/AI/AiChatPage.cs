@@ -55,7 +55,7 @@ public sealed class AiChatPage : MonoBehaviour
         input.onSubmit.AddListener(_ => { if (string.IsNullOrEmpty(Input.compositionString)) Send(); });
         input.lineType = TMP_InputField.LineType.MultiLineSubmit;
         input.characterLimit = 2000;
-        input.onValueChanged.AddListener(_ => Refresh());
+        input.onValueChanged.AddListener(_ => RefreshSendAvailability());
     }
     void OnEnable() { client = ChatGptClient.EnsureInstance(); client.Changed += Refresh; Refresh(); }
     void OnDisable()
@@ -75,6 +75,11 @@ public sealed class AiChatPage : MonoBehaviour
         int count = session.History.messages.Count;
         SendText(input.text);
         if (session.History.messages.Count > count) input.text = "";
+    }
+    void RefreshSendAvailability()
+    {
+        send.interactable = AppPlatform.WindowsDesktop && client && client.Enabled
+            && session != null && session.Loaded && !session.Busy && !string.IsNullOrWhiteSpace(input.text);
     }
     void Refresh()
     {
@@ -100,7 +105,7 @@ public sealed class AiChatPage : MonoBehaviour
         status.text = !client.Ready ? "Loading AI connection…" : !client.Connection.Connected ? "Connect ChatGPT in AI Settings to start chatting." : session?.Status;
         status.gameObject.SetActive(!string.IsNullOrEmpty(status.text));
         thinking.enabled = busy;
-        send.interactable = ready && !busy && !string.IsNullOrWhiteSpace(input.text);
+        RefreshSendAvailability();
         today.interactable = plan.interactable = ready && !busy;
         stop.gameObject.SetActive(busy); retry.gameObject.SetActive(!busy && session != null && session.CanRetry);
         retry.interactable = ready; clear.interactable = session != null;

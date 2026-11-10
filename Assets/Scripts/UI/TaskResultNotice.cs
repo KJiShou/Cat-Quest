@@ -14,8 +14,8 @@ public sealed class TaskResultNotice : MonoBehaviour, IPointerClickHandler
     {
         gameObject.SetActive(true);
         message.text = text; elapsed = 0;
-        transform.localScale = restingScale * .12f;
-        fade.alpha = 0; transform.SetAsLastSibling();
+        transform.localScale = restingScale * (UiMotion.Reduced?1:.12f);
+        fade.alpha = UiMotion.Reduced?1:0; transform.SetAsLastSibling();
     }
     public void Dismiss() { gameObject.SetActive(false); }
     public void OnPointerClick(PointerEventData e) { if (e.button == PointerEventData.InputButton.Left) Dismiss(); }
@@ -25,7 +25,7 @@ public sealed class TaskResultNotice : MonoBehaviour, IPointerClickHandler
         if (elapsed >= 4f) { Dismiss(); return; }
         float t = Mathf.Clamp01(elapsed / .28f);
         float ease = 1 - Mathf.Pow(1 - t, 3);
-        transform.localScale = restingScale * Mathf.Lerp(.12f, 1, ease);
+        transform.localScale = restingScale * (UiMotion.Reduced?1:Mathf.Lerp(.12f, 1, ease));
         fade.alpha = Mathf.Clamp01(t * 3) * Mathf.Clamp01((4f - elapsed) / .3f);
     }
     void OnApplicationFocus(bool focused) { if (!focused) Dismiss(); }

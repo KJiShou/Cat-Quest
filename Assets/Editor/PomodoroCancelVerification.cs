@@ -87,6 +87,8 @@ public static class PomodoroCancelVerification
         UnityEngine.Object.FindFirstObjectByType<TutorialController>().Skip();
         manager.PlayerData.experience=100;manager.SaveData();
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();Check(nav.ShowPage(MainMenuPage.Focus),"Focus unlocked");var panel=nav.pages[(int)MainMenuPage.Focus].GetComponent<FocusPanelUI>();var focus=panel.Controller;
+        var sharedPrompt=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Focus/FocusCancelConfirmation.prefab").GetComponent<FocusCancelConfirmation>();
+        Check(sharedPrompt&&!sharedPrompt.rewardPreview&&!sharedPrompt.previewExperience&&!sharedPrompt.previewFish&&!sharedPrompt.previewTickets&&!sharedPrompt.previewGoal,"Shared Companion confirmation keeps its preview fields unbound");
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);yield return .4;
             var before=SessionState.GetBool(Flag+".before",false);
@@ -139,6 +141,7 @@ public static class PomodoroCancelVerification
             focus.Configure(new FocusSessionOptions{mode=FocusTimerMode.Pomodoro,focusMinutes=25,restMinutes=5});panel.start.onClick.Invoke();for(int i=0;i<300;i++)focus.Advance(1);
             Check(!panel.endEarly.gameObject.activeSelf&&panel.cancel.gameObject.activeSelf,"Pomodoro only Cancel");panel.endEarly.onClick.Invoke();Check(focus.Phase==FocusPhase.Focusing,"Hidden early command rejected");
             panel.cancel.onClick.Invoke();var dialog=panel.cancelConfirmation;Check(dialog.IsOpen&&focus.Phase==FocusPhase.Focusing,"Cancel requires confirmation");Check(EventSystem.current.currentSelectedGameObject==dialog.keepFocusing.gameObject,"Safe default focus");
+            Check(dialog.rewardPreview&&!dialog.rewardPreview.activeSelf&&dialog.info.gameObject.activeInHierarchy&&dialog.info.text=="No rewards will be granted.","Cancel preserves the visible no-rewards message and hides the End Early estimate");
             yield return .4;Capture("confirmation-"+width);yield return .2;dialog.keepFocusing.onClick.Invoke();Check(!dialog.IsOpen&&focus.Phase==FocusPhase.Focusing,"Keep focus preserves session");
             panel.cancel.onClick.Invoke();dialog.backdrop.onClick.Invoke();Check(focus.Phase==FocusPhase.Focusing,"Backdrop dismiss");panel.cancel.onClick.Invoke();
             int xp=service.Snapshot.experience,fish=service.Snapshot.fishCoins,tickets=service.Snapshot.tickets;

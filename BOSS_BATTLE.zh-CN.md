@@ -38,7 +38,9 @@
 
 设计参考为 [Sakurai 的重要时刻停顿](https://www.youtube.com/watch?v=OdVkEOzdCPw)、[八种 Hit Stop 技巧](https://www.youtube.com/watch?v=tycbMSjDDLg)及[打击感研究](https://faculty.washington.edu/zkwen/articles/lin22features.pdf)。具体时长强度为本项目选择，不声称来自论文数值。
 
-Stage 宝箱在 pendingClaims 大于零时显示轻量金星，不拦点击，关面板或领完立即停止。胜利保留 Victory 标题，仅在正值时显示已提交 EXP 和鱼币图标数额，零值条隐藏，不显示熟练度或下一关文本。共用 RewardFlightUI 从各自数额飞往对应顶栏，失败无飞行，重试重复不能多付。
+Stage 宝箱在 pendingClaims 大于零时显示轻量金星，不拦点击，关面板或领完立即停止。胜利保留 Victory 标题，仅在正值时显示已提交 EXP 和鱼币图标数额，各自零值条隐藏。共用 RewardFlightUI 在成功保存后从数额飞往对应顶栏，失败无飞行，重试重复不能多付。
+
+胜负结果仅保留 Continue 按钮，键盘默认选中该按钮。胜利显示已提交的 EXP／鱼币奖励，额外说明隐藏；战败显示“Train and try again”和“No rewards · Progress kept”。Continue 沿用退出／重置转场并返回 Challenge，不自动入场或领取装备；Master 胜利在该转场中选择已保存的下一关。熟练度进度和领取仍位于关卡选择器，保留 5／10／15 胜固定解锁武器／护甲／头饰。结果页不显示新增引导、熟练度条或次要目的地按钮。
 
 ## Master 与熟练度
 
