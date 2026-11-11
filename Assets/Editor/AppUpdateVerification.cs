@@ -33,6 +33,18 @@ public static class AppUpdateVerification
             capture("updates-settings-"+size.x);yield return .2;
             click(panel.entry);yield return .2;
             Check(panel.IsOpen && !panel.settingsContent.interactable,"Update modal did not isolate Settings");
+            var dimFeedback=panel.backdrop.GetComponent<JuicyButton>();
+            Check(dimFeedback,"Backdrop feedback coverage missing");
+            var dimPointer=new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left};
+            dimFeedback.OnPointerEnter(dimPointer);yield return .2;
+            Check(dimFeedback.DrawScale==Vector2.one && dimFeedback.DrawOffset==0,"Backdrop moved on hover");
+            dimFeedback.OnPointerDown(dimPointer);yield return .2;
+            Check(dimFeedback.DrawScale==Vector2.one && dimFeedback.DrawOffset==0,"Backdrop shrank on press");
+            capture("updates-backdrop-pressed-"+size.x);yield return .1;
+            dimFeedback.OnPointerUp(dimPointer);dimFeedback.OnPointerExit(dimPointer);
+            dimFeedback.OnSelect(new BaseEventData(EventSystem.current));yield return .2;
+            Check(dimFeedback.DrawScale==Vector2.one && dimFeedback.DrawOffset==0,"Backdrop moved on keyboard selection");
+            dimFeedback.OnDeselect(new BaseEventData(EventSystem.current));
             capture("updates-current-"+size.x);yield return .2;
             var vendor=UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_DemoScene_Panels/Light/Popup_Update.prefab"),settings.transform.parent);
             vendor.transform.SetAsLastSibling();yield return .2;capture("updates-reference-"+size.x);yield return .2;UnityEngine.Object.Destroy(vendor);

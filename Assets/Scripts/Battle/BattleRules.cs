@@ -41,8 +41,10 @@ public static class BattleRules
         if(id<1||id>3||master<0) throw new ArgumentException("Invalid boss or stage.");
         if(master==0) return id==1 ? new CombatStats(170,13,8,1) : id==2 ? new CombatStats(340,25,15,1) : new CombatStats(650,40,24,1.1);
         if(id!=1+(master-1)%3) throw new ArgumentException("Master boss does not match stage.");
-        int cycle=(master-1)/3;
-        return new CombatStats(Round((450+50*id)*(1+.2*cycle)),Round((34+2*id)*(1+.1*cycle)),Round((19+id)*(1+.1*cycle)),1.08+.02*id+.02*cycle);
+        // Start just above normal Demon; grow continuously across boss rotations.
+        // Keep the former Cyclope per-cycle growth without resetting at each new cycle.
+        double progress=(master-1)/3.0;
+        return new CombatStats(Round(680+100*progress),Round(41+3.6*progress),Round(25+2*progress),1.12+.02*progress);
     }
     public static int Damage(CombatStats attacker,CombatStats defender) => Math.Max(1,Round(attacker.atk-.5*defender.def));
 }

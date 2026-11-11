@@ -18,7 +18,7 @@ public sealed class LevelUpCelebrationUI : MonoBehaviour
     readonly Queue<TaskService.LevelUpReward> pending = new Queue<TaskService.LevelUpReward>();
     TaskService service;
     GameObject previousSelection;
-    float elapsed, queuedAt;
+    float elapsed;
     Vector3 badgeScale;
     Quaternion rayRotation;
     bool showing;
@@ -41,7 +41,6 @@ public sealed class LevelUpCelebrationUI : MonoBehaviour
     }
     void Enqueue(TaskService.LevelUpReward reward)
     {
-        if(pending.Count==0) queuedAt=Time.unscaledTime;
         pending.Enqueue(reward);
     }
     void Update()
@@ -57,7 +56,8 @@ public sealed class LevelUpCelebrationUI : MonoBehaviour
             footer.sizeDelta=new Vector2(0,Mathf.Max(0,top-panelRect.rect.yMin));
         }
         if(!showing) {
-            if(pending.Count==0 || (rewardFlight && rewardFlight.IsAnimating && Time.unscaledTime-queuedAt<4)) return;
+            // The event already follows persistence. Reward flights must not delay it.
+            if(pending.Count==0) return;
             var reward=pending.Dequeue();
             level.text=reward.toLevel.ToString();
             info.text=reward.toLevel==reward.fromLevel+1 ? "You reached a new level!" : $"Level {reward.fromLevel} → {reward.toLevel}";

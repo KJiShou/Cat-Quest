@@ -13,13 +13,17 @@ public sealed class JuicyButton : MonoBehaviour, IPointerEnterHandler, IPointerE
     Vector2 scale=Vector2.one,velocity;
     bool hovered,pressed,selected;
     float submitUntil;
-    bool taskRow;
+    bool taskRow, stationaryBackdrop;
     JuicyButtonMesh[] meshes;
     public Vector2 DrawScale => scale;
     public float DrawOffset {get;private set;}
     public float DrawShine {get;private set;}
     void Awake(){
         button=GetComponent<Button>();
+        // These authored dismissal surfaces fill the viewport. They keep Button's
+        // input handling, but must never shrink or shift like an action button.
+        stationaryBackdrop=name=="ScreenDim" || name=="Backdrop" || name=="HelpBackdrop";
+        if(stationaryBackdrop)return;
         taskRow=GetComponent<DashboardTaskRow>();
         if(!visual){
             var effects=new System.Collections.Generic.List<JuicyButtonMesh>();
@@ -39,6 +43,7 @@ public sealed class JuicyButton : MonoBehaviour, IPointerEnterHandler, IPointerE
     }
     void Update()
     {
+        if(stationaryBackdrop)return;
         var oldScale=scale;float oldOffset=DrawOffset,oldShine=DrawShine;
         bool active=button.IsInteractable();
         bool down=active&&(pressed||Time.unscaledTime<submitUntil);

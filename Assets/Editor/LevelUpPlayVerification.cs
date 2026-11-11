@@ -111,7 +111,10 @@ public static class LevelUpPlayVerification
         Time.timeScale=0;
         Check(service.Upsert(new QuestTask{title="Level-five test",difficulty=TaskDifficulty.Hard},null,out var id)&&service.Complete(id,true),service.LastError);
         int balance=service.Snapshot.fishCoins;
-        for(int i=0;i<100&&!ui.IsShowing;i++)yield return .05;
+        var rewardFlight=UnityEngine.Object.FindFirstObjectByType<RewardFlightUI>();
+        Check(rewardFlight && rewardFlight.IsAnimating,"Timing regression requires active reward feedback");
+        yield return .05;
+        Check(ui.IsShowing,"Committed level-up was delayed by reward feedback");
         Check(ui.IsShowing&&ui.level.text=="5"&&ui.fish.text=="+25"&&ui.tickets.text=="+1"&&ui.ticketCard.activeSelf,"Milestone display");
         for(int frame=0;frame<20;frame++){Capture("intro-"+frame.ToString("00"));yield return .05;}
         Check(ui.continueButton.interactable&&Math.Abs(ui.badge.localScale.x-1)<.001&&ui.fade.alpha==1,"Unscaled animation did not settle");

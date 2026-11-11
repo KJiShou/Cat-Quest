@@ -70,8 +70,35 @@ public static class BattleVerification
         Check(service.BeginBattle(1,1,out a),"Master entry");xp=m.Data.experience;int coins=m.Data.fishCoins;service.ResolveBattle(a.id,BattleOutcome.Victory);
         Check(m.Data.masterStage==2&&m.Data.experience==xp+60&&m.Data.fishCoins==coins+30,"Master first reward");
         Check(!service.BeginBattle(1,1,out _),"Master stage cannot repay");
-        var ms=BattleRules.Boss(1,4);Check(ms.hp==600&&ms.atk==40&&ms.def==22&&Math.Abs(ms.aspd-1.12)<1e-8,"Master scaling");
+        var ms=BattleRules.Boss(1,4);Check(ms.hp==780&&ms.atk==45&&ms.def==27&&Math.Abs(ms.aspd-1.14)<1e-8,"Master scaling");
+        VerifyMasterBalance();
         var old=JsonUtility.FromJson<PlayerData>("{\"version\":3,\"username\":\"Existing\",\"experience\":123,\"tickets\":4}");PlayerDataStore.Normalize(old);
         Check(old.version==6&&old.experience==123&&old.tickets==4&&old.bossProgress.Count==3&&old.masterStage==1,"Old save migration");
+    }
+    static void VerifyMasterBalance()
+    {
+        var previous=BattleRules.Boss(3);
+        for(int stage=1;stage<=300;stage++) {
+            var current=BattleRules.Boss(1+(stage-1)%3,stage);
+            Check(current.Valid&&current.hp>previous.hp&&current.atk>=previous.atk
+                &&current.def>=previous.def&&current.aspd>=previous.aspd,
+                "Master difficulty regressed at stage "+stage);
+            previous=current;
+        }
+        // A near-threshold normal clear must face a small, achievable next step.
+        foreach(int level in new[]{22,23}) {
+            var data=new PlayerData {experience=Xp(level)};
+            foreach(EquipmentSlot slot in Enum.GetValues(typeof(EquipmentSlot))) {
+                string id="boss2-"+slot.ToString().ToLowerInvariant();
+                data.equipment.Add(new EquipmentItem {id=id,level=level});
+                EquipmentRules.SetEquipped(data,slot,id);
+            }
+            var cat=EquipmentRules.Calculate(data).Final;
+            var normal=new BattleSimulation(cat,BattleRules.Boss(3));normal.Advance(120);
+            var master=new BattleSimulation(cat,BattleRules.Boss(1,1));master.Advance(120);
+            Check(normal.Outcome==BattleOutcome.Victory,"Orc set normal clear baseline");
+            Check(master.Outcome==(level==22?BattleOutcome.Defeat:BattleOutcome.Victory),
+                "Master entry should require one more level than the normal clear baseline");
+        }
     }
 }
