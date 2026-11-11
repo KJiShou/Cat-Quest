@@ -100,6 +100,7 @@ public static class BossRewardVerification
             var camera=panel.arena.StageCamera;float size=camera.orthographicSize,fov=camera.fieldOfView;
             float timeScale=Time.timeScale;int xp=service.Snapshot.experience,tickets=service.Snapshot.tickets;
             Capture("death-before-"+width+"-"+boss);yield return .1;
+            var victoryPosition=actors.Cat.position;
             panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);
             Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Victory,"Prepared victory");
             int awarded=service.Snapshot.experience;
@@ -110,10 +111,17 @@ public static class BossRewardVerification
             Check(!flights.GetComponentsInChildren<Image>().Any(i=>i.name=="Reward Icon"&&i.gameObject.activeSelf),"Rewards wait for banner");
             // A short sequence of actual rendered frames, rather than a single pose.
             for(int frame=0;frame<10;frame++){
+                if(actors.IsFinishingVictory){
+                    Check(Vector3.Distance(actors.Cat.position,victoryPosition)<.001f,"Cat waits in place while boss falls");
+                    Check(!actors.Cat.GetComponentInChildren<Animator>().GetCurrentAnimatorStateInfo(0).IsName("Run"),"Cat cannot run during boss death");
+                }
                 Capture("death-motion-"+width+"-"+boss+"-"+frame.ToString("00"));yield return .08;
             }
             yield return 1.1;
             Check(panel.resultPanels[0].activeSelf&&!actors.IsFinishingVictory,"Banner follows bounded death");
+            Check(actors.Cat.position.x>victoryPosition.x,"Cat runs away after boss falls");
+            var deathState=actors.Boss.GetComponentInChildren<Animator>().GetCurrentAnimatorStateInfo(0);
+            Check(deathState.IsName("Die")&&deathState.normalizedTime>=1,"Boss death clip completes before departure");
             Check(Mathf.Approximately(camera.orthographicSize,size)&&Mathf.Approximately(camera.fieldOfView,fov)&&Time.timeScale==timeScale,"Projection restored; global time unchanged");
             Check(actors.Boss.GetComponentsInChildren<SpriteRenderer>().All(r=>r.color.a<.01f),"Boss remains faded behind result");
             Check(panel.bossValue.text.StartsWith("0/"),"Dead boss HP stays zero");

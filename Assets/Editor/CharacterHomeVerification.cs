@@ -75,7 +75,8 @@ public static class CharacterHomeVerification
             Require(home.GetComponentsInChildren<EquipmentStatsUI>(true).Length == 1, "Cat Home stats must exist before Play Mode.");
             foreach (var page in roots.SelectMany(r => r.GetComponentsInChildren<EquipmentPageUI>(true)))
             {
-                Require(page.GetComponentsInChildren<EquipmentItemDetailUI>(true).Length == 1, "Equipment details must exist before Play Mode.");
+                var details=page.GetComponentsInChildren<EquipmentItemDetailUI>(true).Where(d=>!d.GetComponentInParent<LootShopUI>(true)).ToArray();
+                Require(details.Length == 1 && new SerializedObject(page).FindProperty("itemDetail").objectReferenceValue == details[0], "Page-owned equipment detail must be authored and bound before Play Mode; page="+page.name+", details="+details.Length);
                 Require(page.transform.Find("ItemModal") && page.transform.Find("ConfirmEquipment"), "Equipment dialogs must be authored objects.");
                 foreach (var child in page.GetComponentsInChildren<Transform>(true))
                     Require(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(child.gameObject) == 0, "Missing UI script: " + child.name);

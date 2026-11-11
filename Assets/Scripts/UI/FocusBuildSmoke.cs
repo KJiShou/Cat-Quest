@@ -134,7 +134,7 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                         var bossPage=navigation.pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>();
                         bossPage.action.onClick.Invoke();bossPage.confirm.onClick.Invoke();
                         var latest=GameDataManager.Instance.PlayerData.battles.LastOrDefault();
-                        if(latest!=null){var expected=new BattleSimulation(latest.cat,latest.boss);expected.Advance(120);expectedBattleOutcome=expected.Outcome.ToString();}
+                        if(latest!=null){var expected=new BattleSimulation(latest);expected.Advance(120);expectedBattleOutcome=expected.Outcome.ToString();}
                         break;
                     case "boss-confirm-again":navigation.pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>().confirm.onClick.Invoke();break;
                     case "boss-skip":navigation.pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>().SkipBattle();break;

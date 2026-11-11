@@ -9,6 +9,9 @@ public sealed class BossBattleActors : MonoBehaviour
     public RuntimeAnimatorController catController, bossController;
     public GameObject orcPrefab, demonPrefab;
     public GameObject[] weaponSlashPrefabs;
+    public WeaponAttackArt weaponAttackArt;
+    readonly WeaponAttackEffect weaponEffect=new WeaponAttackEffect();
+    int weaponStyle;
     GameObject slash;
     ParticleSystem[] slashParticles;
     int slashTier;
@@ -192,9 +195,11 @@ public sealed class BossBattleActors : MonoBehaviour
     public void StartCombat(CombatStats catStats,CombatStats bossStats,string weaponId=null)
     {
         ClearReactions();combatActive=true;
+        weaponStyle=WeaponAttackArt.Style(weaponId);
+        catAnimator.runtimeAnimatorController=weaponStyle!=0&&weaponAttackArt?weaponAttackArt.unarmedCombat:catController;
         ConfigureSlash(weaponId,(float)catStats.aspd);
         // One whole attack cycle per 1 / ASPD seconds. Impact sits halfway through a cycle.
-        Play(catAnimator,"Attack",AttackLength(catAnimator)*(float)catStats.aspd,.5f);
+        Play(catAnimator,"Attack",catAnimator.runtimeAnimatorController.animationClips.First(c=>c.name.Contains(weaponStyle!=0&&weaponAttackArt?"pull lever":"slash")).length*(float)catStats.aspd,.5f);
         Play(bossAnimator,"Attack",AttackLength(bossAnimator)*(float)bossStats.aspd,.5f);
     }
     public void Hit(bool catAttacks)
@@ -233,8 +238,9 @@ public sealed class BossBattleActors : MonoBehaviour
     void ConfigureSlash(string weaponId,float attackSpeed){
         int tier=EquipmentRules.Find(weaponId)?.Tier??1;
         slashSpeed=Mathf.Max(1,attackSpeed);
-        if(slash&&slashTier==tier)return;
+        if(slash&&slashTier==tier&&weaponStyle==0)return;
         ClearSlash();slashTier=tier;
+        if(weaponStyle!=0&&weaponAttackArt){weaponEffect.Configure(weaponAttackArt.Effect(weaponStyle),stage,weaponStyle,catRenderers[0]);return;}
         if(!stage||weaponSlashPrefabs==null||weaponSlashPrefabs.Length<tier||!weaponSlashPrefabs[tier-1])return;
         slash=Instantiate(weaponSlashPrefabs[tier-1],stage);slash.name="Weapon Slash Grade "+tier;
         slashParticles=slash.GetComponentsInChildren<ParticleSystem>(true);
@@ -243,7 +249,9 @@ public sealed class BossBattleActors : MonoBehaviour
         foreach(var renderer in slash.GetComponentsInChildren<ParticleSystemRenderer>(true)){if(reference)renderer.sortingLayerID=reference.sortingLayerID;renderer.sortingOrder=Mathf.Max(catRenderers.Max(r=>r.sortingOrder),bossRenderers.Max(r=>r.sortingOrder))+2;}
     }
     void PlaySlash(){
-        if(!slash||slashParticles==null||!Ready)return;
+        if(!Ready)return;
+        if(weaponStyle!=0){weaponEffect.Play(catRenderers[0].bounds,bossRenderers[0].bounds,slashSpeed);return;}
+        if(!slash||slashParticles==null)return;
         var bounds=catRenderers[0].bounds;
         foreach(var renderer in catRenderers)bounds.Encapsulate(renderer.bounds);
         var point=bounds.center;point.x=Mathf.Lerp(bounds.center.x,bossRenderers[0].bounds.center.x,.6f);
@@ -251,10 +259,10 @@ public sealed class BossBattleActors : MonoBehaviour
         slash.transform.localScale=Vector3.one*(Mathf.Max(.5f,bounds.size.y*1.4f)*.65f);
         foreach(var ps in slashParticles){ps.Stop(false,ParticleSystemStopBehavior.StopEmittingAndClear);var main=ps.main;main.simulationSpeed=slashSpeed;ps.Play(false);}
     }
-    void StopSlash(){if(slashParticles!=null)foreach(var ps in slashParticles)if(ps)ps.Stop(false,ParticleSystemStopBehavior.StopEmittingAndClear);}
-    void ClearSlash(){StopSlash();if(slash)Destroy(slash);slash=null;slashParticles=null;}
+    void StopSlash(){weaponEffect.Stop();if(slashParticles!=null)foreach(var ps in slashParticles)if(ps)ps.Stop(false,ParticleSystemStopBehavior.StopEmittingAndClear);}
+    void ClearSlash(){weaponEffect.Clear();StopSlash();if(slash)Destroy(slash);slash=null;slashParticles=null;}
     void OnDisable(){combatActive=false;ClearReactions();StopSlash();}
-    void OnApplicationFocus(bool focus){if(!focus){if(victoryPlaying)Finish(BattleOutcome.Victory);else ClearReactions();}}
+    void OnApplicationFocus(bool focus){if(!focus){StopSlash();if(victoryPlaying)Finish(BattleOutcome.Victory);else ClearReactions();}}
     void OnDestroy(){ClearSlash();}
     public void Finish(BattleOutcome outcome)
     {

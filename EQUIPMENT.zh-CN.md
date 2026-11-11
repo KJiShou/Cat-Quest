@@ -80,3 +80,9 @@ EquipmentClaimUI 保留一排固定物品宝箱，不保留下方选择行。蓝
 | `Temp/verify-chest-reward.request` | 隔离领取悬停、固定边界、旧装备补齐、揭示序列、键盘、失败重试重复、暂停和中断清理 |
 
 所有检查使用独立存档，不修改玩家数据。已有报告不是当前版本的验证证明。
+
+## 装备商城（2026-11-11）
+
+Cat Home 增加 Shop 入口和 18 件宝箱装备。Legendary / Ultra Rare / Rare 的固定独立概率为 1% / 10% / 89%；单抽、十连分别使用 1 / 10 张 Boss Ticket，无保底。重复分别兑换 300 / 25 / 5 Fish。金色与钢制护手属于武器槽。沿用基础属性与升级规则，不触发原有 Boss 套装或精通奖励；新系列能力与武器专属攻击方式留待后续。背包在超过 24 件时调整为五行，显示全部 27 件装备。研究、版本 6 备份策略与验证方法见 [商城说明](SHOP.zh-CN.md)。
+
+武器表现：金色／钢制拳套使用 ninja-pull lever 动作和 HitAttack_Yellow_3 命中特效；法杖使用同一无剑施法动作，搭配 BeamEffect6_Yellow。其他武器保留原有挥剑动作／特效。Boss 与 Focus 训练共用 WeaponAttackArt，训练随装备切换，Companion 仅接收装备 ID。特效不改变伤害或专注奖励。

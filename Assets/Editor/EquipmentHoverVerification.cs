@@ -91,6 +91,7 @@ public static class EquipmentHoverVerification
         var page=nav.pages[(int)MainMenuPage.CatHome].GetComponent<EquipmentPageUI>();
         Check(manager.SavePath.Contains("EquipmentHoverVerification"),"Must use isolated save");
         if(step==0){
+            UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
             manager.PlayerData.experience=2025;manager.PlayerData.fishCoins=1000;
             manager.PlayerData.rewardDays.Add(new RewardDay{day="2026-10-24",questsClaimed=true});
             foreach(var boss in manager.PlayerData.bossProgress){boss.wins=15;boss.pendingClaims=3;}
@@ -124,6 +125,7 @@ public static class EquipmentHoverVerification
                 Check(detail.itemName.text==EquipmentRules.Find("boss1-weapon").Name&&detail.currentValue.text==EquipmentRules.Effect(EquipmentRules.Find("boss1-weapon"),1),"Hover content differs from item data");
                 Check(!detail.GetComponent<GraphicRaycaster>().enabled&&!detail.GetComponent<CanvasGroup>().blocksRaycasts,"Tooltip blocks pointer");
                 Check(!detail.equip.gameObject.activeSelf&&!detail.upgrade.gameObject.activeSelf&&!detail.close.gameObject.activeSelf,"Hover shows action buttons");
+                Check(string.IsNullOrEmpty(detail.status.text)&&!detail.upgradeCaption.activeSelf&&!detail.price.gameObject.activeInHierarchy,"Hover reveals upgrade text or Fish cost");
                 Check(!detail.transform.Find("ScreenDim").GetComponent<Image>().enabled,"Hover dimmed the page");
                 Bounds(detail);TextFits(detail);Capture("hover-inventory-1920");
             }
@@ -139,6 +141,7 @@ public static class EquipmentHoverVerification
                 Check(detail.transform.Find("ScreenDim").GetComponent<Image>().enabled,"Click did not restore backdrop");
                 Check(detail.card.anchoredPosition==Vector2.zero&&detail.equip.gameObject.activeSelf&&detail.close.gameObject.activeSelf,"Click did not restore card/actions");
                 Check(events.currentSelectedGameObject.transform.IsChildOf(detail.transform),"Click modal lost keyboard focus");
+                Check(detail.upgrade.gameObject.activeInHierarchy&&detail.price.text=="15 Fish","Click detail retains upgrade cost");
                 Capture("click-after-hover-1920");
             }
             if(step==7){detail.close.onClick.Invoke();target.OnPointerEnter(pointer);target.OnPointerExit(pointer);Check(!detail.gameObject.activeSelf,"Pointer exit did not hide preview");}

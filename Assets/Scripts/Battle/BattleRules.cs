@@ -23,6 +23,7 @@ public sealed class BattleAttempt
     public string id, startedUtc, completedUtc;
     public int bossId, masterStage, experience, fishCoins;
     public CombatStats cat, boss;
+    public int equipmentAbilityVersion;
     public List<EquipmentItem> equippedEquipment = new List<EquipmentItem>();
     public BattleOutcome outcome;
 }
@@ -38,7 +39,7 @@ public static class BattleRules
     public static CombatStats Boss(int id,int master=0)
     {
         if(id<1||id>3||master<0) throw new ArgumentException("Invalid boss or stage.");
-        if(master==0) return id==1 ? new CombatStats(90,8,5,.9) : id==2 ? new CombatStats(220,18,10,1) : new CombatStats(450,35,18,1.1);
+        if(master==0) return id==1 ? new CombatStats(170,13,8,1) : id==2 ? new CombatStats(340,25,15,1) : new CombatStats(650,40,24,1.1);
         if(id!=1+(master-1)%3) throw new ArgumentException("Master boss does not match stage.");
         int cycle=(master-1)/3;
         return new CombatStats(Round((450+50*id)*(1+.2*cycle)),Round((34+2*id)*(1+.1*cycle)),Round((19+id)*(1+.1*cycle)),1.08+.02*id+.02*cycle);
@@ -47,10 +48,10 @@ public static class BattleRules
 }
 public readonly struct BattleHit
 {
-    public readonly bool catAttacks;
+    public readonly bool catAttacks, critical, blocked;
     public readonly int damage, catHp, bossHp;
     public readonly double time;
-    public BattleHit(bool cat,int damage,int catHp,int bossHp,double time) {catAttacks=cat;this.damage=damage;this.catHp=catHp;this.bossHp=bossHp;this.time=time;}
+    public BattleHit(bool cat,int damage,int catHp,int bossHp,double time,bool critical=false,bool blocked=false) {this.critical=critical;this.blocked=blocked;catAttacks=cat;this.damage=damage;this.catHp=catHp;this.bossHp=bossHp;this.time=time;}
 }
 // Integer attack counters avoid cumulative timer drift. Rendering never decides damage.
 public sealed class BattleSimulation
@@ -61,6 +62,27 @@ public sealed class BattleSimulation
     public double Elapsed {get;private set;}
     public BattleOutcome Outcome {get;private set;} = BattleOutcome.Running;
     int catCount=1,bossCount=1;
+    bool criticalEnabled,guardEnabled,piercingEnabled,burstEnabled;
+    uint randomState;
+    public BattleSimulation(BattleAttempt attempt):this(attempt.cat,attempt.boss){
+        if(attempt.equipmentAbilityVersion<1)return;
+        foreach(var item in attempt.equippedEquipment ?? new List<EquipmentItem>()){
+            var ability=EquipmentRules.Ability(EquipmentRules.Find(item.id));
+            criticalEnabled|=ability==EquipmentAbility.GauntletCritical;
+            guardEnabled|=ability==EquipmentAbility.ArmourGuard;
+            piercingEnabled|=attempt.equipmentAbilityVersion>=2&&ability==EquipmentAbility.SwordPiercing;
+            burstEnabled|=attempt.equipmentAbilityVersion>=2&&ability==EquipmentAbility.StaffBurst;
+        }
+        // Stable snapshot seed: neither frame timing nor a new request ID changes outcomes.
+        randomState=2166136261;
+        void Mix(long value){unchecked{for(int i=0;i<8;i++){randomState=(randomState^(byte)value)*16777619;value>>=8;}}}
+        foreach(var stats in new[]{Cat,Boss}){Mix(stats.hp);Mix(BitConverter.DoubleToInt64Bits(stats.atk));Mix(BitConverter.DoubleToInt64Bits(stats.def));Mix(BitConverter.DoubleToInt64Bits(stats.aspd));}
+        Mix(criticalEnabled?1:0);Mix(guardEnabled?1:0);if(randomState==0)randomState=1;
+    }
+    bool Roll(int chance){
+        uint value;do{unchecked{randomState^=randomState<<13;randomState^=randomState>>17;randomState^=randomState<<5;value=randomState;}}while(value>=4294967200u);
+        return value%100<chance;
+    }
     public BattleSimulation(CombatStats cat,CombatStats boss)
     {
         Cat=cat;Boss=boss;CatHp=cat.hp;BossHp=boss.hp;
@@ -76,11 +98,15 @@ public sealed class BattleSimulation
             bool cat=ct<=bt+1e-9;
             double t=cat?ct:bt;
             if(t>end+1e-9) break;
-            int damage=cat?BattleRules.Damage(Cat,Boss):BattleRules.Damage(Boss,Cat);
+            var defender=cat?Boss:Cat;if(cat&&piercingEnabled)defender.def*=.8;
+            int damage=BattleRules.Damage(cat?Cat:Boss,defender);
+            bool critical=cat&&((criticalEnabled&&Roll(20))||(burstEnabled&&catCount%5==0)),blocked=!cat&&guardEnabled&&Roll(10);
+            if(critical)damage=(int)Math.Min(int.MaxValue,(long)damage*2);
+            if(blocked)damage=0;
             if(cat) {catCount++;BossHp=Math.Max(0,BossHp-damage);} else {bossCount++;CatHp=Math.Max(0,CatHp-damage);}
             Elapsed=t;
             if(BossHp==0) Outcome=BattleOutcome.Victory; else if(CatHp==0) Outcome=BattleOutcome.Defeat;
-            hit?.Invoke(new BattleHit(cat,damage,CatHp,BossHp,t));
+            hit?.Invoke(new BattleHit(cat,damage,CatHp,BossHp,t,critical,blocked));
         }
         if(Outcome==BattleOutcome.Running) {Elapsed=end;if(end>=120) Outcome=BattleOutcome.Error;}
     }

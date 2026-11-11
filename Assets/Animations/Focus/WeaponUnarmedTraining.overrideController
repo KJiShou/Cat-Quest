@@ -1,0 +1,15 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!221 &22100000
+AnimatorOverrideController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: WeaponUnarmedTraining
+  m_Controller: {fileID: 9100000, guid: ef3de2f7c77d9a84d86fc59c354dccd0, type: 2}
+  m_Clips:
+  - m_OriginalClip: {fileID: 7400000, guid: 407d64c52b7ff0142b9f84d877cd0a09, type: 2}
+    m_OverrideClip: {fileID: 7400000, guid: fce7cbd1186aefe4e85123e9d9e7f13e, type: 2}
+  - m_OriginalClip: {fileID: 7400000, guid: 21f7615c53979854f860f4f582d27ea6, type: 2}
+    m_OverrideClip: {fileID: 7400000, guid: 051e4e8798392334e983eef738f8837c, type: 2}

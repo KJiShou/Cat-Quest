@@ -28,6 +28,7 @@ public sealed partial class TaskService
     {
         var error=EquipmentAccessError();if(error!=null)return error;
         var def=EquipmentRules.Find(itemId);if(def==null)return "Unknown equipment.";
+        if(def.IsLoot)return "Available from the equipment chest in Shop.";
         if(store.Data.equipment.Any(i=>i.id==itemId))return "This component is already owned.";
         var progress=store.Data.bossProgress.Single(p=>p.bossId==def.Tier);
         int required=5*((int)def.Slot+1);
@@ -54,11 +55,14 @@ public sealed partial class TaskService
         var preview=EquipmentSnapshot;
         var options=Enumerable.Range(0,3).Select(slot=>preview.equipment.Where(i=>(int)EquipmentRules.Find(i.id).Slot==slot).Select(i=>i.id).Prepend((string)null).ToArray()).ToArray();
         string[] best=Enumerable.Range(0,3).Select(i=>EquipmentRules.Equipped(preview,(EquipmentSlot)i)).ToArray();
-        double power=EquipmentRules.Calculate(preview).Final.Power;
+        int stage=MasterStage>0&&BossUnlockError(1+(MasterStage-1)%3,MasterStage)==null?MasterStage:0;
+        int bossId=stage>0?1+(stage-1)%3:BossUnlockError(3)==null?3:BossUnlockError(2)==null?2:1;
+        var target=BattleRules.Boss(bossId,stage);
+        double power=EquipmentRules.AutoEquipScore(preview,target);
         foreach(var weapon in options[0])foreach(var body in options[1])foreach(var head in options[2]){
             EquipmentRules.SetEquipped(preview,EquipmentSlot.Weapon,weapon);EquipmentRules.SetEquipped(preview,EquipmentSlot.Body,body);EquipmentRules.SetEquipped(preview,EquipmentSlot.Head,head);
-            double candidate=EquipmentRules.Calculate(preview).Final.Power;
-            if(candidate>power){power=candidate;best=new[]{weapon,body,head};}
+            double candidate=EquipmentRules.AutoEquipScore(preview,target);
+            if(candidate>power+1e-9){power=candidate;best=new[]{weapon,body,head};}
         }
         return Commit(d=>{for(int i=0;i<3;i++)EquipmentRules.SetEquipped(d,(EquipmentSlot)i,best[i]);});
     }

@@ -171,7 +171,7 @@ public static class TaskSystemVerification
 
     private static void VerifyNewerSaveProtection(string folder)
     {
-        const string future="{\"version\":6,\"username\":\"Future player\",\"tasks\":{\"newSchema\":true}}";
+        const string future="{\"version\":7,\"username\":\"Future player\",\"tasks\":{\"newSchema\":true}}";
         const string supported="{\"version\":5,\"username\":\"Previous player\",\"tagsInitialized\":true}";
         for(int scenario=0;scenario<5;scenario++)
         {
@@ -193,9 +193,9 @@ public static class TaskSystemVerification
         string replaced=Path.Combine(folder,"externally-replaced.json");File.WriteAllText(replaced,supported);
         var existing=new PlayerDataStore(replaced);File.WriteAllText(replaced,future);
         Check(!existing.TrySave(PlayerDataStore.Copy(existing.Data),out _) && File.ReadAllText(replaced)==future && !File.Exists(replaced+".tmp"),"Newer save installed after load was overwritten.");
-        var invalidCandidate=new PlayerData {version=6};
+        var invalidCandidate=new PlayerData {version=7};
         var target=new PlayerDataStore(Path.Combine(folder,"future-candidate.json"));
-        Check(!target.TrySave(invalidCandidate,out _) && invalidCandidate.version==6 && !File.Exists(target.Path),"Newer candidate was normalized or saved.");
+        Check(!target.TrySave(invalidCandidate,out _) && invalidCandidate.version==7 && !File.Exists(target.Path),"Newer candidate was normalized or saved.");
         Check(target.TrySave(new PlayerData(),out _),"Rejected candidate permanently blocked an ordinary new save.");
     }
 
@@ -268,7 +268,7 @@ public static class TaskSystemVerification
 
             string path=Path.Combine(folder,"save.json"); File.WriteAllText(path,"{\"username\":\"Legacy player\"}");
             var disk=new PlayerDataStore(path); var diskService=new TaskService(disk,clock);
-            Check(disk.Data.username=="Legacy player" && disk.Data.version==5,"Username-only migration failed.");
+            Check(disk.Data.username=="Legacy player" && disk.Data.version==6,"Username-only migration failed.");
             Check(diskService.Upsert(Task("Persisted"),null,out var diskId),diskService.LastError);
             var reloaded=new PlayerDataStore(path); Check(reloaded.Data.tasks.Single().id==diskId,"Reload lost tasks or IDs.");
             diskService.Complete(diskId,true);

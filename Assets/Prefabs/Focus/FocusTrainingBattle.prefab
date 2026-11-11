@@ -232,6 +232,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FocusTrainingBattle
   animator: {fileID: 881334270673233110}
+  weaponAttackArt: {fileID: 11400000, guid: f4986fb11cae5714abf20f98caf7d3d3, type: 2}
   previewWithoutFocusSession: 1
 --- !u!114 &5595348158094540569
 MonoBehaviour:

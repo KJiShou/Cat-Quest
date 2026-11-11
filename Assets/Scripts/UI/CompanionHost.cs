@@ -128,6 +128,7 @@ public sealed class CompanionHost : MonoBehaviour
             RefreshAura();
             if (lastSnapshot == null || lastSnapshot.playerName != GameDataManager.Instance.PlayerData.username
                 || lastSnapshot.equipmentAuraPieces != auraPieces || lastSnapshot.equipmentAuraTier != auraTier
+                || lastSnapshot.equippedWeaponId != service.EquippedItem(EquipmentSlot.Weapon)
                 || lastSnapshot.fishCount != focus.SpectatorFishCount) Publish();
             else pipe.Send("pulse");
         }
@@ -162,6 +163,7 @@ public sealed class CompanionHost : MonoBehaviour
             requestId=requestId, accepted=accepted,
             reduceMotion=service.ReduceMotion,
             equipmentAuraTier=auraTier,equipmentAuraPieces=auraPieces,
+            equippedWeaponId=service.EquippedItem(EquipmentSlot.Weapon),
             ownerId=OwnerId,sessionId=focus.SessionId ?? "",
             phase=focus.Phase,mode=focus.Options.mode,elapsedSeconds=focus.ElapsedSeconds,remainingSeconds=focus.RemainingSeconds,fishCount=focus.SpectatorFishCount,
             playerName=GameDataManager.Instance.PlayerData.username,questTitle=focus.Options.questTitle,focusMinutes=focus.Options.focusMinutes,restMinutes=focus.Options.restMinutes,message=focus.Message };

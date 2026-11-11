@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 07fca90725f3ff74ba860a501c68cb6c, type: 3}
+  m_Name: WeaponAttackArt
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponAttackArt
+  unarmedCombat: {fileID: 22100000, guid: b33d7899c27156c4bb284e7bba8158e9, type: 2}
+  unarmedTraining: {fileID: 22100000, guid: aa838d3657a271049abee68d07052265, type: 2}
+  gauntletExplosion: {fileID: 6314779590791898373, guid: e8011f3e530c21c4087342f911af7439, type: 3}
+  staffBeam: {fileID: 6783780528192938894, guid: 7ef20c6c101af4d46906206be7a6ea91, type: 3}

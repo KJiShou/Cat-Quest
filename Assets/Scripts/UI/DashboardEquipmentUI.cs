@@ -4,6 +4,7 @@ using UnityEngine.UI;
 
 public sealed class DashboardEquipmentUI : MonoBehaviour
 {
+    public LootArt lootArt;
     public MainMenuNavigation navigation;
     public Button[] slots;
     public Image[] icons;
@@ -24,6 +25,7 @@ public sealed class DashboardEquipmentUI : MonoBehaviour
             string id=EquipmentRules.Equipped(d,(EquipmentSlot)i);bool owned=d.equipment.Any(x=>x.id==id);
             slots[i].interactable=service.EquipmentUnlocked;icons[i].sprite=owned?equippedIcons[i]:emptySlotIcons[i];icons[i].color=owned?Color.white:new Color32(161,172,198,255);
             int tier=owned?EquipmentRules.Find(id).Tier:0;
+            if(owned&&lootArt&&EquipmentRules.Find(id).IsLoot)icons[i].sprite=lootArt.Icon(id);
             Color grade=tier==1?new Color32(67,184,255,255):tier==2?new Color32(182,112,245,255):new Color32(255,201,65,255);
             slots[i].GetComponent<Image>().color=owned?Color.Lerp(grade,Color.white,.75f):emptyColors[i];
 

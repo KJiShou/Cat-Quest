@@ -21,12 +21,13 @@ public class PlayerData
     }
     public TutorialProgress tutorial;
     public string username;
-    public int version = 5;
+    public int version = 6;
     public AppSettings settings;
     public AccountPreferences account;
     public bool equipmentUnlocked;
     public List<EquipmentItem> equipment = new List<EquipmentItem>();
     public List<EquipmentUpgradeReceipt> equipmentUpgrades = new List<EquipmentUpgradeReceipt>();
+    public List<LootReceipt> lootReceipts = new List<LootReceipt>();
     public string equippedWeaponId, equippedBodyOutfitId, equippedHeadAccessoryId;
     public int masterStage = 1;
     public List<BossProgress> bossProgress = new List<BossProgress>();

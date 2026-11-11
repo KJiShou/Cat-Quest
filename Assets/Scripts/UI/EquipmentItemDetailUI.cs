@@ -11,6 +11,15 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
     public RectTransform card;
     public TMP_Text itemName, tier, level, currentLabel, currentValue, nextValue, setInfo, status, equipLabel, price;
     public Image itemIcon, currentIcon, nextIcon, grade;
+    public Image itemBackground;
+    public TMP_Text abilityText;
+    public Image abilityIcon;
+    public Sprite[] abilityIcons;
+    public void ShowAbility(EquipmentDefinition definition){
+        int ability=(int)EquipmentRules.Ability(definition);
+        if(abilityText){abilityText.text=EquipmentRules.AbilityDescription(definition);abilityText.gameObject.SetActive(ability>0);}
+        if(abilityIcon){abilityIcon.gameObject.SetActive(ability>0);abilityIcon.sprite=ability>0&&abilityIcons!=null&&ability<abilityIcons.Length?abilityIcons[ability]:null;}
+    }
     public Button close, equip, upgrade;
     public GameObject upgradeCaption;
     public Sprite[] tierLabels;
@@ -21,6 +30,7 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
     {
         var accent=tierIndex==1?new Color32(67,164,240,255):tierIndex==2?new Color32(170,100,225,255):new Color32(235,174,42,255);
         grade.sprite=tierLabels[tierIndex-1];grade.color=Color.white;
+        if(itemBackground)itemBackground.color=LootShopUI.Tint(tierIndex);
         tier.color=tierIndex==3?new Color32(113,76,17,255):Color.white;
         setProgress.text=$"{pieces}/3 equipped";
         for(int i=0;i<setProgressPips.Length;i++)setProgressPips[i].color=i<pieces?accent:new Color32(221,226,239,255);

@@ -14,6 +14,7 @@ using UnityEngine;
     public double remainingSeconds;
     public int fishCount, focusMinutes, restMinutes;
     public int equipmentAuraTier, equipmentAuraPieces;
+    public string equippedWeaponId;
     public bool connected = true;
     public FocusPhase Phase => connected ? phase : FocusPhase.Interrupted;
     public int SpectatorFishCount => fishCount;

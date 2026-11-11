@@ -82,7 +82,7 @@ public static class TaskFeedbackVerification
             File.WriteAllText(folder+"/result.txt",DateTime.UtcNow.ToString("O")+" RUNNING");
             if(!before&&!intro)RewardSystemVerification.Run();
             Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(folder+"/save.json"));
-            if(mode=="intro")File.WriteAllText(folder+"/save.json","{\"version\":6,\"username\":\"Future player\"}");
+            if(mode=="intro")File.WriteAllText(folder+"/save.json","{\"version\":7,\"username\":\"Future player\"}");
             EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(intro?"Assets/Scenes/IntroStory.unity":"Assets/Scenes/CharacterHome.unity");
             EditorApplication.isPaused=false;EditorApplication.isPlaying=true;
         }catch(Exception e){Finish("FAIL starting: "+e);}

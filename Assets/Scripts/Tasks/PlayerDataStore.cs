@@ -14,7 +14,7 @@ public interface IPlayerDataStore
 
 public sealed class PlayerDataStore : IPlayerDataStore
 {
-    private const int CurrentVersion = 5;
+    private const int CurrentVersion = 6;
     private const int ParallelWorkMinimumBytes = 128 * 1024;
     [Serializable] private sealed class SaveHeader { public int version; }
     private sealed class ReadValidation
@@ -218,11 +218,14 @@ public sealed class PlayerDataStore : IPlayerDataStore
             byte[] bytes = Encoding.UTF8.GetBytes(json);
             if (browser != null)
             {
-                browser.Commit(json, valid, valid && candidate.tutorial != null && Data.tutorial == null);
+                browser.Commit(json, valid, valid && candidate.tutorial != null && Data.tutorial == null, valid && primaryVersion < 6);
             }
             else
             {
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
+                // Keep the original pre-shop save as well as the rolling atomic backup.
+                if (valid && primaryVersion < 6 && !File.Exists(Path + ".before-shop.bak"))
+                    File.Copy(Path, Path + ".before-shop.bak");
                 // Preserve the pre-tutorial save once, in addition to the rolling atomic backup.
                 if (valid && candidate.tutorial != null && Data.tutorial == null && !File.Exists(Path + ".before-tutorial.bak"))
                     File.Copy(Path, Path + ".before-tutorial.bak");
@@ -255,6 +258,7 @@ public sealed class PlayerDataStore : IPlayerDataStore
     }
     public static void Normalize(PlayerData data)
     {
+        data.lootReceipts ??= new System.Collections.Generic.List<LootReceipt>();
         data.version = CurrentVersion;
         data.settings = AppSettings.Normalize(data.settings);
         data.account = AccountPreferences.Normalize(data.account);

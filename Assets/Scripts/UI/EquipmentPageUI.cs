@@ -10,6 +10,8 @@ using UnityEngine.UI;
 [ExecuteAlways]
 public sealed class EquipmentPageUI : MonoBehaviour
 {
+    public LootArt lootArt;
+    Sprite ItemIcon(EquipmentDefinition def) => def.IsLoot&&lootArt?lootArt.Icon(def.Id):slotIcons[(int)def.Slot];
     public EquipmentItemDetailUI itemDetailPrefab;
     public EquipmentStatsUI statsPrefab;
     public EquipmentInventoryUI inventoryPrefab;
@@ -85,7 +87,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
         notice.text="";
         inventory.autoSelect.interactable=d.equipmentUnlocked&&d.equipment.Count>0&&!service.HasActiveBattle;
         if(service.HasActiveBattle)notice.text="Finish the current battle before changing equipment.";
-        for(int i=0;i<3;i++){var id=EquipmentRules.Equipped(d,(EquipmentSlot)i);var item=d.equipment.FirstOrDefault(x=>x.id==id);slotImages[i].sprite=item==null?emptySlotIcons[i]:slotIcons[i];slotImages[i].color=item==null?new Color32(161,172,198,255):Color.white;slotColors[i]=item==null?Pale:Color.Lerp(Grade(EquipmentRules.Find(id).Tier),Color.white,.75f);slotBackgrounds[i].color=slotColors[i];}
+        for(int i=0;i<3;i++){var id=EquipmentRules.Equipped(d,(EquipmentSlot)i);var item=d.equipment.FirstOrDefault(x=>x.id==id);slotImages[i].sprite=item==null?emptySlotIcons[i]:ItemIcon(EquipmentRules.Find(id));slotImages[i].color=item==null?new Color32(161,172,198,255):Color.white;slotColors[i]=item==null?Pale:Color.Lerp(Grade(EquipmentRules.Find(id).Tier),Color.white,.75f);slotBackgrounds[i].color=slotColors[i];}
         sets.text=string.Join("  ",Enumerable.Range(1,3).Where(t=>s.SetPieces[t-1]>0).Select(t=>$"{EquipmentRules.BossName(t)} {s.SetPieces[t-1]}/3"));
         for(int i=0;i<filters.Length;i++){inventory.filterIcons[i].color=filter==i?new Color32(88,121,255,255):new Color32(193,201,208,255);inventory.filterFocus[i].SetActive(filter==i);}
         if (!inventoryInitialized) { TaskUIBuilder.Clear(backpack); inventoryInitialized=true; }
@@ -94,6 +96,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
                 existing.Value.gameObject.SetActive(false);
         var items=d.equipment.Where(x=>MatchesFilter(x.id)).OrderBy(x=>EquipmentRules.Find(x.id).Tier).ThenBy(x=>EquipmentRules.Find(x.id).Slot).ToArray();
         UpdateEmptyState(d,items.Length==0);
+        inventory.SetVisibleItemCount(items.Length);
         notice.gameObject.SetActive(!string.IsNullOrEmpty(notice.text));
         int position=0;
         foreach(var item in items){
@@ -104,12 +107,12 @@ public sealed class EquipmentPageUI : MonoBehaviour
                 inventoryCells.Add(id,cell);
             }
             cell.transform.SetSiblingIndex(position++);
-            cell.background.sprite=inventory.tierBackgrounds[def.Tier-1];cell.icon.sprite=slotIcons[(int)def.Slot];
+            cell.background.sprite=inventory.tierBackgrounds[def.Tier-1];cell.icon.sprite=ItemIcon(def);
             cell.level.text=item.level.ToString();cell.equipped.SetActive(EquipmentRules.Equipped(d,def.Slot)==id);
             if(cell.upgradeAvailable)cell.upgradeAvailable.SetActive(service.UpgradeEquipmentError(id,item.level)==null);
             cell.gameObject.SetActive(true);
         }
-        int emptyCount=items.Length==0?0:24-items.Length;
+        int emptyCount=items.Length==0?0:Mathf.Max(inventory.Columns*4,Mathf.CeilToInt(items.Length/(float)inventory.Columns)*inventory.Columns)-items.Length;
         while (emptyCells.Count < emptyCount) {
             var cell=Instantiate(inventory.emptyTemplate,backpack); cell.name="EmptySlot"; emptyCells.Add(cell);
         }
@@ -162,15 +165,24 @@ public sealed class EquipmentPageUI : MonoBehaviour
         if(!hover){selected=id;expectedLevel=itemLevel;}
         itemDetail.SetHoverPreview(hover,position);
         if(!hover)modal.gameObject.SetActive(false);itemDetail.gameObject.SetActive(true);itemDetail.transform.SetAsLastSibling();
-        itemDetail.itemName.text=def.Name;itemDetail.tier.text=EquipmentRules.BossName(def.Tier).ToUpperInvariant()+" SET";
-        itemDetail.level.text=itemLevel.ToString();itemDetail.itemIcon.sprite=slotIcons[(int)def.Slot];
+        itemDetail.itemName.text=def.Name;itemDetail.tier.text=def.IsLoot?LootRules.Rarity(def.Tier):EquipmentRules.BossName(def.Tier).ToUpperInvariant()+" SET";
+        itemDetail.level.text=itemLevel.ToString();itemDetail.itemIcon.sprite=ItemIcon(def);
         itemDetail.currentLabel.text=def.Slot==EquipmentSlot.Weapon?"Attack":def.Slot==EquipmentSlot.Body?"Defence":"Speed";
         itemDetail.currentValue.text=EquipmentRules.Effect(def,itemLevel);itemDetail.nextValue.text=EquipmentRules.Effect(def,itemLevel+1);
         int statIndex=def.Slot==EquipmentSlot.Weapon?1:def.Slot==EquipmentSlot.Body?2:3;
         if(statIcons!=null&&statIcons.Length>statIndex){itemDetail.currentIcon.sprite=statIcons[statIndex];itemDetail.nextIcon.sprite=statIcons[statIndex];}
         int set=service.EquipmentStats.SetPieces[def.Tier-1];
         itemDetail.setInfo.text=$"{EquipmentRules.BossName(def.Tier)} set";
-        itemDetail.ShowSet(def.Tier,set);
+        itemDetail.ShowSet(def.Tier,set);itemDetail.ShowAbility(def);
+        foreach(var card in itemDetail.setBonusCards)card.gameObject.SetActive(!def.IsLoot);
+        foreach(var pip in itemDetail.setProgressPips)pip.gameObject.SetActive(!def.IsLoot);
+        if(def.IsLoot){
+            itemDetail.setInfo.text="";itemDetail.setProgress.text="";
+            foreach(var pip in itemDetail.setProgressPips)pip.color=new Color32(221,226,239,255);
+            foreach(var value in itemDetail.setBonusValues)value.text="-";
+            foreach(var label in itemDetail.setBonusTitles)label.text="NO SERIES BONUS";
+            foreach(var card in itemDetail.setBonusCards)card.color=new Color32(244,244,250,255);
+        }
         itemDetail.equip.gameObject.SetActive(!owned||!claimsOnly);
         itemDetail.upgrade.gameObject.SetActive(owned&&!claimsOnly);itemDetail.upgradeCaption.SetActive(owned&&!claimsOnly);
         itemDetail.price.text=$"{EquipmentRules.UpgradeCost(itemLevel)} Fish";
@@ -188,7 +200,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
         itemDetail.close.gameObject.SetActive(!hover);
         if(hover){
             itemDetail.equip.gameObject.SetActive(false);itemDetail.upgrade.gameObject.SetActive(false);itemDetail.upgradeCaption.SetActive(false);
-            itemDetail.status.text=hoverSource&&hoverSource.masteryReward?(owned?"Collected":service.ClaimEquipmentError(id)??"Ready to collect"):$"Upgrade: {EquipmentRules.UpgradeCost(itemLevel)} Fish";
+            itemDetail.status.text=hoverSource&&hoverSource.masteryReward?(owned?"Collected":service.ClaimEquipmentError(id)??"Ready to collect"):"";
         }else RefreshModalKeyboard(true);
     }
 

@@ -1,0 +1,390 @@
+fileFormatVersion: 2
+guid: 2fe5f59e1f70e414cbede12653121259
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -4244623313444713997
+    second: zibaoxiangkaiqi-open_50_0
+  - first:
+      213: -3733682706243765374
+    second: zibaoxiangkaiqi-open_50_1
+  - first:
+      213: 2198009181417599234
+    second: zibaoxiangkaiqi-open_50_2
+  - first:
+      213: -4687187272061985201
+    second: zibaoxiangkaiqi-open_50_3
+  - first:
+      213: 97126860849856076
+    second: zibaoxiangkaiqi-open_50_4
+  - first:
+      213: -2798105416885305651
+    second: zibaoxiangkaiqi-open_50_5
+  - first:
+      213: -3891118564266710802
+    second: zibaoxiangkaiqi-open_50_6
+  - first:
+      213: -1700085616699326180
+    second: zibaoxiangkaiqi-open_50_7
+  - first:
+      213: -3001187507154962068
+    second: zibaoxiangkaiqi-open_50_8
+  - first:
+      213: 9214683683107075695
+    second: zibaoxiangkaiqi-open_50_9
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_0
+      rect:
+        serializedVersion: 2
+        x: 473
+        y: 849
+        width: 23
+        height: 21
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3f949ccd5911815c0800000000000000
+      internalID: -4244623313444713997
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_1
+      rect:
+        serializedVersion: 2
+        x: 642
+        y: 818
+        width: 24
+        height: 24
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 28b325e4c5b4f2cc0800000000000000
+      internalID: -3733682706243765374
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_2
+      rect:
+        serializedVersion: 2
+        x: 364
+        y: 718
+        width: 27
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 201717774b5e08e10800000000000000
+      internalID: 2198009181417599234
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_3
+      rect:
+        serializedVersion: 2
+        x: 421
+        y: 734
+        width: 20
+        height: 21
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f4e53058204c3feb0800000000000000
+      internalID: -4687187272061985201
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_4
+      rect:
+        serializedVersion: 2
+        x: 753
+        y: 722
+        width: 29
+        height: 42
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c4eba178d50195100800000000000000
+      internalID: 97126860849856076
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_5
+      rect:
+        serializedVersion: 2
+        x: 352
+        y: 420
+        width: 479
+        height: 290
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dce7476c2f12b29d0800000000000000
+      internalID: -2798105416885305651
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_6
+      rect:
+        serializedVersion: 2
+        x: 475
+        y: 701
+        width: 27
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ee864f52848fff9c0800000000000000
+      internalID: -3891118564266710802
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_7
+      rect:
+        serializedVersion: 2
+        x: 780
+        y: 698
+        width: 28
+        height: 29
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c11c2e893251868e0800000000000000
+      internalID: -1700085616699326180
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_8
+      rect:
+        serializedVersion: 2
+        x: 311
+        y: 614
+        width: 42
+        height: 46
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c6930bbfcd3a956d0800000000000000
+      internalID: -3001187507154962068
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: zibaoxiangkaiqi-open_50_9
+      rect:
+        serializedVersion: 2
+        x: 826
+        y: 482
+        width: 31
+        height: 40
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f667f210df121ef70800000000000000
+      internalID: 9214683683107075695
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      zibaoxiangkaiqi-open_50_0: -4244623313444713997
+      zibaoxiangkaiqi-open_50_1: -3733682706243765374
+      zibaoxiangkaiqi-open_50_2: 2198009181417599234
+      zibaoxiangkaiqi-open_50_3: -4687187272061985201
+      zibaoxiangkaiqi-open_50_4: 97126860849856076
+      zibaoxiangkaiqi-open_50_5: -2798105416885305651
+      zibaoxiangkaiqi-open_50_6: -3891118564266710802
+      zibaoxiangkaiqi-open_50_7: -1700085616699326180
+      zibaoxiangkaiqi-open_50_8: -3001187507154962068
+      zibaoxiangkaiqi-open_50_9: 9214683683107075695
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -13,6 +13,7 @@ public sealed class BossPageUI : MonoBehaviour
     public RectTransform catHealth;
     public Slider bossBar;
     public TMP_Text bossTitle,bossValue,message,actionLabel,confirmText,catDamage,bossDamage;
+    public Sprite criticalIcon;
     public Button action,stageButton,confirm,cancel;
     public GameObject confirmation,stagePicker;
     public Button[] stageChoices;
@@ -69,7 +70,7 @@ public sealed class BossPageUI : MonoBehaviour
         bossHealthFeedback=bossBar.GetComponent<PlayerHealthFeedback>();
         bossHealthRestPosition=((RectTransform)bossBar.transform).anchoredPosition;
         damageNumbers=GetComponent<BattleDamageNumbers>()??gameObject.AddComponent<BattleDamageNumbers>();
-        damageNumbers.Initialize(catDamage);catDamage.gameObject.SetActive(false);bossDamage.gameObject.SetActive(false);
+        damageNumbers.Initialize(catDamage,criticalIcon);catDamage.gameObject.SetActive(false);bossDamage.gameObject.SetActive(false);
         for(int i=0;i<masteryParticles.Length;i++)masteryParticles[i].Bind(masteryIcons[i].rectTransform);
         service=GameDataManager.EnsureInstance().Tasks;
         action.onClick.AddListener(Action);
@@ -232,7 +233,7 @@ public sealed class BossPageUI : MonoBehaviour
         if(!arena.IsReady||!actors.Ready){message.text="Battle scene is not ready. No ticket was used.";return;}
         if(!service.BeginBattle(selected,master,out var entry)){message.text=service.LastError;return;}
         SettingsAudio.Instance?.SetBattleMusic(true);
-        attempt=entry;simulation=new BattleSimulation(entry.cat,entry.boss);
+        attempt=entry;simulation=new BattleSimulation(entry);
         skippedPresentation=false;
         returnToIdleAt=0;resetPreview=false;SetHealth(entry.cat.hp,entry.cat.hp,entry.boss.hp,entry.boss.hp);
         damageNumbers.Clear();
@@ -241,7 +242,9 @@ public sealed class BossPageUI : MonoBehaviour
     void Update()
     {
         if(walkingOut&&actors.Exit(Time.unscaledDeltaTime))walkingOut=false;
-        if(victoryResultAt>0&&Time.unscaledTime>=victoryResultAt){
+        if(victoryResultAt>0&&Time.unscaledTime>=victoryResultAt&&!actors.IsFinishingVictory){
+            // Let the boss finish falling before the cat starts its exit run.
+            if(actors.Ready){actors.StartExit(arena.StageCamera);walkingOut=true;}
             victoryResultAt=0;ShowResultPanel(0);Refresh();
         }
         if(!resultAwaitingConfirmation && !returningFromResult && attempt==null && (resetPreview || (returnToIdleAt>0 && Time.unscaledTime>=returnToIdleAt))) {
@@ -257,10 +260,10 @@ public sealed class BossPageUI : MonoBehaviour
     }
     void OnHit(BattleHit hit)
     {
-        actors.Hit(hit.catAttacks);
+        if(!hit.blocked)actors.Hit(hit.catAttacks);
         SettingsAudio.Instance?.PlayAttack(hit.catAttacks);
         SetHealth(hit.catHp,attempt.cat.hp,hit.bossHp,attempt.boss.hp,true);
-        damageNumbers.Spawn(hit.damage,!hit.catAttacks,hit.catAttacks?actors.Boss:actors.Cat,arena.StageCamera);
+        damageNumbers.Spawn(hit.damage,!hit.catAttacks,hit.catAttacks?actors.Boss:actors.Cat,arena.StageCamera,hit.critical);
     }
     void SetHealth(int ch,int cm,int bh,int bm,bool animate=false)
     {
@@ -296,7 +299,7 @@ public sealed class BossPageUI : MonoBehaviour
         message.text=receipt.outcome==BattleOutcome.Victory ? "Victory"+(receipt.experience>0?$" · +{receipt.experience} EXP":"") : receipt.outcome==BattleOutcome.Defeat?"Defeat · Train and try again":receipt.outcome==BattleOutcome.Stopped?"Battle stopped":"Battle interrupted · Ticket restored";
         if(isActiveAndEnabled && (receipt.outcome==BattleOutcome.Victory || receipt.outcome==BattleOutcome.Defeat)) {
             resultAwaitingConfirmation=true;
-            if(actors.Ready){actors.StartExit(arena.StageCamera);walkingOut=true;}
+            if(actors.Ready&&victoryResultAt<=0){actors.StartExit(arena.StageCamera);walkingOut=true;}
             int index=receipt.outcome==BattleOutcome.Victory?0:1;
             foreach(var panel in resultPanels)panel.SetActive(false);
             resultValues[index].text=index==0 ? (receipt.experience>0?$"+{receipt.experience}":"") : "Train and try again";
