@@ -18,6 +18,7 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     public FocusStatisticsGraph graph;
     public RectTransform tagContent;
     public Button tagTemplate;
+    public Image todayIcon, allTagsIcon;
     public FocusStatisticsPeriod Period { get; private set; } = FocusStatisticsPeriod.Week;
     public DateTime Date { get; private set; }
     public FocusStatistics.Result Data { get; private set; }
@@ -73,10 +74,11 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         range.text=Period==FocusStatisticsPeriod.Year?Data.start.ToString("yyyy"):Period==FocusStatisticsPeriod.Month?Data.start.ToString("MMMM yyyy",CultureInfo.InvariantCulture)
             :Period==FocusStatisticsPeriod.Day?Data.start.ToString("ddd, dd MMM yyyy",CultureInfo.InvariantCulture):Data.start.ToString("dd MMM",CultureInfo.InvariantCulture)+" - "+Data.end.AddDays(-1).ToString("dd MMM yyyy",CultureInfo.InvariantCulture);
         total.text=FocusStatistics.Duration(Data.seconds);
-        sessionCount.text=Data.sessions+" session"+(Data.sessions==1?"":"s");
+        sessionCount.text=Data.sessions.ToString(CultureInfo.InvariantCulture);
         next.interactable=Data.end<=FocusStatistics.Start(service.LocalNow,Period);
         previous.interactable=Data.start.Year>1;
         Tint(today,Data.start==FocusStatistics.Start(observedDay,Period));
+        if(todayIcon)todayIcon.color=Data.start==FocusStatistics.Start(observedDay,Period)?Color.white:TaskUIBuilder.Ink;
         for(int i=0;i<periods.Length;i++)Tint(periods[i],i==(int)Period);
         foreach(var row in rows)
             if(row && !Data.tags.Any(tag=>tag.id==row.name))row.gameObject.SetActive(false);
@@ -90,8 +92,15 @@ public sealed class FocusStatisticsUI : MonoBehaviour
                 rowsByTag.Add(id,row);
             }
             row.transform.SetAsLastSibling();row.gameObject.SetActive(true);
-            var label=row.GetComponentInChildren<TMP_Text>();label.richText=false;label.textWrappingMode=TextWrappingModes.NoWrap;label.overflowMode=TextOverflowModes.Ellipsis;label.text=tag.name+"\n"+FocusStatistics.Duration(tag.seconds);
+            var label=row.transform.Find("Text").GetComponent<TMP_Text>();label.richText=false;label.textWrappingMode=TextWrappingModes.NoWrap;label.overflowMode=TextOverflowModes.Ellipsis;label.text=tag.name;
+            row.transform.Find("Duration").GetComponent<TMP_Text>().text=FocusStatistics.Duration(tag.seconds);
             row.transform.Find("Swatch").GetComponent<Image>().color=chartColors[tag.id];
+            var bar=row.transform.Find("TimeTrack/Fill").GetComponent<Image>();
+            bar.color=chartColors[tag.id];
+            // Compare tag durations against the longest tag, including legacy overlapping tags.
+            // This is not a percentage of unique session time.
+            float fraction=Data.tags.Count>0 && Data.tags[0].seconds>0?(float)(tag.seconds/Data.tags[0].seconds):0;
+            bar.rectTransform.anchorMax=new Vector2(fraction,1);
             rows.Add(row);
         }
         if(!Data.tags.Any(t=>t.id==SelectedTag))SelectedTag=null;
@@ -103,8 +112,8 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         var values=selected?.buckets??Data.buckets;
         displayedSeries=selected==null?Data.tags.ToArray():new[]{selected};
         graph.SetSeries(displayedSeries.Select(t=>t.buckets).ToArray(),displayedSeries.Select(t=>chartColors[t.id]).ToArray(),values.Length);
-        chartTitle.richText=false;chartTitle.text=selected==null?"":selected.name;
-        empty.gameObject.SetActive(values.All(v=>v<=0));empty.text="No focus sessions in this period.";
+        chartTitle.richText=false;chartTitle.text=selected==null?"Trend":selected.name;
+        empty.gameObject.SetActive(values.All(v=>v<=0));empty.text="No sessions yet";
         for(int i=0;i<xLabels.Length;i++)
         {
             bool visible=i<values.Length&&(values.Length<=12||i% (Period==FocusStatisticsPeriod.Day?4:5)==0||i==values.Length-1);
@@ -114,6 +123,7 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         }
         for(int i=0;i<yLabels.Length;i++)yLabels[i].text=(graph.Maximum/3600*i/4).ToString("0.##",CultureInfo.InvariantCulture)+"h";
         foreach(var row in rows)Tint(row,row.name==SelectedTag);Tint(allTags,SelectedTag==null);Hover(-1,-1);
+        if(allTagsIcon)allTagsIcon.color=SelectedTag==null?Color.white:TaskUIBuilder.Ink;
     }
     void Hover(int index,int segment)
     {
@@ -150,7 +160,9 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     }
     static void Tint(Button button,bool selected) {
         if(button.targetGraphic)button.targetGraphic.color=selected?new Color32(96,115,168,255):new Color32(231,239,250,255);
-        var label=button.GetComponentInChildren<TMP_Text>();
+        var label=button.transform.Find("Text")?.GetComponent<TMP_Text>();
         if(label)label.color=selected?Color.white:TaskUIBuilder.Ink;
+        var duration=button.transform.Find("Duration");
+        if(duration)duration.GetComponent<TMP_Text>().color=selected?Color.white:TaskUIBuilder.ScheduleInk;
     }
 }

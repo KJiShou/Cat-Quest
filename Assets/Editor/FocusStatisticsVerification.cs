@@ -49,7 +49,7 @@ public static class FocusStatisticsVerification
             EditorApplication.QueuePlayerLoopUpdate();
             if(DateTime.UtcNow.Ticks>long.Parse(SessionState.GetString(Flag+".deadline","0"))){Finish("FAIL: timeout");return;}
             if(flow==null||EditorApplication.timeSinceStartup<next||(capture&&capture.Pending))return;
-            try{if(flow.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(flow.Current);else Finish("PASS: "+(SessionState.GetBool(Flag+".uiOnly",false)?"UI-only; domain checks intentionally excluded from this run. ":"statistics boundaries/legacy/DST/deduplication and Focus domain regression; ")+"day/week/month/year stacked graphs, distinct matching legend/mesh colours, segment hover, optional tag filtering, keyboard and raycast controls, empty/reopen, 1920x1080 and 1280x720. Screenshots and button motion captured.");}
+            try{if(flow.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(flow.Current);else Finish("PASS: "+(SessionState.GetBool(Flag+".uiOnly",false)?"UI-only; domain checks intentionally excluded from this run. ":"statistics boundaries/legacy/DST/deduplication and Focus domain regression; ")+"day/week/month/year stacked graphs, distinct matching legend/mesh colours, segment hover, optional tag filtering, keyboard and raycast controls, empty/reopen, long tags, foreground icon hints, relative tag bars; 1920x1080, 1280x720, 1024x768 and 2560x1080 with both sidebar states. Screenshots and button motion captured.");}
             catch(Exception e){Finish("FAIL: "+e);Debug.LogException(e);}return;
         }
         if(EditorApplication.isPlayingOrWillChangePlaymode||!File.Exists("Temp/verify-focus-statistics.request"))return;
@@ -118,9 +118,10 @@ public static class FocusStatisticsVerification
         for(int month=1;month<12;month++)data.focusSessions.Add(Receipt("month-"+month,now.AddMonths(-month).AddHours(12).ToUniversalTime(),(month+2)*3600,"project"));
         manager.SaveData();
         Check(File.Exists(manager.SavePath),"Fixture persistence failed");
-        foreach(int width in new[]{1920,1280})
+        foreach(int width in new[]{1920,1280,1024,2560})
         {
-            Resolution(width,width==1920?1080:720);yield return .5;
+            int height=width==1280?720:width==1024?768:1080;
+            Resolution(width,height);yield return .5;
             Capture("focus-entry-"+width);yield return .1;
             Click(ui.open);yield return .3;Check(ui.panel.activeSelf,"Statistics not open");
             Check(!ui.panel.transform.Find("Card/AboutData") && !ui.panel.transform.Find("Card/Note"), "Removed explanation UI still exists");
@@ -130,6 +131,12 @@ public static class FocusStatisticsVerification
                 Check(ui.Period==period&&ui.Data.seconds>0&&!ui.next.interactable,"Period / future navigation");
                 Check(!ui.range.isTextOverflowing&&!ui.total.isTextOverflowing,"Statistics text clipped");
                 Check(ui.graph.SeriesCount==ui.Data.tags.Count&&ui.graph.SeriesCount==3,"All tags not shown together by default");
+                Check(ui.sessionCount.text==ui.Data.sessions.ToString(CultureInfo.InvariantCulture),"Session metric does not match committed data");
+                foreach(var tagRow in ui.tagContent.GetComponentsInChildren<Button>()) {
+                    var series=ui.Data.tags.Single(t=>t.id==tagRow.name);
+                    Check(tagRow.transform.Find("Duration").GetComponent<TMPro.TMP_Text>().text==FocusStatistics.Duration(series.seconds),"Tag duration missing");
+                    Near(((RectTransform)tagRow.transform.Find("TimeTrack/Fill")).anchorMax.x,series.seconds/ui.Data.tags[0].seconds,"Relative tag time bar");
+                }
                 var legend=ui.tagContent.GetComponentsInChildren<Button>().Select(b=>(Color32)b.transform.Find("Swatch").GetComponent<Image>().color).ToArray();
                 Check(legend.Distinct().Count()==3,"Same-colour tags were not distinguished");
                 var mesh=ui.graph.canvasRenderer.GetMesh();
@@ -139,6 +146,26 @@ public static class FocusStatisticsVerification
                     Near(ui.graph.Maximum,Math.Max(3600,Math.Ceiling(peak/3600)*3600),"Stacked scale");
                 } finally { UnityEngine.Object.Destroy(mesh); }
                 Capture(period.ToString().ToLowerInvariant()+"-"+width);yield return .1;
+                if(period==FocusStatisticsPeriod.Week) {
+                    var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
+                    var toggle=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
+                    bool prior=toggle.isOn;
+                    foreach(bool expanded in new[]{false,true}) {
+                        toggle.isOn=expanded;yield return .5;
+                        var viewport=TaskCalendarPlayVerification.Viewport(ui,new Vector2Int(width,height));
+                        foreach(var element in new Component[]{ui.range,ui.total,ui.sessionCount,ui.graph,ui.close,ui.today,ui.allTags}) {
+                            var corners=new Vector3[4];((RectTransform)element.transform).GetWorldCorners(corners);
+                            foreach(var corner in corners)Check(viewport.Contains(RectTransformUtility.WorldToScreenPoint(null,corner)),"Insights element outside viewport: "+element.name);
+                        }
+                        Check(!ui.range.isTextOverflowing&&!ui.total.isTextOverflowing,"Expanded sidebar clips metrics");
+                        foreach(var periodButton in ui.periods) {
+                            var caption=periodButton.transform.Find("Text").GetComponent<TMPro.TMP_Text>();
+                            Check(!caption.isTextOverflowing&&caption.textInfo.lineCount==1,"Period caption wraps or clips");
+                        }
+                        Capture("overview-"+width+(expanded?"-expanded":"-collapsed"));yield return .1;
+                    }
+                    toggle.isOn=prior;yield return .3;
+                }
             }
             Click(ui.periods[(int)FocusStatisticsPeriod.Week]);yield return .2;
             var first=ui.Data.tags[0];int bucket=Array.FindIndex(first.buckets,v=>v>0);
@@ -156,6 +183,18 @@ public static class FocusStatisticsVerification
             Check(ui.next.interactable,"Previous period cannot advance");
             Check(ui.today.targetGraphic.color!=currentTodayColor,"Today must change to its inactive colour outside the current period");
             Capture("today-away-"+width);yield return .1;
+            foreach(var compact in new[]{ui.close,ui.previous,ui.next,ui.today,ui.allTags}) {
+                var hint=compact.GetComponent<ControlHint>();Check(hint,"Compact control hint missing");
+                var pointerEvent=Pointer(compact.transform);
+                ExecuteEvents.Execute(compact.gameObject,pointerEvent,ExecuteEvents.pointerEnterHandler);yield return .2;
+                Check(hint.hint.activeSelf&&hint.hint.GetComponent<Canvas>().overrideSorting,"Hint not foreground");
+                Check(!hint.hint.GetComponentsInChildren<Graphic>().Any(g=>g.raycastTarget),"Hint intercepts clicks");
+                if(compact==ui.today) { Capture("current-period-hint-"+width);yield return .1; }
+                ExecuteEvents.Execute(compact.gameObject,pointerEvent,ExecuteEvents.pointerExitHandler);yield return .2;
+                Check(!hint.hint.activeSelf,"Hint stuck after pointer exit");
+                hint.OnSelect(new BaseEventData(EventSystem.current));Check(hint.hint.activeSelf,"Keyboard hint missing");
+                hint.OnSubmit(new BaseEventData(EventSystem.current));Check(!hint.hint.activeSelf,"Hint stuck after submit");hint.OnDeselect(new BaseEventData(EventSystem.current));
+            }
             var todayFeedback=ui.today.GetComponent<JuicyButton>();var todayPointer=Pointer(ui.today.transform);
             var todayRect=(RectTransform)ui.today.transform;var todayPosition=todayRect.anchoredPosition;
             todayFeedback.OnPointerEnter(todayPointer);yield return .2;Capture("today-hover-"+width);yield return .1;
@@ -176,15 +215,26 @@ public static class FocusStatisticsVerification
             Check(rect.anchoredPosition==pos&&Vector2.Distance(juicy.DrawScale,Vector2.one)<.02f,"Motion did not reset / moved hit area");
             Click(ui.open);nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);yield return .2;Check(!ui.panel.activeSelf,"Page reopen left statistics overlay active");
         }
+        Resolution(1280,720);yield return .5;
         var legacy=manager.PlayerData.focusSessions.First();legacy.tagIds.Add("reading");legacy.tagNames.Add("Reading");manager.SaveData();
         Click(ui.open);yield return .2;
         Check(ui.Data.legacyMultipleTags && !ui.panel.transform.Find("Card/Note"),"Legacy receipts should remain supported without the removed explanation");
         Capture("legacy-1280");yield return .1;Click(ui.close);
+        manager.PlayerData.tags.First(t=>t.id=="project").name="Research / literature review and dissertation preparation";manager.SaveData();
+        Click(ui.open);yield return .2;
+        var longRow=ui.tagContent.GetComponentsInChildren<Button>().Single(b=>b.name=="project");Click(longRow);yield return .2;
+        Check(ui.chartTitle.text==manager.PlayerData.tags.First(t=>t.id=="project").name,"Long tag name lost");
+        Check(longRow.transform.Find("Text").GetComponent<TMPro.TMP_Text>().overflowMode==TMPro.TextOverflowModes.Ellipsis,"Long tag must not wrap into its duration");
+        Capture("long-tag-1280");yield return .1;Click(ui.close);
         manager.PlayerData.focusSessions.Clear();manager.SaveData();Click(ui.open);yield return .2;Check(ui.Data.seconds==0&&ui.empty.gameObject.activeSelf,"Empty state missing");Capture("empty-1280");yield return .1;
         var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_Buttons/Btn_MenuButton_Rectangle01-Group.prefab");
         var reference=UnityEngine.Object.Instantiate(source.transform.Find("Btn_MenuButton_Rectangle01_Light").gameObject,ui.panel.transform);
         var referenceRect=(RectTransform)reference.transform;referenceRect.anchorMin=referenceRect.anchorMax=new Vector2(.55f,.65f);referenceRect.anchoredPosition=Vector2.zero;referenceRect.localScale=Vector3.one*.5f;
         Capture("simplecasual-button-reference-1280");yield return .1;UnityEngine.Object.Destroy(reference);
+        var closeSource=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Task/TaskFilterDialog.prefab").GetComponent<TaskFilterDialog>().close;
+        var closeReference=UnityEngine.Object.Instantiate(closeSource.gameObject,ui.panel.transform);
+        var closeRect=(RectTransform)closeReference.transform;closeRect.anchorMin=closeRect.anchorMax=new Vector2(.55f,.65f);closeRect.anchoredPosition=Vector2.zero;
+        Capture("shared-close-reference-1280");yield return .1;UnityEngine.Object.Destroy(closeReference.gameObject);
         Click(ui.close);focus.questDropdown.onClick.Invoke();focus.questSearch.text="Study";focus.questList.GetComponentsInChildren<Button>().Single(b=>b.name=="study").onClick.Invoke();
         Check(focus.Controller.Options.tagIds.SequenceEqual(new[]{"study"})&&!focus.questPopup.gameObject.activeSelf,"Focus single tag selection");
         focus.questDropdown.onClick.Invoke();focus.questSearch.text="Reading";focus.questList.GetComponentsInChildren<Button>().Single(b=>b.name=="reading").onClick.Invoke();

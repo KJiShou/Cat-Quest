@@ -174,8 +174,14 @@ public static class TaskCalendarPlayVerification
                 context=size.x+"x"+size.y+(expanded?"-expanded":"-collapsed"); toggle.isOn=expanded; yield return 1;
                 calendar.CloseDrawer();calendar.SetMode(TaskDisplayMode.List);owner.SelectTab(TaskTab.Todo);yield return .3;
                 Check(calendar.listMode.image.sprite != calendar.calendarMode.image.sprite,"List selection lacks a distinct background");
-                Readable(calendar.listMode.GetComponentInChildren<TMPro.TMP_Text>());
-                Readable(calendar.calendarMode.GetComponentInChildren<TMPro.TMP_Text>());
+                foreach (var iconButton in new[] { calendar.listMode, calendar.calendarMode, calendar.previous, calendar.next, calendar.add, calendar.filter, calendar.clear })
+                {
+                    var icon = iconButton.transform.Find("ActionIcon").GetComponent<Image>();
+                    Check(icon && icon.sprite && icon.gameObject.activeSelf && !icon.raycastTarget, "Missing or blocking control icon: " + iconButton.name);
+                    Contained(ScreenBounds((RectTransform)iconButton.transform), ScreenBounds(icon.rectTransform), "Icon outside control");
+                    var hint = iconButton.GetComponent<ControlHint>();
+                    Check(hint && hint.hint && !hint.hint.GetComponentsInChildren<Graphic>(true).Any(g => g.raycastTarget), "Missing or blocking hint");
+                }
                 capture.Begin(Path.GetFullPath(Folder+"/list-"+context+".png"));yield return .2;
                 calendar.SetMode(TaskDisplayMode.Calendar);yield return .3;
                 var viewport=Viewport(owner,size);
@@ -192,6 +198,26 @@ public static class TaskCalendarPlayVerification
                 Contained(ScreenBounds((RectTransform)todayCell.dailyButton.transform),ScreenBounds(todayCell.dailyCount.rectTransform),"Daily badge outside footer");
                 Check(!Overlap(ScreenBounds(todayCell.dailyLabel.rectTransform),ScreenBounds(todayCell.dailyCount.rectTransform)),"Daily badge overlaps caption");
                 capture.Begin(Path.GetFullPath(Folder+"/month-"+context+".png"));yield return .2;
+                if (size.x == 1920 || size.x == 1280)
+                {
+                    var listHint = calendar.listMode.GetComponent<ControlHint>().hint.GetComponent<Image>();
+                    var calendarHint = calendar.calendarMode.GetComponent<ControlHint>().hint.GetComponent<Image>();
+                    Check(listHint.sprite == calendarHint.sprite && listHint.color == calendarHint.color, "View hints have different backgrounds");
+                    foreach (var hintButton in new[] { calendar.listMode, calendar.calendarMode, calendar.filter })
+                    {
+                        var hoverHint = hintButton.GetComponent<ControlHint>();
+                        ExecuteEvents.Execute(hintButton.gameObject, new PointerEventData(EventSystem.current), ExecuteEvents.pointerEnterHandler);
+                        yield return .3;
+                        var overlay = hoverHint.hint.GetComponent<Canvas>();
+                        var rootCanvas = owner.GetComponentInParent<Canvas>().rootCanvas;
+                        Check(overlay.overrideSorting && overlay.sortingOrder > rootCanvas.sortingOrder, "Hint does not override page sorting");
+                        var label = hoverHint.hint.GetComponentInChildren<TMPro.TMP_Text>();
+                        Check(label.canvas == overlay, "Hint text does not share the foreground canvas");
+                        Readable(label);
+                        capture.Begin(Path.GetFullPath(Folder+"/hint-"+hintButton.name+"-"+context+".png")); yield return .2;
+                        ExecuteEvents.Execute(hintButton.gameObject, new PointerEventData(EventSystem.current), ExecuteEvents.pointerExitHandler);
+                    }
+                }
                 var todayArtwork=calendar.today.image.sprite;
                 Click(calendar.next);yield return .2;
                 Check(calendar.SelectedDate!=now && calendar.today.image.sprite!=todayArtwork,"Today remained highlighted after navigating away");
@@ -289,6 +315,23 @@ public static class TaskCalendarPlayVerification
         calendar.SetMode(TaskDisplayMode.Calendar);yield return .2;
         foreach(var control in new[]{calendar.listMode,calendar.calendarMode,calendar.previous,calendar.next,calendar.filter,calendar.noDateButton,calendar.add})
         {
+            var hint = control.GetComponent<ControlHint>();
+            if (hint)
+            {
+                hint.OnPointerEnter(new PointerEventData(EventSystem.current)); yield return .1;
+                Check(hint.hint.activeSelf, "Hover hint missing: " + control.name);
+                Contained(Viewport(owner, requestedSize), ScreenBounds((RectTransform)hint.hint.transform), "Hint outside viewport");
+                if (control == calendar.calendarMode) { capture.Begin(Path.GetFullPath(Folder+"/icon-hint.png")); yield return .2; }
+                hint.OnPointerDown(new PointerEventData(EventSystem.current)); Check(!hint.hint.activeSelf, "Hint persists on press");
+                hint.OnPointerExit(new PointerEventData(EventSystem.current));
+                hint.OnSelect(new BaseEventData(EventSystem.current)); Check(hint.hint.activeSelf, "Keyboard hint missing");
+                hint.OnSubmit(new BaseEventData(EventSystem.current)); Check(!hint.hint.activeSelf, "Hint persists on submit");
+                hint.OnDeselect(new BaseEventData(EventSystem.current));
+                hint.OnPointerEnter(new PointerEventData(EventSystem.current)); control.interactable = false; yield return .1;
+                Check(!hint.hint.activeSelf, "Disabled hint remains visible"); control.interactable = true;
+                hint.OnPointerEnter(new PointerEventData(EventSystem.current)); hint.SendMessage("OnApplicationFocus",false);
+                Check(!hint.hint.activeSelf, "Hint persists after focus loss");
+            }
             var effect=control.GetComponent<JuicyButton>();
             Check(effect,"Missing feedback on "+control.name);
             var hitSize=ScreenBounds((RectTransform)control.transform).size;

@@ -82,7 +82,7 @@ pwsh -NoProfile -File Tools/Verify-FocusModesWindows.ps1 -Executable Builds/Focu
 
 ## Focus insights
 
-从 Focus insights 打开统计。Day 按小时，Week 为周一到周日，Month 按日期，Year 按月。前后和 Today 切换周期，未来禁用。默认按标签堆叠并配颜色图例，目录重复颜色使用稳定显示颜色区分，不改保存颜色。悬停点击片段查看标签时长，图例可单选标签，All focus 恢复。Back to Focus、Escape 或切页关闭。
+从 Focus 页的 Insights 打开统计，使用图标导航、大号时长与次数摘要。Day 按小时，Week 为周一到周日，Month 按日期，Year 按月。前后和 Today 切换周期，未来禁用。默认按标签堆叠并配颜色图例，目录重复颜色使用稳定显示颜色区分，不改保存颜色。悬停点击片段查看标签时长，图例可单选标签，图层图标（All focus）恢复，日历图标回到当前周期。图标提供置顶悬停／键盘提示。关闭图标、Escape 或切页关闭。标签时长条与最长标签比较，不代表唯一专注时长百分比。
 
 只统计已提交 Completed/EndedEarly。优先实际 elapsedSeconds，含超过奖励额度的时间，旧数据回退 eligibleSeconds/分钟。以 completedUtc 为结束向前推活动时长，再按本地小时、日、月拆分。统计不是奖励，不写入或重定价。运行中、取消、无效中断和休息不计。跨期会话每期计一次，先合计精确秒再显示完整分钟，少于一分钟显示 <1 min。
 

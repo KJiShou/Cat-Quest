@@ -12,6 +12,8 @@ public sealed class TaskCalendarUI : MonoBehaviour
 {
     public Button listMode, calendarMode, previous, next, today, monthButton, add, filter, clear, noDateButton;
     public Sprite selectedViewSprite, neutralButtonSprite, todayButtonSprite;
+    public Image listViewIcon, calendarViewIcon, filterIcon;
+    public GameObject filterActiveMark;
     public TMP_Text monthLabel, noDateLabel, filterLabel;
     public TMP_Text noDateCount;
     public TMP_InputField search;
@@ -95,7 +97,8 @@ public sealed class TaskCalendarUI : MonoBehaviour
     {
         button.image.sprite = selectedView ? selectedViewSprite : neutralButtonSprite;
         button.image.color = selectedView ? Color.white : new Color32(231,239,250,255);
-        button.GetComponentInChildren<TMP_Text>().color = selectedView ? Color.white : TaskUIBuilder.Ink;
+        var icon = button == listMode ? listViewIcon : calendarViewIcon;
+        if (icon) icon.color = selectedView ? Color.white : TaskUIBuilder.Ink;
         button.transform.Find("TabFocus").gameObject.SetActive(false);
     }
     public void Refresh()
@@ -133,6 +136,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
             noDateLabel.rectTransform.offsetMax = new Vector2(-badgeWidth - 16, noDateLabel.rectTransform.offsetMax.y);
             noDateButton.GetComponent<LayoutElement>().preferredWidth = Mathf.Max(155, noDateLabel.preferredWidth + badgeWidth + 32);
             filterLabel.text = "Filter" + (difficulty.HasValue || tags.Count > 0 ? " · On" : "");
+            if (filterActiveMark) filterActiveMark.SetActive(difficulty.HasValue || tags.Count > 0);
             clear.gameObject.SetActive(HasFilters);
             if (changed || boundCellHeight != cellHeight) {
                 boundCellHeight = cellHeight;
@@ -207,7 +211,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
         }
         drawerRows.Begin();
         emptyLabel.gameObject.SetActive(items.Count == 0);
-        emptyLabel.text = HasFilters ? "No matching tasks. Use Clear to reset filters." : "No tasks scheduled. Use + Add Task to get started.";
+        emptyLabel.text = HasFilters ? "No matching tasks. Clear filters to see all tasks." : "No tasks scheduled. Select + to add a task.";
         bool? lastDaily = null;
         foreach (var item in items)
         {
