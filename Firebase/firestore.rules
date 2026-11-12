@@ -5,10 +5,22 @@ service cloud.firestore {
       function ownsRecord() {
         return request.auth != null && request.auth.uid == uid;
       }
+      function validSlot(id, level, catLevel, allowed) {
+        return id is string && level is int && level >= 0 && level <= catLevel
+          && ((id == '' && level == 0) || (id in allowed && level >= 1));
+      }
+      function validEquipment(d) {
+        let fields = ['weaponId', 'weaponLevel', 'bodyId', 'bodyLevel', 'headId', 'headLevel'];
+        return !d.keys().hasAny(fields) || (d.keys().hasAll(fields)
+          && validSlot(d.weaponId, d.weaponLevel, d.catLevel, ['boss1-weapon', 'boss2-weapon', 'boss3-weapon', 'chest-armor_gauntletsgold', 'chest-weapon_shortsword', 'chest-weapon_magicstaff_01', 'chest-armor_gauntletssteel', 'chest-weapon_scimitar_02', 'chest-weapon_speargolden', 'chest-weapon_dualswords', 'chest-weapon_axe_01', 'chest-weapon_scimitar_01', 'chest-weapon_spearsilver'])
+          && validSlot(d.bodyId, d.bodyLevel, d.catLevel, ['boss1-body', 'boss2-body', 'boss3-body', 'chest-armor_heavyarmor', 'chest-armor_chestarmor', 'chest-armor_bonearmor'])
+          && validSlot(d.headId, d.headLevel, d.catLevel, ['boss1-head', 'boss2-head', 'boss3-head', 'chest-armor_helmgolden', 'chest-armor_magiccrown', 'chest-armor_helmsilver', 'chest-armor_helmetgray', 'chest-armor_skullmask'])
+        );
+      }
       function validAggregate() {
         let d = request.resource.data;
         return d.keys().hasAll(['playerId', 'playerName', 'bossStage', 'totalTasksCompleted', 'totalFocusMinutes', 'power', 'catLevel', 'updatedAt'])
-          && d.keys().hasOnly(['playerId', 'playerName', 'bossStage', 'totalTasksCompleted', 'totalFocusMinutes', 'power', 'catLevel', 'updatedAt'])
+          && d.keys().hasOnly(['playerId', 'playerName', 'bossStage', 'totalTasksCompleted', 'totalFocusMinutes', 'power', 'catLevel', 'updatedAt', 'weaponId', 'weaponLevel', 'bodyId', 'bodyLevel', 'headId', 'headLevel'])
           && d.playerId is string && d.playerId == uid
           && d.playerName is string && d.playerName.size() >= 1 && d.playerName.size() <= 20
           && d.playerName.matches('^[^<>\\x00-\\x1F\\x7F-\\x9F]+$')
@@ -19,6 +31,7 @@ service cloud.firestore {
           && d.totalFocusMinutes is int && d.totalFocusMinutes >= 0
           && d.power is int && d.power >= 0 && d.power <= 2147483647
           && d.catLevel is int && d.catLevel >= 1 && d.catLevel <= 2147483647
+          && validEquipment(d)
           && d.updatedAt is timestamp && d.updatedAt == request.time;
       }
       // Only opted-in aggregate documents live here. Signed-in players may read

@@ -49,11 +49,13 @@ Dashboard 槽与战力徽章保持间距，空槽用 512px PictoIcon_Attack/Armo
 
 已穿戴和背包物品悬停可打开只读详情，复用同数据卡并随指针移动、翻转夹在屏幕内，不变暗、不抢射线或键盘。空槽无提示。移出、按下拖动、Escape、来源禁用、刷新、关页或失焦关闭。点击仍打开居中可操作模态框，悬停不改变选中物品或存档。
 
+Cat Home 与排行榜的悬停卡按可见内容收缩高度，仅保留少量底部留白。点击详情时恢复原有高度与操作区。
+
 ## 共用装备光环
 
 `Assets/Prefabs/CatCharacter.prefab` 是项目 Ninja 变体，其嵌套 `Assets/Prefabs/CharacterEquipmentAura.prefab` 持有圆环引用、身体锚点、比例和三件抬升。旧场景和训练演员复用同一表现预制体，保留原对象控制器动画。改共用资产即可同步，不改供应商 Ninja/VFX。
 
-只计算有效、拥有且已装备部件，显示件数最多的阶色，同数选更高阶，无装备无环。蓝色一二三件用 Circle_Effect_7/13/19，紫色 9/15/21，黄色 10/16/22。圆形效果在身体后，旧 Magic_Circle 地面效果不再实例化，Demo_Item_Icon_3 仅在运行实例隐藏。仅表现，不改属性奖励存档，随已提交 TaskService.Changed 刷新，禁用清理重开重建。
+本机使用已规范化的拥有／穿戴资料。CharacterEquipmentAura.SelectEquipment 只选择表现：每件 Legendary 宝箱装备增加一个金色同心圈，最多三个 Circle_Effect_10，比例依次为 1.0／1.35／1.7。有 Legendary 时优先显示，否则保留 Boss 套装件数最多、同数选高阶的规则。Rare／Ultra Rare 宝箱装备不增加圈。内部表现类别 4（也用于伙伴快照）表示 Legendary；游戏稀有度和套装阶仍为 1–3，不增加属性或套装加成。无装备无环。蓝色一二三件用 Circle_Effect_7/13/19，紫色 9/15/21，黄色 10/16/22。圆形效果在身体后，旧 Magic_Circle 地面效果不再实例化，Demo_Item_Icon_3 仅在运行实例隐藏。仅表现，不改属性奖励存档，随已提交 TaskService.Changed 刷新，禁用清理重开重建。
 
 Dashboard、Cat Home、Focus、三 Boss 场景及现有 Ninja 共用。伙伴只接收主进程选定阶与件数，不读存档，断连隐藏直至有效状态恢复。
 

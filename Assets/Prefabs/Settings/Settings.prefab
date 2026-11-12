@@ -16767,9 +16767,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Only your chosen name and game statistics are shared.
+  m_text: 'Your chosen name, game totals and equipped gear are shared.
 
-    Your tasks,
+    Tasks,
     tags and private history stay on this computer.'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 98208c7f05e775f48a22efc4563512bd, type: 2}

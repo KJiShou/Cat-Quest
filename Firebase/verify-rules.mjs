@@ -119,6 +119,21 @@ try {
   for (const field of Object.keys(aggregate(uid))) {
     await deniedPayload(`missing ${field}`, data => { delete data[field]; });
   }
+  await check('published equipped slots and levels, including empty slots', async () => {
+    const uid = 'equipment-owner';
+    await assertSucceeds(setDoc(doc(owner(uid), 'leaderboard', uid), { ...aggregate(uid), catLevel: 10,
+      weaponId: 'boss1-weapon', weaponLevel: 10, bodyId: '', bodyLevel: 0,
+      headId: 'chest-armor_magiccrown', headLevel: 1 }));
+  });
+  const equipment = { weaponId: 'boss1-weapon', weaponLevel: 1, bodyId: '', bodyLevel: 0, headId: '', headLevel: 0 };
+  for (const [name, patch] of [
+    ['wrong slot', { weaponId: 'boss1-head' }], ['unknown item', { weaponId: 'arbitrary' }],
+    ['above cat level', { weaponLevel: 2 }], ['negative level', { weaponLevel: -1 }],
+    ['fractional level', { weaponLevel: 1.5 }], ['empty nonzero', { weaponId: '' }],
+    ['zero equipped', { weaponLevel: 0 }], ['private equipment field', { inventory: [] }]
+  ]) await deniedPayload('equipment ' + name, data => Object.assign(data, equipment, patch));
+  await deniedPayload('partial equipment snapshot', data => { data.weaponId = 'boss1-weapon'; });
+
   // Every excluded privacy category is rejected, including otherwise valid aggregate fields.
   for (const field of ['taskTitles', 'descriptions', 'schedules', 'tags', 'goals', 'responsibilities', 'aiPrompts', 'localHistory', 'unexpected']) {
     await deniedPayload(`extra/private field ${field}`, data => { data[field] = ['Private fixture']; });

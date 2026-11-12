@@ -21,7 +21,7 @@ Dashboard 右下预览前三名，复用紧凑排名行。在 **Settings → Das
 - 打开、换分类、Refresh、账号或发布状态变化触发读取，无持续轮询。关闭只取消该页面读取，不取消发布。
 - 登录后可看榜而不参与，未登录、无人、未发布、退出、错误账号和读取失败状态明确。Account 使用既有设置模态框。
 
-任务、专注、奖励和成长仍以本地为准，只读取发布既有八个汇总字段。显示名由用户选择，不上传 Google 姓名、邮箱或私密内容，不是服务器权威防作弊竞赛。
+任务、专注、奖励和成长仍以本地为准，读取发布原有八个汇总字段，以及三件已穿戴装备的 ID 与等级（六项字段）。显示名由用户选择，不上传 Google 姓名、邮箱或私密内容，不是服务器权威防作弊竞赛。
 
 ## Firebase 部署
 
@@ -53,3 +53,15 @@ npx firebase-tools deploy --only firestore:rules,firestore:indexes --project 'YO
 `Tools/Verify-LeaderboardWindows.ps1 -Executable '<development build>' -Run` 在独立可见 Windows 开发版检查 1920×1080/1280×720，使用本地预览数据，检查完整日志和 Development Console，截图、最小化恢复，并恢复 PlayerPrefs，不登录或发布。`Tools/Start-AccountVerification.ps1` 为复用交互启动器。
 
 已有 6000.3.10f1 诊断中，先 Hidden 启动再 ShowWindow 会重现 PresentFrame/WaitForLastPresentation 警告，直接可见启动未出现。因此交互验证启动器使用 Normal，不关闭开发控制台或过滤错误掩盖失败。图形 API、Unity、通知和渲染配置不变。
+
+## 查看玩家资料
+
+点击排行榜玩家行或「Your Rank」可打开只读资料弹窗：当前榜单名次、猫等级、Boss Stage、Tasks Completed、Focus Minutes、Power，以及武器／身体装备／头饰的名称、类型、稀有度、等级、属性加成和适用的传奇技能。显示的是同一份公开快照，不会使用本机装备冒充其他玩家的数据。旧记录显示「Not shared yet」，明确空槽显示「No equipment」。关闭按钮、Escape 或遮罩均可关闭；刷新、账号变化或离开页面会清除详情。
+
+新组件为 `Assets/Prefabs/Leaderboard/LeaderboardPlayer.prefab`，参考 SimpleCasual Light `Equipment_Popup_Detail.prefab`，复用项目装备详情样式和 JuicyButton。上线前须部署更新后的 `Firebase/firestore.rules`。原有八项资料增加六项穿戴字段（三个槽位各自的 ID 和等级）；玩家使用新版同步后才会公开装备，不上传背包、任务内容或历史明细。排行榜排序和索引不变。Dashboard 仍保留简版榜单及 View All 入口。
+
+资料弹窗使用 Cat Home 风格：上方宽幅森林和动态忍者猫，下方三件装备大图／等级，再下方四项图标／数值。悬停或键盘聚焦卡片显示标签或完整装备资料。复用 CharacterHomePreview，以独立舞台渲染 LeaderboardForest 场景与 LeaderboardCat 变体，只使用对方公开装备。森林来自 CharacterHome 原有环境与相机，不包含游戏管理器或 UI；原 Cat Home 场景不修改。当前项目使用统一忍者猫外观，没有玩家自选皮肤字段。
+
+每穿一件 Legendary 宝箱装备，背后增加一个金色同心圈，最多三个，由小到大。有 Legendary 时优先显示这些圈，否则保留原有 Boss 套装光环选择；Rare／Ultra Rare 宝箱装备不增加圈。这仅为表现，不授予套装或属性加成。旧资料／空槽不借用本机光环，不增加云端字段。界面参考 SimpleCasual Light Character_Detail_1（034_Character_Detail 预览）与现有 Cat Home、EquipmentItemDetail；保留 Fredoka 字体。
+
+装备悬停现在直接复用 Cat Home 的 EquipmentItemDetail 预制体（SimpleCasual Light Equipment_Popup_Detail）：装备大图、稀有度标签、等级、属性图标／数值、技能及套装进度。跟随鼠标并限制在屏幕内，键盘选中也可查看。仅使用对方公开装备，隐藏穿戴／升级／关闭操作且不阻挡点击。空槽／旧资料仍显示简短说明。

@@ -14,7 +14,7 @@ public static class LeaderboardVerification
     {
         if(EditorApplication.isCompiling||EditorApplication.isUpdating||EditorApplication.isPlayingOrWillChangePlaymode||!File.Exists("Temp/verify-leaderboard-data.request"))return;
         File.Delete("Temp/verify-leaderboard-data.request");string path="Library/LeaderboardVerification/Data-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");Directory.CreateDirectory(path);
-        try{Run(path);File.WriteAllText(path+"/result.txt",DateTime.UtcNow.ToString("O")+"\nPASS: independent ordering, Power ties, exact own rank outside top 50, snapshot query contract, malformed/failed reads, opt-out, cancellation and serialized bindings.");}
+        try{Run(path);File.WriteAllText(path+"/result.txt",DateTime.UtcNow.ToString("O")+"\nPASS: equipped snapshot round trip/reload, legacy and empty slots, wrong-slot/level/partial rejection, independent ordering, Power ties, exact own rank outside top 50, snapshot query contract, malformed/failed reads, opt-out, cancellation and serialized bindings.");}
         catch(Exception e){File.WriteAllText(path+"/result.txt","FAIL: "+e);Debug.LogException(e);}
         File.WriteAllText("Temp/verify-leaderboard-data.result",path+"/result.txt");
     }
@@ -44,6 +44,7 @@ public static class LeaderboardVerification
     [Serializable] sealed class Contracts{public Contract[] items;}
     public static void Run(string folder)
     {
+        VerifyEquipment();
         var a=new AccountAggregate{playerId="a",playerName="A",bossStage=4,totalTasksCompleted=3,totalFocusMinutes=7,power=20,catLevel=1};
         var b=new AccountAggregate{playerId="b",playerName="B",bossStage=3,totalTasksCompleted=9,totalFocusMinutes=2,power=20,catLevel=5};
         Check(LeaderboardQuery.Compare(a,b,LeaderboardKind.BossStage)<0,"Boss descending");Check(LeaderboardQuery.Compare(a,b,LeaderboardKind.TasksCompleted)>0,"Tasks independent");
@@ -77,5 +78,35 @@ public static class LeaderboardVerification
         try{var nav=canvas.GetComponentInChildren<MainMenuNavigation>(true);var page=nav.pages[5];var ui=page.GetComponentInChildren<LeaderboardPanelUI>(true);Check(ui&&ui.categories.Length==4&&ui.ownRow&&ui.template&&ui.scroll,"Bindings missing");foreach(var t in page.GetComponentsInChildren<Transform>(true))Check(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject)==0,"Missing script");}
         finally{PrefabUtility.UnloadPrefabContents(canvas);}
         File.WriteAllText(folder+"/query-contracts.json",JsonUtility.ToJson(new Contracts{items=contracts.ToArray()},true));
+    }
+    static void VerifyEquipment()
+    {
+        var data = new PlayerData();
+        data.equipment.Add(new EquipmentItem { id = "boss1-weapon", level = 1 }); data.equippedWeaponId = "boss1-weapon";
+        var row = AccountAggregate.From(data, "gear", "Gear");
+        Check(row.HasEquipment && row.weaponId == "boss1-weapon" && row.weaponLevel == 1 && row.bodyId == "" && row.bodyLevel == 0, "Equipped slots mapping");
+        string Remote(AccountAggregate value)
+        {
+            string commit = AccountRest.BuildAggregateCommit("demo-test", value, null);
+            int start = commit.IndexOf("\"fields\":", StringComparison.Ordinal) + 10;
+            int end = commit.IndexOf("}},\"updateTransforms\"", start, StringComparison.Ordinal);
+            return "{\"updateTime\":\"" + Time + "\",\"fields\":{" + commit.Substring(start, end-start) + ",\"updatedAt\":{\"timestampValue\":\"" + Time + "\"}}}";
+        }
+        Check(AccountRest.TryRemote(Remote(row), "gear", out var remote) && row.SameAs(remote.aggregate), "Equipment REST round trip");
+        var reloaded = AccountAggregate.ReadPending(JsonUtility.ToJson(row));
+        Check(row.SameAs(reloaded), "Pending equipment snapshot reload");
+        reloaded.weaponId = "boss2-weapon";
+        Check(!row.SameAs(reloaded), "Same-power equipment change ignored");
+        row.weaponLevel = row.catLevel + 1;
+        Check(!AccountRest.TryRemote(Remote(row), "gear", out _), "Equipment level above cat level accepted");
+        row.weaponLevel = 1; row.weaponId = "boss1-head";
+        Check(!AccountRest.TryRemote(Remote(row), "gear", out _), "Wrong-slot equipment accepted");
+        row.weaponId = "";
+        Check(!AccountRest.TryRemote(Remote(row), "gear", out _), "Empty slot with nonzero level accepted");
+        row.weaponLevel = 0;
+        Check(AccountRest.TryRemote(Remote(row), "gear", out remote) && remote.aggregate.HasEquipment, "Explicit empty loadout rejected");
+        var legacy = new AccountAggregate { playerId="gear", playerName="Gear", catLevel=1, bossStage=1 };
+        Check(AccountRest.TryRemote(Remote(legacy), "gear", out remote) && !remote.aggregate.HasEquipment, "Legacy publication compatibility");
+        Check(!AccountRest.TryRemote(Remote(legacy).Replace("\"fields\":{", "\"fields\":{\"weaponLevel\":{\"integerValue\":\"1\"},"), "gear", out _), "Partial loadout accepted");
     }
 }

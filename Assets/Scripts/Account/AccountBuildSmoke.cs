@@ -201,7 +201,9 @@ public sealed class AccountBuildSmoke : MonoBehaviour
             // object and reject unexpected values; do not export the response body.
             var names = Regex.Matches(response.body, "\"([^\"]+)\"\\s*:\\s*\\{")
                 .Cast<Match>().Select(m => m.Groups[1].Value).OrderBy(v => v).ToArray();
-            result.remoteFieldsValid = names.SequenceEqual(new[] { "fields", "playerId", "playerName", "bossStage", "totalTasksCompleted", "totalFocusMinutes", "power", "catLevel", "updatedAt" }.OrderBy(v => v));
+            var required = new[] { "fields", "playerId", "playerName", "bossStage", "totalTasksCompleted", "totalFocusMinutes", "power", "catLevel", "updatedAt" };
+            var equipment = new[] { "weaponId", "weaponLevel", "bodyId", "bodyLevel", "headId", "headLevel" };
+            result.remoteFieldsValid = names.SequenceEqual((remote.aggregate.HasEquipment ? required.Concat(equipment) : required).OrderBy(v => v));
         }
         result.remoteCheck = "Complete";
     }

@@ -2,7 +2,7 @@
 
 [English](SETUP.md) | [简体中文](SETUP.zh-CN.md)
 
-当前 Windows 版本使用系统浏览器登录，随后通过 REST 连接 Firebase Authentication 和 Cloud Firestore。**不用安装 Firebase Unity SDK，也不用把 Firebase 的 JavaScript 示例粘进 Unity。** 登录不上传存档。只有手动开启排行榜参与后才上传八个汇总字段。
+当前 Windows 版本使用系统浏览器登录，随后通过 REST 连接 Firebase Authentication 和 Cloud Firestore。**不用安装 Firebase Unity SDK，也不用把 Firebase 的 JavaScript 示例粘进 Unity。** 登录不上传存档。只有手动开启排行榜参与后才上传八个汇总字段和六项已穿戴装备字段。
 
 ## 1. 创建 Firebase 项目并取得两个值
 
@@ -73,7 +73,7 @@ npx firebase-tools deploy --only firestore:rules,firestore:indexes --project '�
 1. 用专门的测试存档打开新构建，进入 **Settings → Account → Sign in with Google**，保持 Account 弹窗打开，完成系统浏览器登录。关闭弹窗会取消尚未完成的登录。
 2. 返回应用，确认显示已登录。Firebase **Authentication → Users** 应能看到该用户。此时不应上传任务或整份存档。
 3. 输入自己确认的排行榜名称（去除两端空白后 1–20 字符），开启参与开关。**首次开启会把这份本地存档永久绑定到当前 UID**。不要拿日常存档试多个不同账号。
-4. 在 Firestore **Data → leaderboard → 当前 Firebase UID** 查看记录，应只有：`playerId`、`playerName`、`bossStage`、`totalTasksCompleted`、`totalFocusMinutes`、`power`、`catLevel`、`updatedAt`。
+4. 在 Firestore **Data → leaderboard → 当前 Firebase UID** 查看记录，应只有：`playerId`、`playerName`、`bossStage`、`totalTasksCompleted`、`totalFocusMinutes`、`power`、`catLevel`、`updatedAt`，以及 `weaponId`、`weaponLevel`、`bodyId`、`bodyLevel`、`headId`、`headLevel`。
 5. 完成一个任务或有效 Focus，检查汇总更新。退出并重启，检查登录恢复。Sign out 后检查本地任务仍在。用原账号登录后关闭参与，确认文档删除。断网时会显示等待移除，联网并认证后才完成。
 
 排行榜页面已实现四种排名及个人名次。登录后可读取已发布的汇总数据。云存档备份和换设备恢复不在当前范围内。规则只开放排行榜汇总读取，其他玩家不能修改你的记录。
@@ -155,3 +155,5 @@ npm 文件、模拟器日志、results/results.json 与 JSON/HTML 覆盖率留�
 配置后另测浏览器同意取消超时、重启退出、错误账号、正常上传、离线重试、上传中退出、跨重启待删、另设备冲突替换及退出后的迟到回调。使用测试账号存档，不使用日常玩家数据。
 
 实现参考：[Google Desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app)、[Firebase Auth REST](https://firebase.google.com/docs/reference/rest/auth)、[外部客户端](https://cloud.google.com/identity-platform/docs/web/google)、[Firestore REST](https://firebase.google.com/docs/firestore/use-rest-api)、[写入前置条件](https://firebase.google.com/docs/firestore/reference/rest/v1/Precondition)、[服务器时间戳](https://firebase.google.com/docs/firestore/reference/rest/v1/Write)、[Unity 桌面限制](https://firebase.google.com/docs/unity/setup#desktop-workflow)。
+
+新版客户端发布前须部署更新后的 firestore.rules。旧八字段记录仍兼容；玩家用新版同步后才会显示穿戴装备。不会上传整个背包或私密任务内容。

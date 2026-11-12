@@ -21,6 +21,24 @@ public sealed class CharacterEquipmentAura : MonoBehaviour
     public int Pieces { get; private set; }
     public GameObject Circle => circle;
 
+    // Presentation category 4 is Legendary chest gear; it grants no mastery bonus.
+    public const int LegendaryTier = 4;
+    public static void SelectEquipment(string weapon, string body, string head, out int tier, out int pieces)
+    {
+        var counts = new int[3];
+        int legendary = 0;
+        string[] ids = { weapon, body, head };
+        for (int i = 0; i < ids.Length; i++)
+        {
+            var definition = EquipmentRules.Find(ids[i]);
+            if (definition == null || (int)definition.Slot != i) continue;
+            if (!definition.IsLoot) counts[definition.Tier - 1]++;
+            else if (definition.Tier == 3) legendary++;
+        }
+        Select(counts, out tier, out pieces);
+        if (legendary > 0) { tier = LegendaryTier; pieces = legendary; }
+    }
+
     public static void Select(int[] counts, out int tier, out int pieces)
     {
         tier = pieces = 0;
@@ -46,7 +64,8 @@ public sealed class CharacterEquipmentAura : MonoBehaviour
     }
     void Refresh()
     {
-        Select(service.EquipmentStats.SetPieces, out int tier, out int pieces);
+        SelectEquipment(service.EquippedItem(EquipmentSlot.Weapon), service.EquippedItem(EquipmentSlot.Body),
+            service.EquippedItem(EquipmentSlot.Head), out int tier, out int pieces);
         Show(tier, pieces);
     }
     public void SetRemote(int tier, int pieces)
@@ -57,10 +76,10 @@ public sealed class CharacterEquipmentAura : MonoBehaviour
     }
     void Show(int tier, int pieces)
     {
-        if (tier < 1 || tier > 3 || pieces < 1 || pieces > 3) tier = pieces = 0;
+        if (tier < 1 || tier > LegendaryTier || pieces < 1 || pieces > 3) tier = pieces = 0;
         if (Tier == tier && Pieces == pieces && (tier == 0 || circle)) return;
         Clear(); Tier = tier; Pieces = pieces;
-        int index = (tier - 1) * 3 + pieces - 1;
+        int index = tier == LegendaryTier ? 6 : (tier - 1) * 3 + pieces - 1;
         if (tier == 0 || circlePrefabs == null || index >= circlePrefabs.Length || !circlePrefabs[index]) return;
         // Sort the character and its circle together against the environment,
         // then put the circle behind the sprite inside that group.
@@ -72,9 +91,23 @@ public sealed class CharacterEquipmentAura : MonoBehaviour
             ownedSortingGroup.sortingOrder = character.sortingOrder + 1;
             ownedSortingGroup.enabled = true;
         }
-        circle = Instantiate(circlePrefabs[index], transform);
+        circle = tier == LegendaryTier ? new GameObject("Legendary Rings") : Instantiate(circlePrefabs[index], transform);
+        if (tier == LegendaryTier)
+        {
+            circle.transform.SetParent(transform, false);
+            for (int i = 0; i < pieces; i++)
+            {
+                var ring = Instantiate(circlePrefabs[index], circle.transform);
+                ring.name = "Legendary Ring " + (i + 1);
+                ring.transform.localPosition = Vector3.zero;
+                ring.transform.localRotation = Quaternion.identity;
+                ring.transform.localScale = Vector3.one * (1f + .35f * i);
+                var icon = ring.transform.Find("Demo_Item_Icon_3");
+                if (icon) icon.gameObject.SetActive(false);
+            }
+        }
         circle.name = "Equipment Circle " + tier + "-" + pieces;
-        circle.transform.localPosition = pieces == 3 ? Vector3.up * threePieceLift : Vector3.zero;
+        circle.transform.localPosition = pieces == 3 && tier != LegendaryTier ? Vector3.up * threePieceLift : Vector3.zero;
         circle.transform.localRotation = Quaternion.identity;
         circle.transform.localScale = circleScale;
         // The source effect includes a demo equipment icon, not part of the aura.

@@ -151,7 +151,8 @@ public sealed class CompanionHost : MonoBehaviour
     {
         var service = GameDataManager.Instance.Tasks;
         if (auraVersion != service.ReadVersion) {
-            CharacterEquipmentAura.Select(service.EquipmentStats.SetPieces, out auraTier, out auraPieces);
+            CharacterEquipmentAura.SelectEquipment(service.EquippedItem(EquipmentSlot.Weapon), service.EquippedItem(EquipmentSlot.Body),
+                service.EquippedItem(EquipmentSlot.Head), out auraTier, out auraPieces);
             auraVersion = service.ReadVersion;
         }
     }

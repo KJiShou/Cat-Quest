@@ -59,6 +59,7 @@ public static class AccountRest
     [Serializable] public sealed class Fields
     {
         public Value playerId, playerName, bossStage, totalTasksCompleted, totalFocusMinutes, power, catLevel, updatedAt;
+        public Value weaponId, weaponLevel, bodyId, bodyLevel, headId, headLevel;
     }
     [Serializable] public sealed class Document { public string name, updateTime; public Fields fields; }
     [Serializable] sealed class CommitResult { public WriteResult[] writeResults; }
@@ -91,11 +92,14 @@ public static class AccountRest
     static string Number(long value) => "{\"integerValue\":" + Quote(value.ToString(CultureInfo.InvariantCulture)) + "}";
     public static string BuildAggregateCommit(string project, AccountAggregate aggregate, string expectedUpdateTime)
     {
+        string gear = aggregate.HasEquipment ? ",\"weaponId\":" + Text(aggregate.weaponId) + ",\"weaponLevel\":" + Number(aggregate.weaponLevel) +
+            ",\"bodyId\":" + Text(aggregate.bodyId) + ",\"bodyLevel\":" + Number(aggregate.bodyLevel) +
+            ",\"headId\":" + Text(aggregate.headId) + ",\"headLevel\":" + Number(aggregate.headLevel) : "";
         return "{\"writes\":[{\"update\":{\"name\":" + Quote(DocumentPath(project, aggregate.playerId)) + ",\"fields\":{" +
             "\"playerId\":" + Text(aggregate.playerId) + ",\"playerName\":" + Text(aggregate.playerName) +
             ",\"bossStage\":" + Number(aggregate.bossStage) + ",\"totalTasksCompleted\":" + Number(aggregate.totalTasksCompleted) +
             ",\"totalFocusMinutes\":" + Number(aggregate.totalFocusMinutes) + ",\"power\":" + Number(aggregate.power) +
-            ",\"catLevel\":" + Number(aggregate.catLevel) + "}},\"updateTransforms\":[{\"fieldPath\":\"updatedAt\",\"setToServerValue\":\"REQUEST_TIME\"}]," +
+            ",\"catLevel\":" + Number(aggregate.catLevel) + gear + "}},\"updateTransforms\":[{\"fieldPath\":\"updatedAt\",\"setToServerValue\":\"REQUEST_TIME\"}]," +
             "\"currentDocument\":" + (string.IsNullOrEmpty(expectedUpdateTime) ? "{\"exists\":false}" : "{\"updateTime\":" + Quote(expectedUpdateTime) + "}") + "}]}";
     }
     public static string CommitUpdateTime(string body) => Parse<CommitResult>(body)?.writeResults is { Length: > 0 } results ? results[0].updateTime : null;
@@ -114,6 +118,24 @@ public static class AccountRest
         remote = new AccountRemoteSnapshot { exists = true, updateTime = document.updateTime,
             aggregate = new AccountAggregate { playerId = uid, playerName = f.playerName.stringValue, bossStage = (int)stage,
                 power = (int)power, catLevel = (int)level, totalTasksCompleted = tasks, totalFocusMinutes = minutes } };
+        bool Present(Value value) => value != null && (!string.IsNullOrEmpty(value.stringValue) || !string.IsNullOrEmpty(value.integerValue));
+        if (Present(f.weaponId) || Present(f.weaponLevel) || Present(f.bodyId) || Present(f.bodyLevel) || Present(f.headId) || Present(f.headLevel))
+        {
+            bool Slot(Value id, Value number, EquipmentSlot slot, out int itemLevel)
+            {
+                itemLevel = 0;
+                if (id?.stringValue == null || !NumberValue(number, out long n) || n > level) return false;
+                if (id.stringValue == "") return n == 0;
+                if (n < 1 || EquipmentRules.Find(id.stringValue)?.Slot != slot) return false;
+                itemLevel = (int)n; return true;
+            }
+            if (!Slot(f.weaponId, f.weaponLevel, EquipmentSlot.Weapon, out int w) ||
+                !Slot(f.bodyId, f.bodyLevel, EquipmentSlot.Body, out int b) ||
+                !Slot(f.headId, f.headLevel, EquipmentSlot.Head, out int h)) { remote = null; return false; }
+            remote.aggregate.weaponId = f.weaponId.stringValue; remote.aggregate.weaponLevel = w;
+            remote.aggregate.bodyId = f.bodyId.stringValue; remote.aggregate.bodyLevel = b;
+            remote.aggregate.headId = f.headId.stringValue; remote.aggregate.headLevel = h;
+        }
         return true;
     }
     public static bool ValidGoogleToken(string token, string clientId, string nonce)

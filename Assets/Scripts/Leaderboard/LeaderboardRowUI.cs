@@ -1,8 +1,9 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
-public sealed class LeaderboardRowUI : MonoBehaviour
+public sealed class LeaderboardRowUI : MonoBehaviour, ISelectHandler
 {
     public TMP_Text rank, playerName, level, score;
     public Image background, medal;
@@ -15,8 +16,34 @@ public sealed class LeaderboardRowUI : MonoBehaviour
     TMP_Text[] labels;
     Color[] normalColors;
     FontStyles[] normalStyles;
+    public Button inspect;
+    public LeaderboardPlayerUI playerDetails;
+    AccountAggregate displayed;
+    long displayedRank;
+    LeaderboardKind displayedKind;
+    void Awake() { if (inspect) inspect.onClick.AddListener(OpenPlayer); }
+    void OnDestroy() { if (inspect) inspect.onClick.RemoveListener(OpenPlayer); }
+    void OnDisable() { displayed = null; }
+    void OpenPlayer()
+    {
+        var panel = GetComponentInParent<LeaderboardPanelUI>();
+        if (panel && panel.TutorialOwnsInput) return;
+        if (displayed != null && playerDetails) playerDetails.Show(displayed, displayedRank, displayedKind, gameObject);
+    }
+    public void OnSelect(BaseEventData e)
+    {
+        if (e is PointerEventData) return;
+        var scroll = GetComponentInParent<ScrollRect>();
+        if (!scroll || !scroll.viewport || !scroll.content) return;
+        Canvas.ForceUpdateCanvases();
+        var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(scroll.viewport, transform);
+        var view = scroll.viewport.rect;
+        float offset = bounds.max.y > view.yMax ? view.yMax - bounds.max.y : bounds.min.y < view.yMin ? view.yMin - bounds.min.y : 0;
+        scroll.StopMovement(); scroll.content.anchoredPosition += new Vector2(0, offset);
+    }
     public void Show(AccountAggregate row, long position, LeaderboardKind kind, bool self)
     {
+        displayed = row; displayedRank = position; displayedKind = kind;
         if (labels == null)
         {
             labels = new[] { rank, playerName, level, score };

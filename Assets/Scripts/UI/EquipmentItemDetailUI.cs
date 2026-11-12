@@ -53,22 +53,68 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
     GraphicRaycaster raycaster;
     CanvasGroup inputGroup;
     bool cachedPresentation, backdropEnabled, raycasterEnabled, blocksRaycasts, interactable;
+    Vector2 authoredCardSize;
+    float authoredHeight;
+    RectTransform[] contentRects;
+    Vector2[] authoredPositions, authoredSizes;
+    Graphic[] contentGraphics;
+    readonly Vector3[] contentCorners = new Vector3[4];
+    bool fitHoverContent;
+
+    void SizeHoverCard(float height)
+    {
+        float removed = authoredHeight - height;
+        card.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,height);
+        // Preserve each child's authored distance from the top, including stretched
+        // children. Only the unused bottom of the card moves.
+        for(int i=0;i<contentRects.Length;i++){
+            var rect=contentRects[i];
+            float anchor=Mathf.Lerp(rect.anchorMin.y,rect.anchorMax.y,rect.pivot.y);
+            rect.sizeDelta=authoredSizes[i]+new Vector2(0,removed*(rect.anchorMax.y-rect.anchorMin.y));
+            rect.anchoredPosition=authoredPositions[i]+new Vector2(0,removed*(anchor-1));
+        }
+    }
+    void FitHoverContent()
+    {
+        float bottom=card.rect.yMax;
+        foreach(var graphic in contentGraphics){
+            if(!graphic||!graphic.isActiveAndEnabled||graphic.transform==card)continue;
+            if(graphic is TMP_Text text){
+                if(string.IsNullOrWhiteSpace(text.text))continue;
+                text.ForceMeshUpdate();
+                var bounds=text.textBounds;
+                contentCorners[0]=text.transform.TransformPoint(bounds.min);
+                contentCorners[1]=text.transform.TransformPoint(bounds.max);
+                for(int i=0;i<2;i++)bottom=Mathf.Min(bottom,card.InverseTransformPoint(contentCorners[i]).y);
+            }else{
+                graphic.rectTransform.GetWorldCorners(contentCorners);
+                for(int i=0;i<4;i++)bottom=Mathf.Min(bottom,card.InverseTransformPoint(contentCorners[i]).y);
+            }
+        }
+        SizeHoverCard(Mathf.Min(authoredHeight,card.rect.yMax-bottom+28));
+        fitHoverContent=false;
+    }
 
     // Use the authored detail card for a non-blocking preview, without owning equipment state.
     public void SetHoverPreview(bool preview, Vector2 position = default)
     {
         if(!cachedPresentation){
             cachedPresentation=true;modalPosition=card.anchoredPosition;
+            authoredCardSize=card.sizeDelta;authoredHeight=card.rect.height;
+            contentRects=card.Cast<Transform>().Select(t=>(RectTransform)t).ToArray();
+            authoredPositions=contentRects.Select(r=>r.anchoredPosition).ToArray();
+            authoredSizes=contentRects.Select(r=>r.sizeDelta).ToArray();
+            contentGraphics=card.GetComponentsInChildren<Graphic>(true);
             raycaster=GetComponent<GraphicRaycaster>();
             inputGroup=GetComponent<CanvasGroup>();
             backdropEnabled=backdrop&&backdrop.enabled;raycasterEnabled=raycaster&&raycaster.enabled;
             blocksRaycasts=inputGroup&&inputGroup.blocksRaycasts;interactable=inputGroup&&inputGroup.interactable;
         }
-        IsHoverPreview=preview;pointerPosition=position;
+        IsHoverPreview=preview;pointerPosition=position;fitHoverContent=preview;
         if(backdrop)backdrop.enabled=!preview&&backdropEnabled;
         if(raycaster)raycaster.enabled=!preview&&raycasterEnabled;
         if(inputGroup){inputGroup.blocksRaycasts=!preview&&blocksRaycasts;inputGroup.interactable=!preview&&interactable;}
-        if(!preview)card.anchoredPosition=modalPosition;
+        if(!preview){SizeHoverCard(authoredHeight);card.sizeDelta=authoredCardSize;card.anchoredPosition=modalPosition;}
     }
     public void MoveHoverPreview(Vector2 position){pointerPosition=position;}
 
@@ -103,6 +149,7 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
 
     void LateUpdate()
     {
+        if(IsHoverPreview&&fitHoverContent)FitHoverContent();
         var bounds = ((RectTransform)transform).rect;
         float scale = Mathf.Max(0, Mathf.Min(IsHoverPreview ? .5f : .56f, (bounds.width - 32) / card.rect.width, (bounds.height - 32) / card.rect.height));
         card.localScale = Vector3.one * scale;

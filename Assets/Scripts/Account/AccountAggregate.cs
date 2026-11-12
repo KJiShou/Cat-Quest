@@ -11,6 +11,12 @@ public sealed class AccountAggregate
     public string playerId, playerName;
     public int bossStage, power, catLevel;
     public long totalTasksCompleted, totalFocusMinutes;
+    // Null IDs mean a legacy publication. Empty IDs mean an explicitly empty slot.
+    public string weaponId, bodyId, headId;
+    public int weaponLevel, bodyLevel, headLevel;
+    public bool HasEquipment => weaponId != null && bodyId != null && headId != null;
+    public string EquipmentId(EquipmentSlot slot) => slot == EquipmentSlot.Weapon ? weaponId : slot == EquipmentSlot.Body ? bodyId : headId;
+    public int EquipmentLevel(EquipmentSlot slot) => slot == EquipmentSlot.Weapon ? weaponLevel : slot == EquipmentSlot.Body ? bodyLevel : headLevel;
 
     public static bool ValidName(string name) => !string.IsNullOrWhiteSpace(name) && name.Trim() == name &&
         name.Length <= 20 && !name.Any(c => char.IsControl(c) || c == '<' || c == '>');
@@ -39,8 +45,13 @@ public sealed class AccountAggregate
         }
         if (double.IsInfinity(seconds) || seconds / 60d >= long.MaxValue)
             throw new ArgumentException("Focus statistics exceed the supported range.");
+        EquipmentItem Gear(EquipmentSlot slot) => data.equipment?.FirstOrDefault(i => i != null && i.id == EquipmentRules.Equipped(data, slot) && EquipmentRules.Find(i.id)?.Slot == slot);
+        var weapon = Gear(EquipmentSlot.Weapon); var body = Gear(EquipmentSlot.Body); var head = Gear(EquipmentSlot.Head);
         return new AccountAggregate
         {
+            weaponId = weapon?.id ?? "", weaponLevel = weapon?.level ?? 0,
+            bodyId = body?.id ?? "", bodyLevel = body?.level ?? 0,
+            headId = head?.id ?? "", headLevel = head?.level ?? 0,
             playerId = uid, playerName = name, bossStage = stage, catLevel = level,
             power = EquipmentRules.Calculate(data).Final.Power,
             totalTasksCompleted = data.history.Where(h => h != null && !h.revoked && !string.IsNullOrEmpty(h.taskId) && !string.IsNullOrEmpty(h.day))
@@ -51,7 +62,9 @@ public sealed class AccountAggregate
 
     public bool SameAs(AccountAggregate other) => other != null && playerId == other.playerId && playerName == other.playerName &&
         bossStage == other.bossStage && power == other.power && catLevel == other.catLevel &&
-        totalTasksCompleted == other.totalTasksCompleted && totalFocusMinutes == other.totalFocusMinutes;
+        totalTasksCompleted == other.totalTasksCompleted && totalFocusMinutes == other.totalFocusMinutes &&
+        HasEquipment == other.HasEquipment && weaponId == other.weaponId && bodyId == other.bodyId && headId == other.headId &&
+        weaponLevel == other.weaponLevel && bodyLevel == other.bodyLevel && headLevel == other.headLevel;
 
     public string Summary => $"Stage {bossStage} · {totalTasksCompleted:N0} tasks · {totalFocusMinutes:N0} Focus min · Power {power:N0} · Lv. {catLevel}";
     public static AccountAggregate ReadPending(string json)

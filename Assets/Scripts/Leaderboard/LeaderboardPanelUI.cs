@@ -18,6 +18,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     public RectTransform content;
     public ScrollRect scroll;
     public LeaderboardRowUI template, ownRow;
+    public LeaderboardPlayerUI playerDetails;
     public LeaderboardKind CurrentKind { get; private set; }
     public bool Loading { get; private set; }
     public bool TutorialOwnsInput { get; set; }
@@ -61,6 +62,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
     public void Select(LeaderboardKind kind) { CurrentKind = kind; Reload(); }
     void Stop()
     {
+        if (playerDetails) playerDetails.Close();
         generation++; source?.Cancel();
         if (running != null) StopCoroutine(running);
         running = null; Loading = false;
@@ -152,10 +154,13 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
         if (Snapshot != null && Snapshot.success && visibleRows < Snapshot.leaders.Count)
             BindRows(Snapshot, Math.Min(visibleRows + 6, Snapshot.leaders.Count));
         if(TutorialOwnsInput) return;
+        if(playerDetails && playerDetails.gameObject.activeSelf) return;
         if (!Input.GetKeyDown(KeyCode.Tab) || EventSystem.current == null) return;
         var selected = EventSystem.current.currentSelectedGameObject;
         if (selected && selected.GetComponentInParent<SettingsPanelUI>()) return;
         var controls = new List<Button>(categories); controls.Add(refresh); controls.Add(accountButton);
+        foreach (var row in rows) if (row.gameObject.activeInHierarchy && row.inspect) controls.Add(row.inspect);
+        if (ownRow.gameObject.activeInHierarchy && ownRow.inspect) controls.Add(ownRow.inspect);
         controls.RemoveAll(button => !button.IsInteractable());
         int index = controls.FindIndex(button => button.gameObject == selected);
         int direction = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift) ? -1 : 1;

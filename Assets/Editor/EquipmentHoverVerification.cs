@@ -127,7 +127,7 @@ public static class EquipmentHoverVerification
                 Check(!detail.equip.gameObject.activeSelf&&!detail.upgrade.gameObject.activeSelf&&!detail.close.gameObject.activeSelf,"Hover shows action buttons");
                 Check(string.IsNullOrEmpty(detail.status.text)&&!detail.upgradeCaption.activeSelf&&!detail.price.gameObject.activeInHierarchy,"Hover reveals upgrade text or Fish cost");
                 Check(!detail.transform.Find("ScreenDim").GetComponent<Image>().enabled,"Hover dimmed the page");
-                Bounds(detail);TextFits(detail);Capture("hover-inventory-1920");
+                Check(detail.card.rect.height<700,"Hover retained unused action space");Bounds(detail);TextFits(detail);Capture("hover-inventory-1920");
             }
             if(step==3){SessionState.SetFloat(Flag+"x",detail.card.position.x);pointer.position+=new Vector2(30,16);target.OnPointerMove(pointer);}
             if(step==4){Check(Mathf.Abs(detail.card.position.x-SessionState.GetFloat(Flag+"x",0))>10,"Tooltip does not follow pointer movement");Capture("hover-moved-1920");}
@@ -140,6 +140,7 @@ public static class EquipmentHoverVerification
                 Check(!detail.IsHoverPreview&&detail.gameObject.activeSelf&&detail.GetComponent<GraphicRaycaster>().enabled&&detail.GetComponent<CanvasGroup>().blocksRaycasts,"Click did not restore modal input");
                 Check(detail.transform.Find("ScreenDim").GetComponent<Image>().enabled,"Click did not restore backdrop");
                 Check(detail.card.anchoredPosition==Vector2.zero&&detail.equip.gameObject.activeSelf&&detail.close.gameObject.activeSelf,"Click did not restore card/actions");
+                Check(Mathf.Abs(detail.card.rect.height-AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/EquipmentItemDetail.prefab").GetComponent<EquipmentItemDetailUI>().card.rect.height)<.01f,"Click did not restore authored card height");
                 Check(events.currentSelectedGameObject.transform.IsChildOf(detail.transform),"Click modal lost keyboard focus");
                 Check(detail.upgrade.gameObject.activeInHierarchy&&detail.price.text=="15 Fish","Click detail retains upgrade cost");
                 Capture("click-after-hover-1920");

@@ -9,12 +9,22 @@ public sealed class CharacterHomePreview : MonoBehaviour
     public Camera previewCamera;
     public SpriteRenderer character;
     public GameObject characterPrefab;
+    public GameObject environmentPrefab;
     public string idleAnimation = "ninja-idle";
     public bool fixedFraming;
     [Min(.1f)] public float framingZoom = 1;
     public Vector2 framingOffset;
     public Vector3 stageOffset;
     public Material characterMaterial;
+    // Optional remote presentation. Existing home/dashboard previews remain local.
+    public bool remoteEquipment;
+    int remoteTier, remotePieces;
+    public CharacterEquipmentAura EquipmentAura => character ? character.GetComponentInChildren<CharacterEquipmentAura>(true) : null;
+    public void SetRemoteEquipment(int tier, int pieces)
+    {
+        remoteEquipment = true; remoteTier = tier; remotePieces = pieces;
+        if (EquipmentAura) EquipmentAura.SetRemote(tier, pieces);
+    }
     private Vector3 fixedCenter;
     public Animator CharacterAnimator => character ? character.GetComponent<Animator>() : null;
     public bool showSceneBackground;
@@ -52,6 +62,7 @@ public sealed class CharacterHomePreview : MonoBehaviour
         placeholder = layoutImage ? layoutImage.GetComponent<Image>() : null;
         if (ownedStage) ownedStage.SetActive(true);
         if ((!previewCamera || !character) && characterPrefab && Application.isPlaying) CreatePreview();
+        if (remoteEquipment && EquipmentAura) EquipmentAura.SetRemote(remoteTier, remotePieces);
         view.enabled = previewCamera && character;
         if (placeholder) placeholder.enabled = !view.enabled;
         if (!previewCamera || !character) return;
@@ -114,12 +125,19 @@ public sealed class CharacterHomePreview : MonoBehaviour
     {
         ownedStage = new GameObject("Dashboard Character Preview");
         ownedStage.transform.position = new Vector3(-10000, 10000, 0) + stageOffset;
+        if (environmentPrefab)
+        {
+            var environment = Instantiate(environmentPrefab, ownedStage.transform, false);
+            previewCamera = environment.GetComponentInChildren<Camera>();
+        }
         var model = Instantiate(characterPrefab, ownedStage.transform);
         model.transform.localPosition = Vector3.zero;
         character = model.GetComponentInChildren<SpriteRenderer>();
+        if (remoteEquipment && EquipmentAura) EquipmentAura.SetRemote(remoteTier, remotePieces);
         if(characterMaterial) character.sharedMaterial = characterMaterial;
         var animator = model.GetComponentInChildren<Animator>();
-        if (animator) { animator.cullingMode = AnimatorCullingMode.AlwaysAnimate; animator.Play(idleAnimation, 0, 0); animator.Update(0); }
+        if (animator) { animator.cullingMode = AnimatorCullingMode.AlwaysAnimate; if(remoteEquipment)animator.updateMode=AnimatorUpdateMode.UnscaledTime; animator.Play(idleAnimation, 0, 0); animator.Update(0); }
+        if (previewCamera) { previewCamera.enabled = false; return; }
         var cameraObject = new GameObject("Dashboard Preview Camera");
         cameraObject.transform.SetParent(ownedStage.transform, false);
         cameraObject.transform.localPosition = new Vector3(0, 0, -10);
@@ -175,7 +193,7 @@ public sealed class CharacterHomePreview : MonoBehaviour
         previewCamera.aspect = aspect;
         if (!fixedFraming || halfSize == Vector2.zero) { halfSize = character.bounds.extents; fixedCenter = character.bounds.center; }
         float fill = ownedStage ? .8f : .55f;
-        previewCamera.orthographicSize = showSceneBackground && !ownedStage ? backgroundOrthographicSize : Mathf.Max(ownedStage ? .1f : 1f,
+        previewCamera.orthographicSize = showSceneBackground && (!ownedStage || environmentPrefab) ? backgroundOrthographicSize : Mathf.Max(ownedStage ? .1f : 1f,
             halfSize.y / fill, halfSize.x / (aspect * fill)) / Mathf.Max(.1f, framingZoom);
         var center = (fixedFraming ? fixedCenter : character.bounds.center) + new Vector3(framingOffset.x * halfSize.x, framingOffset.y * halfSize.y, 0);
         previewCamera.transform.position = new Vector3(center.x, center.y, previewCamera.transform.position.z);

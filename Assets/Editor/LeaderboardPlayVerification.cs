@@ -107,7 +107,7 @@ public static class LeaderboardPlayVerification
                 else
                 {
                     Check(evidence.All(path => File.Exists(path) && new FileInfo(path).Length > 100), "A requested screenshot is missing or empty.");
-                    Finish("PASS: four categories, medal-number centering, panel/button/own-rank containment, removed copy, empty/error/auth states, navigation, cancellation and feedback at four resolutions; expanded/collapsed sidebar layout captures. Review current screenshots separately.");
+                    Finish("PASS: player details, four published metrics, equipped/empty/legacy slots, large values, click/submit/backdrop/close/focus restore, own row and refresh dismissal, row feedback; four categories, medal-number centering, panel/button/own-rank containment, empty/error/auth states, navigation, cancellation and feedback at four resolutions; expanded/collapsed sidebar layout captures. Review current screenshots separately.");
                 }
             }
             catch (Exception e) { Finish("FAIL at " + context + ": " + e); }
@@ -256,7 +256,7 @@ public static class LeaderboardPlayVerification
         var pointer = Pointer(control);
         if (control.targetGraphic) pointer.position = Bounds(control.targetGraphic.rectTransform).center;
         var target = Hit(pointer.position);
-        Check(target && (target == control.gameObject || target.transform.IsChildOf(control.transform)), "Control center is blocked: " + control.name);
+        Check(target && (target == control.gameObject || target.transform.IsChildOf(control.transform)), "Control center is blocked: " + control.name + " at " + pointer.position + " by " + (target ? target.name : "no click handler"));
         ExecuteEvents.Execute(target, pointer, ExecuteEvents.pointerDownHandler);
         ExecuteEvents.Execute(target, pointer, ExecuteEvents.pointerUpHandler);
         ExecuteEvents.Execute(target, pointer, ExecuteEvents.pointerClickHandler);
@@ -315,6 +315,10 @@ public static class LeaderboardPlayVerification
             if(mode=="empty"){result.message="No players have shared statistics yet.";complete(result);yield break;}
             for(int i=0;i<140;i++) result.leaders.Add(new AccountAggregate{playerId="player-"+i.ToString("D3"),playerName=i==0?"VeryLongPlayerName123":"Cat Adventurer "+i,bossStage=1+i%12,totalTasksCompleted=i*5,totalFocusMinutes=3000-i*9,power=(i%12)*123,catLevel=1+i%30});
             result.leaders.Sort((a,b)=>LeaderboardQuery.Compare(a,b,kind));
+            foreach(var row in result.leaders) {
+                row.weaponId="chest-weapon_magicstaff_01";row.weaponLevel=row.catLevel;
+                row.bodyId="boss2-body";row.bodyLevel=1;row.headId="chest-armor_magiccrown";row.headLevel=1;
+            }
             if(mode!="optout") {result.own=result.leaders[mode=="ownTop"?0:137];result.ownRank=mode=="ownTop"?1:138;result.ownMessage=null;}
             result.leaders.RemoveRange(50,90); complete(result);
         }
@@ -343,6 +347,87 @@ public static class LeaderboardPlayVerification
                 yield return .4;Check(!panel.Loading && panel.Snapshot != null,"Transient source was not restored");
                 context="signed-out-"+suffix;Capture(context);yield return .2;
                 source.mode="normal";panel.SetSource(source);yield return .4;
+                var selectedRow=panel.content.GetComponentsInChildren<LeaderboardRowUI>().First();
+                var detail=panel.playerDetails;Check(detail&&selectedRow.inspect,"Player detail bindings missing");
+                Check(detail.informationControls.Length==8 && detail.informationControls.All(b=>b.navigation.mode==Navigation.Mode.Explicit),"Modal information controls lack contained keyboard navigation");
+                string published=JsonUtility.ToJson(panel.Snapshot.leaders[0]);
+                Capture("before-player-"+suffix);yield return .3;
+                var rowFeedback=selectedRow.inspect.GetComponent<JuicyButton>();var rowPointer=Pointer(selectedRow.inspect);
+                var rowBounds=Bounds((RectTransform)selectedRow.transform);
+                ExecuteEvents.Execute(selectedRow.gameObject,rowPointer,ExecuteEvents.pointerEnterHandler);yield return .2;
+                Check(rowFeedback.DrawScale.y>1,"Row hover missing");Stable(rowBounds,selectedRow);
+                ExecuteEvents.Execute(selectedRow.gameObject,rowPointer,ExecuteEvents.pointerDownHandler);yield return .2;
+                Check(rowFeedback.DrawScale.y<1,"Row press missing");Stable(rowBounds,selectedRow);
+                ExecuteEvents.Execute(selectedRow.gameObject,rowPointer,ExecuteEvents.pointerUpHandler);
+                ExecuteEvents.Execute(selectedRow.gameObject,rowPointer,ExecuteEvents.pointerExitHandler);yield return .7;Reset(rowFeedback,"Row feedback did not settle");
+                Click(selectedRow.inspect);yield return .4;
+                Check(detail.gameObject.activeInHierarchy&&detail.playerName.text==panel.Snapshot.leaders[0].playerName,"Clicked player mismatch");
+                for(int m=0;m<4;m++)Check(detail.metrics[m].text==LeaderboardQuery.Display(panel.Snapshot.leaders[0],(LeaderboardKind)m),"Profile metric mismatch");
+                Check(detail.equipmentNames[0].text=="Magic Staff"&&detail.equipmentDetails[0].text.Contains("Level "),"Equipment details missing");
+                Check(detail.characterPreview.CharacterAnimator && detail.characterPreview.EquipmentAura && detail.characterPreview.EquipmentAura.Tier==CharacterEquipmentAura.LegendaryTier && detail.characterPreview.EquipmentAura.Pieces==2,"Remote character or published aura missing");
+                Check(detail.characterPreview.GetComponent<RawImage>().texture,"Character preview did not render");
+                Check(detail.characterPreview.environmentPrefab && detail.characterPreview.showSceneBackground,"Cat Home forest preview missing");
+                Check(detail.characterPreview.EquipmentAura.Circle.transform.childCount==2,"Legendary gear must have one ring per piece");
+                Check(detail.equipmentLevels[0].text.Contains(panel.Snapshot.leaders[0].weaponLevel.ToString()),"Equipment level badge missing");
+                Contained((RectTransform)detail.transform,detail.card,"Player card outside screen");
+                foreach(var label in detail.GetComponentsInChildren<TMP_Text>()) {label.ForceMeshUpdate();Check(!label.isTextOverflowing,"Player text clipped: "+label.name);Contained(detail.card,label.rectTransform,"Player text outside card");}
+                Check(Hit(Bounds((RectTransform)panel.refresh.transform).center)!=panel.refresh.gameObject,"Modal click reached page");
+                Capture("player-equipped-"+suffix);yield return .2;
+                if(size.x==1920){
+                    float animationBefore=detail.characterPreview.CharacterAnimator.GetCurrentAnimatorStateInfo(0).normalizedTime;
+                    for(int frame=0;frame<12;frame++){Capture("player-motion-"+frame.ToString("D2"));yield return .09;}
+                    Check(detail.characterPreview.CharacterAnimator.GetCurrentAnimatorStateInfo(0).normalizedTime>animationBefore,"Remote cat animation did not advance");
+                    Check(detail.characterPreview.EquipmentAura.Circle.GetComponentsInChildren<ParticleSystem>().Any(p=>p.isPlaying&&p.time>0),"Equipment aura did not animate");
+                }
+                var gearControl=detail.informationControls[5];
+                ExecuteEvents.Execute(gearControl.gameObject,Pointer(gearControl),ExecuteEvents.pointerEnterHandler);yield return .3;
+                var hover=detail.equipmentHover;
+                Check(hover&&hover.gameObject.activeInHierarchy&&hover.IsHoverPreview,"Shared Cat Home hover missing");
+                Check(hover.card.rect.height<600,"Legendary hover retained empty bottom space");
+                Check(hover.itemName.text=="Magic Staff"&&hover.level.text==panel.Snapshot.leaders[0].weaponLevel.ToString()&&hover.tier.text=="Legendary","Hover did not use published gear");
+                Check(hover.abilityText.gameObject.activeSelf&&hover.abilityText.text.Contains("5th"),"Legendary ability missing");
+                Check(!hover.equip.gameObject.activeSelf&&!hover.upgrade.gameObject.activeSelf&&!hover.close.gameObject.activeSelf,"Remote hover exposed local actions");
+                Check(!hover.GetComponent<GraphicRaycaster>().enabled,"Hover blocks input");
+                foreach(var label in hover.GetComponentsInChildren<TMP_Text>()){label.ForceMeshUpdate();Check(!label.isTextOverflowing,"Gear tooltip clipped: "+label.name);}
+                Contained((RectTransform)hover.transform,hover.card,"Tooltip leaves viewport");
+                Capture("player-gear-hint-"+suffix);yield return .2;
+                ExecuteEvents.Execute(gearControl.gameObject,Pointer(gearControl),ExecuteEvents.pointerExitHandler);yield return .2;
+                Check(!hover.gameObject.activeSelf,"Gear tooltip stuck after pointer exit");
+                gearControl.Select();yield return .2;Check(hover.gameObject.activeSelf,"Keyboard gear preview missing");
+                var hoverTarget=gearControl.GetComponent<LeaderboardEquipmentHover>();
+                foreach(var corner in new[]{new Vector2(2,2),new Vector2(size.x-2,size.y-2)}){
+                    detail.MoveEquipment(hoverTarget,corner);yield return .1;Contained((RectTransform)hover.transform,hover.card,"Edge hover clipped");
+                }
+                detail.close.Select();yield return .1;Check(!hover.gameObject.activeSelf,"Deselection left gear preview");
+                Click(detail.close);yield return .2;
+                Check(!detail.characterPreview.previewCamera.gameObject.activeInHierarchy,"Closed profile left preview camera active");
+                Check(!detail.gameObject.activeSelf&&EventSystem.current.currentSelectedGameObject==selectedRow.gameObject,"Profile close/focus restore failed");
+                Check(published==JsonUtility.ToJson(panel.Snapshot.leaders[0]),"Profile mutated published model");
+                ExecuteEvents.Execute(selectedRow.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler);yield return .3;
+                Check(detail.gameObject.activeSelf,"Keyboard submit did not inspect row");
+                var outside=new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left,position=new Vector2(5,5),pressPosition=new Vector2(5,5)};
+                detail.OnPointerClick(outside);yield return .2;Check(!detail.gameObject.activeSelf,"Backdrop dismissal failed");
+                Click(panel.ownRow.inspect);yield return .2;Check(detail.playerName.text==panel.Snapshot.own.playerName&&detail.subtitle.text.Contains("138"),"Own rank detail mismatch");detail.Close();
+                var legacy=new AccountAggregate{playerName="Legacy Player",catLevel=1,bossStage=1};
+                detail.Show(legacy,51,LeaderboardKind.Power,selectedRow.gameObject);yield return .3;
+                Check(detail.characterPreview.EquipmentAura.Tier==0,"Legacy player borrowed local/previous aura");
+                Check(detail.equipmentNames.All(t=>t.text=="Not shared yet"),"Legacy profile fabricated gear");Capture("player-legacy-"+suffix);yield return .2;detail.Close();
+                legacy.weaponId=legacy.bodyId=legacy.headId="";
+                detail.Show(legacy,51,LeaderboardKind.Power,selectedRow.gameObject);yield return .2;
+                Check(detail.equipmentNames.All(t=>t.text=="No equipment"),"Empty slots indistinguishable from legacy");detail.Close();
+                legacy.weaponId="boss3-weapon";legacy.bodyId="boss3-body";legacy.headId="boss3-head";
+                legacy.weaponLevel=legacy.bodyLevel=legacy.headLevel=1;
+                detail.Show(legacy,51,LeaderboardKind.Power,selectedRow.gameObject);yield return .5;
+                Check(detail.characterPreview.EquipmentAura.Tier==3&&detail.characterPreview.EquipmentAura.Pieces==3,"Three-piece remote aura mismatch");
+                Capture("player-full-set-"+suffix);yield return .2;detail.Close();
+                legacy.weaponId="chest-armor_gauntletsgold";legacy.bodyId="chest-armor_heavyarmor";legacy.headId="chest-armor_helmgolden";
+                detail.Show(legacy,51,LeaderboardKind.Power,selectedRow.gameObject);yield return .5;
+                Check(detail.characterPreview.EquipmentAura.Tier==CharacterEquipmentAura.LegendaryTier && detail.characterPreview.EquipmentAura.Circle.transform.childCount==3,"Legendary three rings missing");
+                Capture("player-legendary-three-"+suffix);yield return .2;detail.Close();
+                legacy.totalFocusMinutes=legacy.totalTasksCompleted=long.MaxValue;legacy.power=int.MaxValue;legacy.bossStage=int.MaxValue;
+                detail.Show(legacy,long.MaxValue,LeaderboardKind.FocusMinutes,selectedRow.gameObject);yield return .3;
+                foreach(var label in detail.metrics.Concat(new[]{detail.subtitle})) {label.ForceMeshUpdate();Check(!label.isTextOverflowing,"Large profile value clipped");}detail.Close();
+                Click(selectedRow.inspect);yield return .2;panel.Reload();yield return .4;Check(!detail.gameObject.activeSelf,"Reload left stale player open");
                 for(int i=0;i<4;i++)
                 {
                     context="category-"+i+"-"+suffix;Click(panel.categories[i]);yield return .4;

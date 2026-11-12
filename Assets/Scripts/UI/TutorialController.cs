@@ -363,7 +363,7 @@ public sealed class TutorialController : MonoBehaviour
         RectTransform anchor = step == 0 ? (RectTransform)settings.playerName.transform : step == 1 ? (RectTransform)settings.upload.transform : privacyTarget;
         string text = step == 0 ? "This is your leaderboard display name. Choose the public name you want other players to see, then use the existing Save button when you decide to change it. This guide will not edit or save your name."
             : step == 1 ? "This switch controls optional statistics uploads. You decide whether to share. The guide will leave its current setting unchanged and will not sign you in. Press Continue to learn what can be shared."
-            : "Only your chosen display name and approved game totals are shared. Private tasks, schedules, tags and detailed history stay on this computer. Continue closes this explanation without changing your privacy choices.";
+            : "Your chosen display name, game totals and equipped gear are shared. Private tasks, schedules, tags and detailed history stay on this computer. Continue closes this explanation without changing your privacy choices.";
         Show("leaderboard-step-" + step, text, anchor, "Continue");
     }
     public void OpenHelp()

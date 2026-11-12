@@ -66,7 +66,9 @@ public static class CharacterAuraVerification
     }
     static IEnumerator Run(){
         var manager=GameDataManager.EnsureInstance();Check(manager.SavePath.Contains("CharacterAuraVerification"),"Not isolated");
-        var data=manager.PlayerData;data.equipmentUnlocked=true;data.equipment=EquipmentRules.Catalog.Select(d=>new EquipmentItem{id=d.Id}).ToList();manager.SaveData();
+        var data=manager.PlayerData;data.experience=10000;
+        data.tutorial=new TutorialProgress{version=1,dismissed=true,taskStep=4,announcedLevel=99};
+        data.equipmentUnlocked=true;data.equipment=EquipmentRules.Catalog.Concat(LootRules.Catalog).Select(d=>new EquipmentItem{id=d.Id}).ToList();manager.SaveData();
         var service=manager.Tasks;var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();nav.ShowPage(MainMenuPage.Dashboard);yield return 1;
         var preview=nav.pages[0].GetComponentInChildren<CharacterHomePreview>();
         var aura=preview.character.GetComponentInChildren<CharacterEquipmentAura>();Check(aura,"Dashboard shared character missing");
@@ -94,6 +96,31 @@ public static class CharacterAuraVerification
         Check(service.Equip("boss2-body",EquipmentSlot.Body),service.LastError);Check(aura.Tier==3&&aura.Pieces==1,"Tie selection");
         Equip(service,1,0);Check(!aura.Circle,"Empty loadout left effect");
         Check(!preview.character.GetComponent<UnityEngine.Rendering.SortingGroup>().enabled,"Empty loadout changed original sorting");
+        foreach(int width in new[]{1920,1280}){
+            Resolution(width,width==1920?1080:720);nav.ShowPage(MainMenuPage.CatHome);yield return .5;
+            Equip(service,1,0);
+            string[] legendary={"chest-armor_gauntletsgold","chest-armor_heavyarmor","chest-armor_helmgolden"};
+            for(int i=0;i<3;i++){
+                Check(service.Equip(legendary[i],(EquipmentSlot)i),service.LastError);yield return .8;
+                Check(aura.Tier==CharacterEquipmentAura.LegendaryTier&&aura.Pieces==i+1&&aura.Circle.transform.childCount==i+1,"Legendary ring count");
+                Check(service.EquipmentStats.SetPieces.All(n=>n==0),"Legendary presentation granted mastery set bonus");
+                float previous=0;
+                foreach(Transform ring in aura.Circle.transform){Check(ring.localScale.x>previous,"Rings must grow from small to large");previous=ring.localScale.x;}
+                var same=aura.Circle;Check(service.Equip(legendary[i],(EquipmentSlot)i),service.LastError);Check(aura.Circle==same,"Duplicate Legendary equip restarted rings");
+                Capture("legendary-"+(i+1)+"-"+width);yield return .2;
+            }
+            var loadedLegendary=new PlayerDataStore(manager.SavePath);
+            CharacterEquipmentAura.SelectEquipment(loadedLegendary.Data.equippedWeaponId,loadedLegendary.Data.equippedBodyOutfitId,loadedLegendary.Data.equippedHeadAccessoryId,out int lt,out int lp);
+            Check(lt==CharacterEquipmentAura.LegendaryTier&&lp==3,"Legendary reload selection");
+            nav.ShowPage(MainMenuPage.Dashboard);yield return .3;nav.ShowPage(MainMenuPage.CatHome);yield return .3;
+            Check(aura.Pieces==3&&aura.Circle.transform.childCount==3,"Legendary reopen lost rings");
+            var preferences=service.Settings;preferences.reduceMotion=true;Check(service.SaveSettings(preferences),service.LastError);yield return .2;
+            Check(!aura.Circle.activeSelf,"Reduced motion left Legendary rings active");
+            preferences.reduceMotion=false;Check(service.SaveSettings(preferences),service.LastError);yield return .2;
+            Check(aura.Circle.activeSelf,"Legendary rings did not resume");
+            if(width==1920)for(int frame=0;frame<12;frame++){Capture("legendary-motion-"+frame.ToString("00"));yield return .12;}
+            for(int i=2;i>=0;i--){Check(service.Unequip((EquipmentSlot)i),service.LastError);yield return .1;Check(i==0?!aura.Circle:aura.Pieces==i,"Unequip left stale Legendary circles");}
+        }
         Equip(service,1,3);yield return .5;
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);yield return .5;
@@ -122,6 +149,9 @@ public static class CharacterAuraVerification
         nav.ShowPage(MainMenuPage.Focus);yield return .5;
         var focus=nav.pages[(int)MainMenuPage.Focus].GetComponentInChildren<FocusScenePreview>();
         var remote=focus.Stage.GetComponentInChildren<CharacterEquipmentAura>();
+        focus.Bind(new CompanionState{connected=true,equipmentAuraTier=CharacterEquipmentAura.LegendaryTier,equipmentAuraPieces=3});yield return .3;
+        Check(remote.Tier==CharacterEquipmentAura.LegendaryTier&&remote.Circle.transform.childCount==3,"Remote Legendary rings missing");
+        focus.Bind(new CompanionState{connected=false,equipmentAuraTier=CharacterEquipmentAura.LegendaryTier,equipmentAuraPieces=3});Check(!remote.Circle,"Disconnected Legendary rings stale");
         focus.Bind(new CompanionState{connected=true,equipmentAuraTier=2,equipmentAuraPieces=2});Check(remote.Tier==2&&remote.Pieces==2,"Remote not applied");
         focus.Bind(new CompanionState{connected=false,equipmentAuraTier=2,equipmentAuraPieces=2});Check(!remote.Circle,"Disconnected effect stale");
         focus.Bind(new CompanionState{connected=true,equipmentAuraTier=3,equipmentAuraPieces=3});Check(remote.Tier==3&&remote.Circle,"Reconnect");
