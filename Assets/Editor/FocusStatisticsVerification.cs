@@ -9,6 +9,8 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
 
 [InitializeOnLoad]
@@ -124,6 +126,19 @@ public static class FocusStatisticsVerification
             Resolution(width,height);yield return .5;
             Capture("focus-entry-"+width);yield return .1;
             Click(ui.open);yield return .3;Check(ui.panel.activeSelf,"Statistics not open");
+            Check(EventSystem.current.currentSelectedGameObject==null,"Opening insights selected a control without keyboard navigation");
+            var closeHint=ui.close.GetComponent<ControlHint>();
+            Check(!closeHint.hint.activeSelf,"Close hint appeared without pointer hover or keyboard navigation");
+            Capture("open-no-close-hint-"+width);yield return .1;
+            var priorKeyboard=Keyboard.current;
+            var testKeyboard=InputSystem.AddDevice<Keyboard>();
+            try {
+                InputSystem.QueueStateEvent(testKeyboard,new KeyboardState(Key.Tab));yield return .2;
+                Check(EventSystem.current.currentSelectedGameObject==ui.close.gameObject&&closeHint.hint.activeSelf,"Tab did not start keyboard navigation with a visible Close hint");
+                InputSystem.QueueStateEvent(testKeyboard,new KeyboardState());yield return .1;
+            } finally { InputSystem.RemoveDevice(testKeyboard);if(priorKeyboard!=null&&priorKeyboard.added)priorKeyboard.MakeCurrent(); }
+            ui.Hide();ui.Show();yield return .2;
+            Check(EventSystem.current.currentSelectedGameObject==null&&!closeHint.hint.activeSelf,"Reopening retained Close focus or hint");
             Check(!ui.panel.transform.Find("Card/AboutData") && !ui.panel.transform.Find("Card/Note"), "Removed explanation UI still exists");
             foreach(FocusStatisticsPeriod period in Enum.GetValues(typeof(FocusStatisticsPeriod)))
             {

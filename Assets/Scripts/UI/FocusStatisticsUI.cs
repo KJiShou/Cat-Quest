@@ -55,10 +55,19 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         if(!panel.activeSelf)return;
         if(Keyboard.current!=null&&Keyboard.current.escapeKey.wasPressedThisFrame)Hide();
         if(service.LocalNow.Date!=observedDay)Refresh();
-        var selected=EventSystem.current?EventSystem.current.currentSelectedGameObject:null;
-        if(selected&&!selected.transform.IsChildOf(panel.transform))EventSystem.current.SetSelectedGameObject(close.gameObject);
+        var events=EventSystem.current;
+        if(!events)return;
+        var selected=events.currentSelectedGameObject;
+        if(selected&&!selected.transform.IsChildOf(panel.transform)){events.SetSelectedGameObject(null);selected=null;}
+        // Opening with the mouse must not look like hovering Close. Seed focus only
+        // when the user starts keyboard navigation; automatic navigation then owns it.
+        var keyboard=Keyboard.current;
+        if(!selected&&keyboard!=null&&(keyboard.tabKey.wasPressedThisFrame||
+            keyboard.upArrowKey.wasPressedThisFrame||keyboard.downArrowKey.wasPressedThisFrame||
+            keyboard.leftArrowKey.wasPressedThisFrame||keyboard.rightArrowKey.wasPressedThisFrame))
+            events.SetSelectedGameObject(close.gameObject);
     }
-    public void Show() { Date=service.LocalNow.Date;SelectedTag=null;panel.SetActive(true);panel.transform.SetAsLastSibling();Refresh();if(EventSystem.current)EventSystem.current.SetSelectedGameObject(close.gameObject); }
+    public void Show() { Date=service.LocalNow.Date;SelectedTag=null;panel.SetActive(true);panel.transform.SetAsLastSibling();Refresh();if(EventSystem.current)EventSystem.current.SetSelectedGameObject(null); }
     public void Hide() { panel.SetActive(false);if(EventSystem.current&&open.gameObject.activeInHierarchy)EventSystem.current.SetSelectedGameObject(open.gameObject); }
     public void ChoosePeriod(FocusStatisticsPeriod period) { Period=period;Refresh(); }
     void Previous() { Date=FocusStatistics.Move(Date,Period,-1);Refresh(); }
