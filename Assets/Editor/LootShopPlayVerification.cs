@@ -178,7 +178,9 @@ public static class LootShopPlayVerification
                 if(shop.Revealing){var sprite=shop.chest.sprite;Check(Vector2.Distance(shop.chest.rectTransform.sizeDelta,sprite.rect.size*shop.chestFrameScale)<.01f,"Stable original-canvas frame scale");}
                 Capture("tier-"+tier+"-"+frame.ToString("00"));yield return .12;
             }
-            yield return .5;shop.FinishReveal();Capture("tier-"+tier+"-result");yield return .2;shop.done.onClick.Invoke();
+            yield return .5;shop.FinishReveal();Capture("tier-"+tier+"-result");yield return .2;
+            Resolution(1280,720);yield return .3;Capture("tier-"+tier+"-result-1280");yield return .2;
+            Resolution(1920,1080);yield return .3;shop.done.onClick.Invoke();
         }
         var settings=PlayerDataStore.Copy(service.Snapshot.settings);settings.reduceMotion=true;Check(service.SaveSettings(settings),"Reduce Motion setting");
         shop.Prepare(1);shop.Purchase();Check(!shop.Revealing&&shop.results.gameObject.activeSelf,"Reduced motion keeps reward without animation");shop.done.onClick.Invoke();

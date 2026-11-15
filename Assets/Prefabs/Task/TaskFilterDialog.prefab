@@ -2000,7 +2000,8 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 8678017446199303089}
   m_Father: {fileID: 8797993101223974747}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -2021,11 +2022,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
   m_IgnoreLayout: 0
-  m_MinWidth: 18
-  m_MinHeight: 18
-  m_PreferredWidth: 18
-  m_PreferredHeight: 18
-  m_FlexibleWidth: -1
+  m_MinWidth: 32
+  m_MinHeight: 34
+  m_PreferredWidth: 32
+  m_PreferredHeight: 34
+  m_FlexibleWidth: 0
   m_FlexibleHeight: 0
   m_LayoutPriority: 1
 --- !u!222 &8132364222991396212
@@ -2065,7 +2066,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 3
+  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &4375410567747460904
 GameObject:
   m_ObjectHideFlags: 0
@@ -2891,12 +2892,12 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 8797993101223974747}
+  m_Father: {fileID: 3182791731721576053}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 100, y: 100}
+  m_SizeDelta: {x: -24, y: -4}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8658101679721511634
 CanvasRenderer:
@@ -2926,7 +2927,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Tag option
+  m_text: Tag
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 98208c7f05e775f48a22efc4563512bd, type: 2}
   m_sharedMaterial: {fileID: 2328590562618913875, guid: 98208c7f05e775f48a22efc4563512bd, type: 2}
@@ -2948,20 +2949,20 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 22
-  m_fontSizeBase: 22
+  m_fontSize: 18
+  m_fontSizeBase: 18
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 0
   m_fontSizeMax: 0
   m_fontStyle: 0
-  m_HorizontalAlignment: 1
-  m_VerticalAlignment: 4096
+  m_HorizontalAlignment: 2
+  m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_characterHorizontalScale: 1
@@ -3010,7 +3011,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
-  m_IgnoreLayout: 0
+  m_IgnoreLayout: 1
   m_MinWidth: 0
   m_MinHeight: 36
   m_PreferredWidth: 0
@@ -3312,7 +3313,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -28, y: -28}
+  m_AnchoredPosition: {x: -46, y: -44}
   m_SizeDelta: {x: 38, y: 38}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &6036385279907709814
@@ -3537,7 +3538,6 @@ RectTransform:
   m_Children:
   - {fileID: 7206370813623907450}
   - {fileID: 3182791731721576053}
-  - {fileID: 8678017446199303089}
   m_Father: {fileID: 2972584179478326049}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -3583,7 +3583,7 @@ MonoBehaviour:
     m_Top: 0
     m_Bottom: 0
   m_ChildAlignment: 3
-  m_Spacing: 8
+  m_Spacing: 12
   m_ChildForceExpandWidth: 0
   m_ChildForceExpandHeight: 0
   m_ChildControlWidth: 1

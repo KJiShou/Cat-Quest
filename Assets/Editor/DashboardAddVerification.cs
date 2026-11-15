@@ -213,5 +213,7 @@ public static class DashboardAddVerification
             EventSystem.current.SetSelectedGameObject(null); yield return .3;
             Check(service.Snapshot.tasks.Count==count+3,"Submit followed by blur duplicated task");
         }
+        var actions=DashboardTaskActionsVerification.Run(owner,nav,Resolution,Capture);
+        while(actions.MoveNext())yield return actions.Current;
     }
 }

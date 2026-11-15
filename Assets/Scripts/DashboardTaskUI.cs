@@ -44,8 +44,13 @@ public class DashboardTasksUI : MonoBehaviour
 
     private void RequestComplete(TaskView view,RectTransform origin)
     {
-        if (view.Completed)
+        if (!PrepareToLeavePage()) return;
+        if (view.Completed) {
+            string receipt = service.CompletionId(view.task.id, view.occurrence.day);
+            if (!service.UndoCompletion(receipt)) ShowTaskNotice(service.LastError, true);
+            else ShowTaskNotice("Task restored. Previously earned rewards are kept.");
             return;
+        }
 
         if (service.HasIncompleteSubtasks(view.task.id))
         {
@@ -85,6 +90,7 @@ public class DashboardTasksUI : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (contextMenu) Destroy(contextMenu.gameObject);
         if (resultNotice) Destroy(resultNotice.gameObject);
         if (confirmation != null && confirmation.Root)
             Destroy(confirmation.Root);
@@ -127,6 +133,7 @@ public class DashboardTasksUI : MonoBehaviour
         if (service != null)
             service.Changed -= Refresh;
         confirmation?.Dismiss();
+        if (contextMenu) contextMenu.Dismiss();
     }
 
     private void LateUpdate()
@@ -142,6 +149,7 @@ public class DashboardTasksUI : MonoBehaviour
 
     public void Refresh()
     {
+        if (contextMenu) contextMenu.Dismiss();
         // Finish the outside click before rebuilding the rows under the pointer.
         if (savingTask) { pendingRefresh = true; return; }
         pendingRefresh = false;
@@ -193,6 +201,11 @@ public class DashboardTasksUI : MonoBehaviour
                     var row=go.GetComponent<DashboardTaskRow>();
                     row.Bind(task,taskManager.editor.difficultySprites,OpenTask,
                         view=>RequestComplete(view,row.completeButton.transform as RectTransform),service.PreviewReward(task));
+                    row.completeButton.interactable = task.Completed
+                        ? service.CanUndoCompletion(service.CompletionId(task.task.id, task.occurrence.day))
+                        : service.Eligible(task.task);
+                    TaskContextTarget.Bind(row.gameObject, point => OpenTaskContext(task, point));
+                    TaskContextTarget.Bind(row.completeButton.gameObject, point => OpenTaskContext(task, point));
                 });
         }
         if (tasks.Length == 0) {
@@ -293,5 +306,90 @@ public class DashboardTasksUI : MonoBehaviour
             view.task.daily ? TaskTab.Daily : TaskTab.Todo);
 
         taskManager.SelectTask(view.task.id);
+    }
+
+    private TaskContextMenu contextMenu;
+
+    private void ShowTaskNotice(string message, bool error = false)
+    {
+        if (error) { GetConfirmation().ShowNotice("Could not update task", message); return; }
+        if (!resultNotice)
+            resultNotice = Instantiate(Resources.Load<TaskResultNotice>("TaskResultNotice"),
+                GetComponentInParent<Canvas>().rootCanvas.transform);
+        resultNotice.Show(message);
+    }
+
+    private TaskView CurrentContextTask(string id) => service.Query(TaskTab.Daily)
+        .Concat(service.Query(TaskTab.Todo)).FirstOrDefault(v => v.task.id == id);
+
+    private void OpenTaskContext(TaskView view, Vector2 point)
+    {
+        if (!PrepareToLeavePage()) return;
+        var current = CurrentContextTask(view.task.id);
+        if (current == null) return;
+        if (!contextMenu)
+            contextMenu = Instantiate(Resources.Load<TaskContextMenu>("TaskContextMenu"),
+                GetComponentInParent<Canvas>().rootCanvas.transform);
+        string id = current.task.id;
+        int version = service.ReadVersion;
+        string day = TaskService.DateKey(service.LocalNow);
+        bool IsCurrent() => isActiveAndEnabled && version == service.ReadVersion
+            && day == TaskService.DateKey(service.LocalNow) && CurrentContextTask(id) != null;
+        contextMenu.Show(current.task, service.TagCatalog, service.LocalNow,
+            !current.Completed && service.Eligible(current.task), point, action =>
+        {
+            if (!IsCurrent()) { ShowTaskNotice("This task changed. Reopen it to continue.", true); return; }
+            if (action == TaskContextAction.Complete) RequestComplete(current, null);
+            else if (action == TaskContextAction.Delete)
+            {
+                var name = new System.Globalization.StringInfo(current.task.title);
+                string caption = name.LengthInTextElements > 40 ? name.SubstringByTextElements(0, 40) + "…" : current.task.title;
+                GetConfirmation().Show(current.task.daily ? "Delete repeating task?" : "Delete task?",
+                    "\"" + caption + "\"\n" + (current.task.daily ? "This stops this task and all future repeats.\n" : "")
+                    + "Completed history and rewards are kept.", () =>
+                {
+                    if (!IsCurrent()) { ShowTaskNotice("This task changed. Reopen it to continue.", true); return; }
+                    if (!service.Delete(id)) ShowTaskNotice(service.LastError, true);
+                    else ShowTaskNotice("Task deleted.");
+                }, "Delete");
+            }
+            else if (navigation.ShowPage(MainMenuPage.Tasks))
+                navigation.StartCoroutine(EditTaskWhenReady(id));
+        }, change =>
+        {
+            if (!IsCurrent()) return "This task changed. Reopen the menu to continue.";
+            var latest = CurrentContextTask(id);
+            var draft = PlayerDataStore.Copy(latest.task);
+            if (change.field == TaskContextAction.Difficulty) draft.difficulty = change.difficulty;
+            else if (change.field == TaskContextAction.Tags) draft.tagIds = change.tagIds;
+            else if (change.field == TaskContextAction.ChooseDate)
+            {
+                draft.scheduled = change.scheduled;
+                if (change.scheduled) draft.date = TaskService.DateKey(change.date);
+                else draft.daily = false;
+            }
+            else return "Choose a field to change.";
+            if (!service.Upsert(draft, latest.occurrence.completedSubtaskIds, out _))
+                return service.LastError ?? "Could not save. Please try again.";
+            ShowTaskNotice("Task updated.");
+            return null;
+        });
+    }
+
+    private System.Collections.IEnumerator EditTaskWhenReady(string id)
+    {
+        yield return new WaitUntil(() => taskManager.Service != null);
+        if (navigation.CurrentPage != MainMenuPage.Tasks) yield break;
+        var current = CurrentContextTask(id);
+        if (current == null) yield break;
+        taskManager.SelectTab(current.task.daily ? TaskTab.Daily : TaskTab.Todo);
+        taskManager.SelectTask(id);
+        taskManager.CalendarDraft(current.task, current.occurrence.completedSubtaskIds);
+    }
+
+    private void OnApplicationFocus(bool focused)
+    {
+        if (!focused && contextMenu) contextMenu.Dismiss();
+        if (focused && isActiveAndEnabled && service != null) { service.RefreshDate(); Refresh(); }
     }
 }

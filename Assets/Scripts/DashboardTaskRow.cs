@@ -45,8 +45,6 @@ public class DashboardTaskRow : MonoBehaviour
         button.onClick.RemoveAllListeners();
         button.onClick.AddListener(() => clicked(view));
 
-        completeButton.interactable = !view.Completed;
-
         completeButton.onClick.RemoveAllListeners();
         completeButton.onClick.AddListener(
             () => completeRequested(view));

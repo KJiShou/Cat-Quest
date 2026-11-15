@@ -56,8 +56,9 @@ public sealed class TaskFilterDialog : MonoBehaviour
         {
             var option = Instantiate(tagTemplate, tagContent);
             option.name = "Tag_" + tag.id;
-            option.GetComponentInChildren<TMP_Text>(true).text = tag.name;
-            option.transform.Find("TagColor").GetComponent<Image>().color = TagColors.Background(tag.colorHex);
+            var chip = option.transform.Find("TagColor").gameObject;
+            chip.GetComponentInChildren<TMP_Text>(true).text = tag.name;
+            TagColors.Apply(chip, tag.colorHex, chip.GetComponent<Image>().sprite);
             option.SetIsOnWithoutNotify(selectedTags.Contains(tag.id));
             option.onValueChanged.AddListener(on => {
                 if (on) selectedTags.Add(tag.id); else selectedTags.Remove(tag.id);
@@ -74,9 +75,26 @@ public sealed class TaskFilterDialog : MonoBehaviour
         if (EventSystem.current) EventSystem.current.SetSelectedGameObject(difficultyTab.gameObject);
     }
 
+    void LayoutTags()
+    {
+        foreach (Transform child in tagContent)
+        {
+            if (child == tagTemplate.transform) continue;
+            var chip = child.Find("TagColor").gameObject;
+            var label = chip.GetComponentInChildren<TMP_Text>(true);
+            label.ForceMeshUpdate();
+            TaskUIBuilder.LayoutTag(chip, label.text);
+            var size = chip.GetComponent<LayoutElement>();
+            size.minWidth = 0;
+            size.preferredWidth = Mathf.Min(size.preferredWidth, 440);
+            label.overflowMode = TextOverflowModes.Ellipsis;
+        }
+    }
+
     void SelectPanel(bool tags)
     {
         difficultyPanel.SetActive(!tags); tagsPanel.SetActive(tags);
+        if (tags) LayoutTags();
         difficultyFocus.SetActive(!tags); tagsFocus.SetActive(tags);
         difficultyLabel.color = tags ? new Color32(193,201,208,255) : new Color32(88,121,255,255);
         tagsLabel.color = tags ? new Color32(88,121,255,255) : new Color32(193,201,208,255);
