@@ -140,6 +140,15 @@ public static class TaskFilterVerification
                 if(tags)CheckHit(d.tagContent.Find("Tag_"+tag.id).GetComponent<Toggle>(),(RectTransform)d.tagContent.Find("Tag_"+tag.id+"/Box"));
                 else foreach(var option in d.difficultyOptions)CheckHit(option,(RectTransform)option.transform.Find("Box"));
                 foreach(var t in d.GetComponentsInChildren<TMPro.TMP_Text>())Check(!t.isTextOverflowing,"Clipped label: "+t.text);
+                if(tags) {
+                    var option=d.tagContent.Find("Tag_"+tag.id).GetComponent<Toggle>();
+                    ClickLabel(option);Check(!option.isOn,"Tag text did not deselect the option.");
+                    ClickLabel(option);Check(option.isOn,"Tag text did not select the option.");
+                    option.interactable=false;ClickLabel(option);Check(option.isOn,"Disabled tag text changed selection.");option.interactable=true;
+                } else {
+                    ClickLabel(d.difficultyOptions[1]);Check(d.difficultyOptions[1].isOn&&!d.difficultyOptions[3].isOn,"Difficulty text did not select exclusively.");
+                    ClickLabel(d.difficultyOptions[3]);Check(d.difficultyOptions[3].isOn&&!d.difficultyOptions[1].isOn,"Difficulty text did not restore Hard.");
+                }
                 Capture((tags?"tags-":"difficulty-")+size.x+"x"+size.y);yield return .3;
             }
         }
@@ -178,6 +187,18 @@ public static class TaskFilterVerification
         var reference=UnityEngine.Object.Instantiate(source,owner.GetComponentInParent<Canvas>().rootCanvas.transform);
         reference.SetActive(true);reference.transform.SetAsLastSibling();yield return .5;Capture("reference-simplecasual-equipment");yield return .3;
         UnityEngine.Object.Destroy(reference);
+    }
+    static void ClickLabel(Toggle option)
+    {
+        Canvas.ForceUpdateCanvases();
+        var label=option.GetComponentInChildren<TMPro.TMP_Text>();
+        var canvas=option.GetComponentInParent<Canvas>().rootCanvas;
+        var camera=canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera;
+        var pointer=new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left,
+            position=RectTransformUtility.WorldToScreenPoint(camera,label.rectTransform.TransformPoint(label.rectTransform.rect.center))};
+        var hits=new List<RaycastResult>();EventSystem.current.RaycastAll(pointer,hits);
+        Check(hits.Count>0&&ExecuteEvents.GetEventHandler<IPointerClickHandler>(hits[0].gameObject)==option.gameObject,"Label click misses option: "+option.name);
+        ExecuteEvents.ExecuteHierarchy(hits[0].gameObject,pointer,ExecuteEvents.pointerClickHandler);
     }
     static void CheckHit(Selectable control,RectTransform hitArea)
     {
