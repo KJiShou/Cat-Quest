@@ -4,17 +4,17 @@
 
 在 `Assets/Scenes/CharacterHome.unity` 选择 Focus。支持默认 Pomodoro、Stopwatch 和 Countdown。正计时直到 End Focus，可超过三小时。倒计时接受 1–180 整分钟，默认 25，结束自动结算。只有番茄钟进入休息，其专注和休息滑条各 1–60 分钟，默认 25/5。可从任务标签目录选择一个标签，标签不影响奖励或完成任务。
 
-当前番茄钟专注中只提供带确认的 Cancel，取消不发奖、不进入休息。正常结束结算后进入休息。正计时和倒计时只显示 End Focus，确认后按既有规则结算有效时间与奖励。历史和底层 End Early 收据继续兼容，不等于取消。
+所有模式均提供带确认的 End Focus，按既有规则保存已专注时间与奖励；番茄钟仅在保存成功后进入休息。真正的取消或技术中断仍不发奖。
 
 训练场景填满圆角裁切背景，隐藏独立页标题和 Return to Dashboard，使用共用侧栏。各模式按需显示白色专注与休息卡，天空显示计时，湖景内有 Start Focus。标签框按名字不区分大小写搜索，选择替换旧标签并关闭，No tags 清空，点击外部或 Escape 关闭。奖励格复用 Task Details 的蓝色鱼币、EXP 格并补同风格券格，显示预览和已结算值。额度卡显示当日使用量及限制。
 
 ## 伙伴窗口
 
-Pet Widget 打开 420×300 默认置顶窗口，浅色标题栏居中显示主程序发布的玩家名，包含 Pin、Minimize、Close。Close 来自 SimpleCasual Lobby_Popup_User_Info，置顶和最小化用 Lucide 图标，许可在 `Assets/Generated/Icons/WindowControls`。伙伴不读玩家存档。
+Windows 应用启动时预先加载隐藏的伙伴进程，隐藏时开关仍为关闭；Pet Widget 随后直接显示已加载的 420×300 默认置顶窗口，浅色标题栏居中显示主程序发布的玩家名，包含 Pin、Minimize、Close。Close 来自 SimpleCasual Lobby_Popup_User_Info，置顶和最小化用 Lucide 图标，许可在 `Assets/Generated/Icons/WindowControls`。伙伴不读玩家存档。
 
 Pin 切换置顶，缩放不改变该状态。伙伴打开时即显示任务栏入口，最小化及恢复后继续保留；最小化不结束专注。UI 遮罩和原生窗口区域均为 16 像素圆角，随缩放刷新。标题栏下是完整训练画面，天空计时、水面会话操作，不显示任务、奖励、预设细节或悬停提示。
 
-所有尺寸下，指针在外时隐藏会话按钮；已获得焦点的伙伴正在使用键盘导航时除外，进入约 0.32 秒淡入、离开约 0.24 秒淡出。Start、Cancel、End Focus、Finish Rest、Retry Save 共用行为，不改变动画构图。标题栏拖动，四边四角用标准 Windows 光标缩放，最小 240×180。关闭立即隐藏原生窗，再在 Unity 清理时退出子进程，主应用继续计时。
+所有尺寸下，指针在外时隐藏会话按钮；已获得焦点的伙伴正在使用键盘导航时除外，进入约 0.32 秒淡入、离开约 0.24 秒淡出。Start、End Focus、Finish Rest、Retry Save 共用行为，不改变动画构图。标题栏拖动，四边四角用标准 Windows 光标缩放，最小 240×180。缩放使用捕获的原生鼠标消息（包含松开时的位置），快速拖动不再依赖 Unity 帧输入；达到最小尺寸时对边保持固定。缩放输入帧内屏蔽 UI 射线，避免移动中的会话按钮把拖动误判为点击。Escape 恢复本次拖动前的尺寸和位置；失去捕获、窗口失焦、隐藏或退出时结束缩放。关闭立即隐藏原生窗并保留进程供下次打开，主应用继续计时。主应用关闭或更新时退出伙伴，失去主机联系 15 秒也会退出孤立进程。
 
 ## 键盘与重复输入
 
@@ -70,9 +70,9 @@ pwsh -NoProfile -File Tools/Verify-FocusModesWindows.ps1 -Executable Builds/Focu
 
 使用已有开发构建和隔离数据，检查主伙伴状态、保存重试、重复陈旧错误 owner、额度、心跳冻结、原生尺寸最小化及关闭。恢复 PlayerPrefs，只关闭自身进程。Windows 拒绝移动鼠标时，真实指针检查明确未验证，不算通过。输出 `Library/FocusModesVerification/native-*`。
 
-## 番茄钟取消确认
+## End Focus 确认
 
-主页面和伙伴共用 `Assets/Prefabs/Focus/FocusCancelConfirmation.prefab`，来自 Boss Skip / SimpleCasual 双按钮弹窗。默认 Keep focus，Escape 或背景关闭不改会话。弹窗期间继续计时，确认校验捕获的会话身份。会话结束、变化、切页或断连清除过期提示。主机拒绝旧番茄钟 `end` 命令，取消仍为原子无奖励结算，失败用 Retry Save，历史提前结束收据保留。
+主页面和伙伴共用 `Assets/Prefabs/Focus/FocusCancelConfirmation.prefab`，来自 Boss Skip / SimpleCasual 双按钮弹窗。默认 Keep focus，Escape 或背景关闭不改会话。弹窗期间继续计时，确认校验捕获的会话身份。会话结束、变化、切页或断连清除过期提示。主机允许各模式经身份与会话校验的 `end` 命令，拒绝错误 owner、陈旧会话和重复请求。提前结束结算有效时间与奖励；真正取消仍为原子无奖励结算，失败用 Retry Save。
 
 `Temp/verify-pomodoro-cancel.request` 检查隔离 UI、陈旧会话和主机防护及两种标准尺寸。`Tools/Verify-PomodoroCancelWindows.ps1 -Executable <development build>` 检查真实主伙伴确认、普通最小尺寸、错误命令、自然结束和干净关闭。仅 `--companion-smoke` 接受冒烟 UI 请求。
 
@@ -95,3 +95,6 @@ pwsh -NoProfile -File Tools/Verify-FocusModesWindows.ps1 -Executable Builds/Focu
 ## 伙伴输入回归
 
 对最新 Windows 构建执行 `pwsh -NoProfile -File Tools/Verify-CompanionInputWindows.ps1 -Executable Builds/Windows/CatQuest.exe`。需可交互的 Windows 桌面：运行器发送真实键盘／鼠标输入，并实际点击任务栏按钮，不用 ShowWindow 代替恢复。它使用已解锁功能的虚构隔离存档，检查普通／最小尺寸、键盘焦点与导航、快速输入、pending 请求防重、保存失败／重试及确认框行为，并恢复 PlayerPrefs、指针和前台窗口。结果与截图在 `Library/CompanionInputVerification/native-*`；找不到任务栏目标或原生输入被拒绝均判为失败。此检查不替代完整奖励验证。
+
+
+Focus 应用内通知与 Task 共用 NotificationReveal：0.24 秒从中间向左右展开，高度不变，文字保持正常尺寸并淡入。相同内容的计时刷新不会重播。保留短暂通知时长和保存错误的持续显示；减少动态效果开启时立即显示。Windows 桌面通知保留系统控制的动画。

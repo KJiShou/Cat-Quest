@@ -24,6 +24,7 @@ public sealed class FocusPanelUI : MonoBehaviour
     public RectTransform questPopup;
     public TMP_Text questContext, rewards, rewardTitle, allowance;
     public GameObject allowanceNotice;
+    public NotificationReveal allowanceReveal;
     public TMP_Text fishReward, ticketReward;
     public Slider rewardAllowanceBar, ticketAllowanceBar;
     public TMP_Text rewardAllowanceLabel, ticketAllowanceLabel;
@@ -45,7 +46,7 @@ public sealed class FocusPanelUI : MonoBehaviour
     {
         focus = FocusRunner.EnsureInstance().Controller;
         focus.Changed += Refresh;
-        GameDataManager.EnsureInstance().Tasks.Changed += RefreshQuests;
+        GameDataManager.EnsureInstance().Service.Changed += RefreshQuests;
         if (!quickStart)
         {
             if (pomodoroMode) pomodoroMode.onValueChanged.AddListener(ChoosePomodoro);
@@ -81,7 +82,7 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (stopwatchMode) stopwatchMode.onValueChanged.RemoveListener(ChooseStopwatch);
         if (countdownMode) countdownMode.onValueChanged.RemoveListener(ChooseCountdown);
         if (focus != null) focus.Changed -= Refresh;
-        if (GameDataManager.Instance) GameDataManager.Instance.Tasks.Changed -= RefreshQuests;
+        if (GameDataManager.Instance) GameDataManager.Instance.Service.Changed -= RefreshQuests;
         if (focusDuration) focusDuration.onValueChanged.RemoveListener(ChangeFocusDuration);
         if (questSearch) { questSearch.onSelect.RemoveListener(OpenQuests); questSearch.onValueChanged.RemoveListener(SearchQuests); }
         if (questDropdown) questDropdown.onClick.RemoveListener(ToggleQuests);
@@ -125,7 +126,7 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (questPopup) questPopup.gameObject.SetActive(false);
         if (questSearch) questSearch.SetTextWithoutNotify("");
     }
-    private void StartFocus()
+    private async void StartFocus()
     {
         if (quickStart)
         {
@@ -133,31 +134,30 @@ public sealed class FocusPanelUI : MonoBehaviour
             if (!navigation.ShowPage(MainMenuPage.Focus)) return;
             if (focus.Phase == FocusPhase.Focusing || focus.Phase == FocusPhase.Resting || focus.Phase == FocusPhase.Saving) return;
         }
-        focus.Start();
+        await focus.StartAsync();
     }
     private void EndEarly() => ConfirmSessionAction(false);
-    private void Cancel() => ConfirmSessionAction(true);
+    private void Cancel() => ConfirmSessionAction(false);
     private void ConfirmSessionAction(bool cancelSession)
     {
         if (focus.Phase != FocusPhase.Focusing || !cancelConfirmation || cancelConfirmation.IsOpen) return;
-        if (cancelSession != (focus.Options.mode == FocusTimerMode.Pomodoro)) return;
         string session = confirmingSession = focus.SessionId;
-        cancelConfirmation.Show(cancelSession, () => {
+        cancelConfirmation.Show(cancelSession, async () => {
             if (focus.Phase != FocusPhase.Focusing || focus.SessionId != session) return;
-            if (cancelSession) focus.Cancel();
-            else focus.EndEarly();
+            if (cancelSession) await focus.CancelAsync();
+            else await focus.EndEarlyAsync();
         }, cancelSession ? null : (Func<FocusCancelConfirmation.RewardPreview>)EndFocusEstimate);
     }
     private FocusCancelConfirmation.RewardPreview EndFocusEstimate()
     {
-        var service = GameDataManager.EnsureInstance().Tasks;
+        var service = GameDataManager.EnsureInstance().Service;
         var estimate = service.PreviewFocusRewards(focus.ElapsedSeconds);
         int minutes = (int)(Math.Min(focus.ElapsedSeconds, service.FocusSessionMinuteLimit * 60d) / 60);
         int remaining = TaskService.DailyGoalTarget(DailyRewardGoal.Focus25Minutes) - service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes);
         return new FocusCancelConfirmation.RewardPreview(estimate, Math.Max(0, Math.Min(minutes, remaining)));
     }
     private void EndRest() { focus.EndRest(); }
-    private void Retry() { focus.RetrySettlement(); }
+    private async void Retry() { await focus.RetrySettlementAsync(); }
     private void ReturnToDashboard() { navigation.ShowPage(MainMenuPage.Dashboard); }
     private void Refresh()
     {
@@ -168,8 +168,8 @@ public sealed class FocusPanelUI : MonoBehaviour
         bool ready = phase == FocusPhase.Ready || phase == FocusPhase.Finished || phase == FocusPhase.Interrupted;
         start.gameObject.SetActive(quickStart || ready);
         start.GetComponentInChildren<TMP_Text>(true).text = quickStart && !ready ? "Open Focus" : "Start Focus";
-        if (endEarly) endEarly.gameObject.SetActive(phase == FocusPhase.Focusing && focus.Options.mode != FocusTimerMode.Pomodoro);
-        if (cancel) cancel.gameObject.SetActive(phase == FocusPhase.Focusing && focus.Options.mode == FocusTimerMode.Pomodoro);
+        if (endEarly) endEarly.gameObject.SetActive(phase == FocusPhase.Focusing);
+        if (cancel) cancel.gameObject.SetActive(false);
         if (endRest) endRest.gameObject.SetActive(phase == FocusPhase.Resting);
         if (retry) retry.gameObject.SetActive(phase == FocusPhase.Saving);
         RefreshTime();
@@ -209,7 +209,7 @@ public sealed class FocusPanelUI : MonoBehaviour
         foreach (Transform child in questList) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
         var ui = new TaskUIBuilder(settingsFont, settingsSprite);
         AddTag(ui, null);
-        var service = GameDataManager.EnsureInstance().Tasks;
+        var service = GameDataManager.EnsureInstance().Service;
         var catalog = service.TagCatalog;
         if (Ready)
         {
@@ -235,7 +235,7 @@ public sealed class FocusPanelUI : MonoBehaviour
             options.questId = options.questTitle = options.occurrenceDay = null;
             if (tag == null) options.tagIds.Clear();
             else { options.tagIds.Clear(); options.tagIds.Add(tag.id); }
-            var catalog = GameDataManager.EnsureInstance().Tasks.TagCatalog;
+            var catalog = GameDataManager.EnsureInstance().Service.TagCatalog;
             options.tagIds.RemoveAll(id => !catalog.Any(t => t.id == id));
             options.tagNames = catalog.Where(t => options.tagIds.Contains(t.id)).Select(t => t.name).ToList();
             focus.Configure(options);
@@ -286,7 +286,7 @@ public sealed class FocusPanelUI : MonoBehaviour
         SetDurationButton(restIncrease, Ready && focus.Options.restMinutes < 60);
         focusDurationLabel.text = focus.Options.focusMinutes + " min";
         restDurationLabel.text = focus.Options.restMinutes + " min";
-        var catalog = GameDataManager.EnsureInstance().Tasks.TagCatalog;
+        var catalog = GameDataManager.EnsureInstance().Service.TagCatalog;
         if (questList) foreach (var button in questList.GetComponentsInChildren<Button>())
         {
             bool selected = focus.Options.tagIds.Contains(button.name) || (button.name == "NoTags" && focus.Options.tagIds.Count == 0);
@@ -308,7 +308,7 @@ public sealed class FocusPanelUI : MonoBehaviour
             questSearch.textComponent.color = tagPlaceholder.color;
         }
         if (questContext) questContext.text = "TAGS\n" + (focus.Options.tagNames.Count == 0 ? "Free focus" : string.Join(", ", focus.Options.tagNames));
-        var service = GameDataManager.EnsureInstance().Tasks;
+        var service = GameDataManager.EnsureInstance().Service;
         var day = service.TodayRewards;
         int dailyLimit = service.FocusDailyMinuteLimit;
         int sessionLimit = service.FocusSessionMinuteLimit;
@@ -342,12 +342,13 @@ public sealed class FocusPanelUI : MonoBehaviour
                 + (focus.Phase == FocusPhase.Saving ? " Retry Save." : " Try Start Focus again.");
         else if (focus.Phase == FocusPhase.Saving)
             notice = "Focus not saved. Retry to save your result.";
-        else if (focus.Phase == FocusPhase.Finished && focus.LastResult != null)
+        else if ((focus.Phase == FocusPhase.Finished || focus.Phase == FocusPhase.Resting) && focus.LastResult != null)
             notice = "Focus saved." + (string.IsNullOrEmpty(notice) ? "" : "\n" + notice);
         else if (focus.Phase == FocusPhase.Interrupted)
             notice = "Session ended without rewards.";
 
-        if (notice != lastNotice || noticeSession != focus.SessionId)
+        bool changed=notice != lastNotice || noticeSession != focus.SessionId;
+        if (changed)
         {
             lastNotice = notice;
             noticeSession = focus.SessionId;
@@ -355,6 +356,7 @@ public sealed class FocusPanelUI : MonoBehaviour
         }
         if (allowance) allowance.text = persistentNotice || Time.realtimeSinceStartupAsDouble < noticeUntil ? notice : "";
         if(allowanceNotice)allowanceNotice.SetActive(allowance&&!string.IsNullOrEmpty(allowance.text));
+        if(changed && allowanceReveal && allowanceNotice.activeInHierarchy){allowanceNotice.transform.SetAsLastSibling();allowanceReveal.Play();}
     }
     private void RefreshTicketProgress(RewardDay day, int estimatedTickets)
     {
@@ -398,10 +400,10 @@ public sealed class FocusPanelUI : MonoBehaviour
         if (quickStart)
             foreach (var label in GetComponentsInChildren<TMP_Text>(true))
                 if ((label.text.Contains("min Focus") && label.text.Contains("min Rest")) || label.text.StartsWith("Stopwatch •") || label.text.StartsWith("Countdown •"))
-                    label.text = focus.CountsUp ? $"Stopwatch • Up to {GameDataManager.EnsureInstance().Tasks.FocusSessionMinuteLimit} min rewards" : focus.Options.mode == FocusTimerMode.Countdown ? $"Countdown • {focus.Options.focusMinutes} min" : $"{focus.Options.focusMinutes} min Focus / {focus.Options.restMinutes} min Rest";
+                    label.text = focus.CountsUp ? $"Stopwatch • Up to {GameDataManager.EnsureInstance().Service.FocusSessionMinuteLimit} min rewards" : focus.Options.mode == FocusTimerMode.Countdown ? $"Countdown • {focus.Options.focusMinutes} min" : $"{focus.Options.focusMinutes} min Focus / {focus.Options.restMinutes} min Rest";
         if (progress)
         {
-            progress.maxValue = focus.CountsUp ? GameDataManager.EnsureInstance().Tasks.FocusSessionMinuteLimit * 60f : focus.Phase == FocusPhase.Resting ? focus.RestSeconds : focus.FocusSeconds;
+            progress.maxValue = focus.CountsUp ? GameDataManager.EnsureInstance().Service.FocusSessionMinuteLimit * 60f : focus.Phase == FocusPhase.Resting ? focus.RestSeconds : focus.FocusSeconds;
             progress.SetValueWithoutNotify((float)(focus.CountsUp ? Math.Min(progress.maxValue, focus.ElapsedSeconds) : progress.maxValue - focus.RemainingSeconds));
         }
     }

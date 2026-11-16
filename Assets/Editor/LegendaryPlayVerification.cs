@@ -86,15 +86,18 @@ public static class LegendaryPlayVerification
     static EquipmentDefinition Item(string icon)=>LootRules.Catalog.Single(d=>d.IconName==icon);
     static System.Collections.IEnumerator Run(){
         var manager=GameDataManager.Instance;Check(manager.SavePath.Contains("LegendaryPlayVerification"),"Isolated save");
+        foreach(var wait in TaskCalendarPlayVerification.Await(manager.Ready))yield return wait;
         UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
-        manager.PlayerData.experience=9025;manager.PlayerData.tickets=30;manager.PlayerData.fishCoins=10000;manager.PlayerData.equipmentUnlocked=true;
-        manager.PlayerData.equipment=EquipmentRules.Catalog.Concat(LootRules.Catalog).Select(d=>new EquipmentItem{id=d.Id}).ToList();
-        manager.PlayerData.bossProgress[0].wins=1;manager.PlayerData.bossProgress[1].wins=1;manager.SaveData();
-        var service=manager.Tasks;var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();nav.ShowPage(MainMenuPage.CatHome);
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{
+            data.experience=9025;data.tickets=30;data.fishCoins=10000;data.equipmentUnlocked=true;
+            data.equipment=EquipmentRules.Catalog.Concat(LootRules.Catalog).Select(d=>new EquipmentItem{id=d.Id}).ToList();
+            data.bossProgress[0].wins=1;data.bossProgress[1].wins=1;
+        })))yield return wait;
+        var service=manager.Service;var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();nav.ShowPage(MainMenuPage.CatHome);
         var page=nav.pages[4].GetComponent<EquipmentPageUI>();var shop=page.GetComponentInChildren<LootShopUI>(true);
         var detail=(EquipmentItemDetailUI)typeof(EquipmentPageUI).GetField("itemDetail",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(page);
         var inventory=page.GetComponentInChildren<EquipmentInventoryUI>(true);
-        for(int i=0;i<60;i++)manager.PlayerData.tasks.Add(new QuestTask{id="wheel-"+i,title="Scroll task "+i});manager.SaveData();
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{for(int i=0;i<60;i++)data.tasks.Add(new QuestTask{id="wheel-"+i,title="Scroll task "+i});})))yield return wait;
         foreach(int width in new[]{1920,1280,1024,2560}){
             Resolution(width,width==1920||width==2560?1080:width==1024?768:720);yield return .4;
             var toggle=(Toggle)typeof(SidebarNavigationButton).GetField("expandedToggle",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(nav.buttons[4]);
@@ -144,13 +147,15 @@ public static class LegendaryPlayVerification
             }finally{if(module)module.enabled=moduleEnabled;}
             shop.CloseInformation();shop.Close();
         }
-        Check(service.AutoEquip(),"Ability-aware Auto Select");var selected=service.EquipmentSnapshot;var target=BattleRules.Boss(3);double best=EquipmentRules.AutoEquipScore(selected,target);
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.AutoEquipAsync()))yield return wait;var selected=service.EquipmentSnapshot;var target=BattleRules.Boss(3);double best=EquipmentRules.AutoEquipScore(selected,target);
         foreach(var def in LootRules.Catalog){var old=EquipmentRules.Equipped(selected,def.Slot);EquipmentRules.SetEquipped(selected,def.Slot,def.Id);Check(EquipmentRules.AutoEquipScore(selected,target)<=best+1e-9,"Auto Select considers alternative "+def.Id);EquipmentRules.SetEquipped(selected,def.Slot,old);}
         var gear=new[]{Item("Armor_GauntletsGold"),Item("Armor_HeavyArmor"),Item("Armor_MagicCrown")};
-        foreach(var def in gear)Check(service.Equip(def.Id,def.Slot),"Equip combat fixture");
+        foreach(var def in gear)foreach(var wait in TaskCalendarPlayVerification.Await(service.EquipAsync(def.Id,def.Slot)))yield return wait;
         bool fixture=false;
         for(int level=20;level<=40&&!fixture;level++){
-            manager.PlayerData.experience=25*(level-1)*(level-1);manager.SaveData();var preview=new BattleAttempt{equipmentAbilityVersion=2,cat=service.CatStats,boss=BattleRules.Boss(3),equippedEquipment=gear.Select(d=>new EquipmentItem{id=d.Id}).ToList()};
+            int xp=25*(level-1)*(level-1);
+            foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>data.experience=xp)))yield return wait;
+            var preview=new BattleAttempt{equipmentAbilityVersion=2,cat=service.CatStats,boss=BattleRules.Boss(3),equippedEquipment=gear.Select(d=>new EquipmentItem{id=d.Id}).ToList()};
             bool crit=false,block=false;new BattleSimulation(preview).Advance(120,h=>{crit|=h.critical;block|=h.blocked;});fixture=crit&&block;
         }
         Check(fixture,"Valid progression fixture contains critical and block");
@@ -158,8 +163,9 @@ public static class LegendaryPlayVerification
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);nav.ShowPage(MainMenuPage.Boss);panel.SelectStage(3);
             for(int i=0;i<100&&(!panel.arena.IsReady||!panel.actors.Ready);i++)yield return .1;
-            Check(panel.arena.IsReady&&panel.actors.Ready,"Boss loaded");yield return .5;panel.Action();panel.Confirm();Check(panel.IsBattling,"Battle entry");
-            var saved=service.Snapshot.battles.Last();var expected=new BattleSimulation(saved);expected.Advance(120);
+            Check(panel.arena.IsReady&&panel.actors.Ready,"Boss loaded");yield return .5;panel.Action();panel.Confirm();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;Check(panel.IsBattling,"Battle entry");
+            var persistedBattle=service.ReadVerificationSnapshotAsync();foreach(var wait in TaskCalendarPlayVerification.Await(persistedBattle))yield return wait;
+            var saved=SqlitePlayVerificationSupport.Value(persistedBattle).battles.Last();var expected=new BattleSimulation(saved);expected.Advance(120);
             int critFrames=0,blockFrames=0,frame=0;var positions=new System.Collections.Generic.Dictionary<int,Vector2>();bool moved=false,faded=false;
             var trace=new System.Text.StringBuilder("time,catHP,bossHP,text,x,y,alpha\n");
             while(panel.IsBattling&&frame<1000){

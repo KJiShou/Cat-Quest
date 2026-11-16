@@ -120,7 +120,13 @@ public static class AiPlayVerification
     }
     static IEnumerator Run(bool before)
     {
+        foreach(var delay in TaskCalendarPlayVerification.Await(GameDataManager.EnsureInstance().Ready))yield return delay;
         yield return 1.0;
+        // Tutorial behavior has its own verifier; this flow exercises Chat controls
+        // without the first-created-task guide taking modal ownership mid-test.
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
+        foreach(var delay in TaskCalendarPlayVerification.Await(GameDataManager.EnsureInstance().Service.FlushAsync()))yield return delay;
+        yield return .1;
         var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         Check(nav && nav.ShowPage(MainMenuPage.Chat), "Chat navigation missing.");
         var page = UnityEngine.Object.FindFirstObjectByType<AiChatPage>();
@@ -203,7 +209,11 @@ public static class AiPlayVerification
         }
         loadingPanel.Close();
         yield return .2;
-        GameDataManager.EnsureInstance().Tasks.SaveTag(null,"Chat verification",out var chatTag);
+        var tagSave = GameDataManager.EnsureInstance().Service.SaveTagAsync(null,"Chat verification");
+        double tagDeadline = EditorApplication.timeSinceStartup + 10;
+        while (!tagSave.IsCompleted && EditorApplication.timeSinceStartup < tagDeadline) yield return .02;
+        Check(tagSave.IsCompleted && tagSave.Result.Succeeded, "Could not save isolated chat tag.");
+        var chatTag = tagSave.Result.Value;
         page.SendText("Help me plan a short study session."); yield return .2;
         float waveBefore=page.status.textInfo.meshInfo[0].vertices[0].y; Capture("chat-thinking-before"); yield return .2;
         Check(page.thinking.enabled && Mathf.Abs(page.status.textInfo.meshInfo[0].vertices[0].y-waveBefore)>.01f,"Thinking wave did not animate.");Capture("chat-thinking");yield return .2;
@@ -245,7 +255,7 @@ public static class AiPlayVerification
             Capture("chat-review-"+size.x);yield return .2;
         }
         Click(page.saveDraft); yield return .3;
-        Check(draft.state == "saved" && GameDataManager.EnsureInstance().Tasks.Snapshot.tasks.Count(t => t.id == draft.task.id) == 1, "Confirmed task not saved exactly once.");
+        Check(draft.state == "saved" && GameDataManager.EnsureInstance().Service.TaskSnapshot.tasks.Count(t => t.id == draft.task.id) == 1, "Confirmed task not saved exactly once.");
         page.SendText("Another message"); yield return .2;
         Click(page.stop); fake.pending.SetResult("{\"message\":\"Late reply\",\"drafts\":[]}"); yield return .2;
         Check(client.Chat.History.messages.Last().role == "user", "Late cancelled response leaked.");

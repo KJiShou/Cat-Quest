@@ -9,6 +9,7 @@ foreach($directory in @($installed,$release,$work)){[IO.Directory]::CreateDirect
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 & $compiler /nologo /target:winexe /main:HandoffFixture "/out:$installed/CatQuest.exe" /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:System.Windows.Forms.dll (Join-Path $repo 'Assets/Scripts/Updates/UpdateManifest.cs') (Join-Path $PSScriptRoot 'Program.cs') (Join-Path $PSScriptRoot 'HandoffFixture.cs')
 if($LASTEXITCODE -ne 0){throw 'Handoff fixture compilation failed.'}
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CatQuestUpdater.exe.config') -Destination (Join-Path $installed 'CatQuest.exe.config')
 [IO.File]::WriteAllText((Join-Path $installed 'UnityPlayer.dll'),'fixture')
 [IO.File]::WriteAllText((Join-Path $installed 'catquest-build.json'),'{"version":"1.2","development":true}')
 [IO.File]::WriteAllText((Join-Path $folder 'notes.txt'),'Isolated updater handoff test')
@@ -19,6 +20,7 @@ Copy-Item -Path "$installed/*" -Destination $release
 Copy-Item -LiteralPath (Join-Path $folder 'published/CatQuest-1.2.1-win-x64.zip') -Destination (Join-Path $work 'package.zip')
 Copy-Item -LiteralPath (Join-Path $folder 'published/catquest-update.json') -Destination (Join-Path $work 'release.json')
 Copy-Item -LiteralPath (Join-Path $installed 'CatQuestUpdater.exe') -Destination $work
+Copy-Item -LiteralPath (Join-Path $installed 'CatQuestUpdater.exe.config') -Destination $work
 [IO.File]::WriteAllText((Join-Path $installed 'personal.txt'),'must stay')
 $parent=Start-Process -FilePath (Join-Path $installed 'CatQuest.exe') -ArgumentList "`"$work`"" -WindowStyle Hidden -PassThru
 try {

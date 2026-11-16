@@ -21,7 +21,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
     [SerializeField] EquipmentItemDetailUI itemDetail;
     public bool claimsOnly; public Texture2D[] gradeSheets; public Sprite catPoster; public Sprite[] statIcons; public Sprite[] tabIcons; public Sprite tabFocus;
     public TMP_FontAsset font; public Sprite rounded,blueButton,redButton;public Sprite[] slotIcons;public GameObject catPrefab;public MainMenuNavigation navigation;
-    TaskService service;[SerializeField] TMP_Text title,notice,sets,modalTitle,modalInfo,confirmInfo;
+    SqlitePlayerService service;[SerializeField] TMP_Text title,notice,sets,modalTitle,modalInfo,confirmInfo;
     [SerializeField] RectTransform backpack,modal,confirmation,choices,gear;[SerializeField] Button[] slots=new Button[3];[SerializeField] Image[] slotImages=new Image[3];
     [SerializeField] Button[] filters=new Button[4]; int filter;
     EquipmentHoverTarget hoverSource;
@@ -46,7 +46,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
     void Awake()
     {
         if(!Application.IsPlaying(gameObject))return;
-        service=GameDataManager.EnsureInstance().Tasks;
+        service=GameDataManager.EnsureInstance().Service;
         BindControls();
     }
     void BindControls()
@@ -72,8 +72,8 @@ public sealed class EquipmentPageUI : MonoBehaviour
         inventory.autoSelect.onClick.AddListener(AutoSelect);
         if(inventory.emptyAction)inventory.emptyAction.onClick.AddListener(OpenEmptyAction);
     }
-    void OnEnable(){if(Ready){service.Changed+=Refresh;Refresh();}}
-    void OnDisable(){if(!Application.IsPlaying(gameObject))return;StopModalKeyboard();HideHover();StopSelectionFeedback();ClearAutoSelectFeedback();if(Ready)service.Changed-=Refresh;ClearConfirmation();if(itemDetail)itemDetail.gameObject.SetActive(false);if(modal)modal.gameObject.SetActive(false);}
+    void OnEnable(){if(Ready){service.RecordsChanged+=RefreshRecords;Refresh();}}
+    void OnDisable(){if(!Application.IsPlaying(gameObject))return;StopModalKeyboard();HideHover();StopSelectionFeedback();ClearAutoSelectFeedback();if(Ready)service.RecordsChanged-=RefreshRecords;ClearConfirmation();if(itemDetail)itemDetail.gameObject.SetActive(false);if(modal)modal.gameObject.SetActive(false);}
     void OnDestroy(){if(itemDetail)itemDetail.Closed-=DetailClosed;}
     static Color Grade(int tier)=>tier==1?new Color32(67,184,255,255):tier==2?new Color32(182,112,245,255):new Color32(255,201,65,255);
     void LateUpdate(){
@@ -81,6 +81,9 @@ public sealed class EquipmentPageUI : MonoBehaviour
     }
     static void Square(RectTransform rect,Vector2 center,float side,Vector2 offset){
         rect.anchorMin=rect.anchorMax=center;rect.pivot=new Vector2(.5f,.5f);rect.sizeDelta=new Vector2(side,side);rect.anchoredPosition=offset;
+    }
+    void RefreshRecords(System.Collections.Generic.IReadOnlyCollection<PlayerRecordKind> kinds){
+        if(kinds==null||kinds.Contains(PlayerRecordKind.Profile)||kinds.Contains(PlayerRecordKind.Equipment)||kinds.Contains(PlayerRecordKind.BossProgress)||kinds.Contains(PlayerRecordKind.Battles))Refresh();
     }
     public void Refresh(){
         if(!Ready||claimsOnly)return;HideHover();StopSelectionFeedback();ClearAutoSelectFeedback();inventory.HideAutoSelectRule(null);var d=service.EquipmentSnapshot;var s=service.EquipmentStats;TaskService.CatLevel(d.experience,out int level,out _,out _);title.text=$"Cat Home  <size=20>Lv. {level}</size>";
@@ -204,12 +207,13 @@ public sealed class EquipmentPageUI : MonoBehaviour
         }else RefreshModalKeyboard(true);
     }
 
-    void ClaimMilestone(int slot)
+    async void ClaimMilestone(int slot)
     {
         if(!Ready||!claimView.buttons[slot].IsInteractable())return;
         var def=EquipmentRules.Catalog.Single(x=>x.Tier==claimView.Boss&&(int)x.Slot==slot);
         HideHover();
-        bool success=service.ClaimEquipment(def.Id);
+        bool success=(await service.ClaimEquipmentAsync(def.Id)).Succeeded;
+        if (!this || !isActiveAndEnabled) return;
         claimView.Show(service.EquipmentSnapshot,claimView.Boss,service.EquipmentUnlocked);
         claimView.status.text=success?"Received "+def.Name+" · "+EquipmentRules.Effect(def,1):service.LastError;
         if(success)claimView.PlayCollected(slot);
@@ -252,17 +256,24 @@ public sealed class EquipmentPageUI : MonoBehaviour
         else if(itemDetail.gameObject.activeInHierarchy&&!itemDetail.IsHoverPreview)itemDetail.gameObject.SetActive(false);
         else if(modal.gameObject.activeInHierarchy)CloseClaim();
     }
-    void ToggleEquip(){
+    bool commandPending;
+    async void ToggleEquip(){
+        if(commandPending)return;commandPending=true;
         var def=EquipmentRules.Find(selected);string id=selected;
         bool worn=service.EquippedItem(def.Slot)==id;
-        bool success=worn?service.Unequip(def.Slot):service.Equip(id,def.Slot);
+        bool success;
+        try{success=(worn?await service.UnequipAsync(def.Slot):await service.EquipAsync(id,def.Slot)).Succeeded;}finally{commandPending=false;}
+        if (!this || !isActiveAndEnabled) return;
         if(success){Result(true);itemDetail.status.text=worn?"Unequipped.":"Equipped.";}
         else itemDetail.status.text=service.LastError;
     }
-    void AutoSelect(){
+    async void AutoSelect(){
+        if(commandPending)return;commandPending=true;
         StopSelectionFeedback();ClearAutoSelectFeedback();inventory.HideAutoSelectRule(null);
         var previous=service.EquipmentSnapshot;
-        if(!service.AutoEquip()){notice.text=service.LastError;notice.gameObject.SetActive(true);return;}
+        bool saved;try{saved=(await service.AutoEquipAsync()).Succeeded;}finally{commandPending=false;}
+        if(!this || !isActiveAndEnabled)return;
+        if(!saved){notice.text=service.LastError;notice.gameObject.SetActive(true);return;}
         // Feedback follows the committed loadout; the existing stat rows show its values.
         var current=service.EquipmentSnapshot;
         int mask=0;
@@ -334,12 +345,16 @@ public sealed class EquipmentPageUI : MonoBehaviour
         int claim=ReadyClaimBoss(data);
         if(navigation.ShowPage(MainMenuPage.Boss)&&claim>0)navigation.pages[(int)MainMenuPage.Boss].GetComponent<EquipmentPageUI>().OpenClaim(claim);
     }
-    void Upgrade(){
-        if(!itemDetail.upgrade.interactable)return;
+    async void Upgrade(){
+        if(commandPending||!itemDetail.upgrade.interactable)return;
+        commandPending=true;
         itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().Dismiss();
-        bool success=service.UpgradeEquipment(selected,expectedLevel,Guid.NewGuid().ToString("N"));
+        string id=selected;bool success;
+        try{success=(await service.UpgradeEquipmentAsync(id,expectedLevel,Guid.NewGuid().ToString("N"))).Succeeded;}finally{commandPending=false;}
+        if (!this || !isActiveAndEnabled) return;
+        if(selected!=id)return;
         if(success){Result(true);itemDetail.status.text="Upgraded.";itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().PlaySuccess();}
         else {string error=service.LastError;OpenItem(selected);itemDetail.status.text=error;}
     }
-    void ConfirmClaim(){string id=selected;Ask("Claim "+EquipmentRules.Find(id).Name+"?\nUses 1 mastery reward. Starts at Lv. 1.",()=>Result(service.ClaimEquipment(id)));}
+    void ConfirmClaim(){string id=selected;Ask("Claim "+EquipmentRules.Find(id).Name+"?\nUses 1 mastery reward. Starts at Lv. 1.",async ()=>{bool saved=(await service.ClaimEquipmentAsync(id)).Succeeded;if(this&&isActiveAndEnabled&&selected==id)Result(saved);});}
 }

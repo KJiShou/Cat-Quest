@@ -9,6 +9,17 @@ using UnityEngine.Serialization;
 
 public partial class TaskSystemUI : MonoBehaviour
 {
+    int observedRewardLevel = -1;
+    public long RenderedVersion { get; private set; } = -1;
+    public double LastRefreshMainMilliseconds { get; private set; }
+    void RefreshRecords(System.Collections.Generic.IReadOnlyCollection<PlayerRecordKind> changed)
+    {
+        bool levelChanged=observedRewardLevel!=Service.RewardLevel;
+        observedRewardLevel=Service.RewardLevel;
+        if(changed==null || levelChanged || changed.Contains(PlayerRecordKind.Tasks)
+            || changed.Contains(PlayerRecordKind.Occurrences) || changed.Contains(PlayerRecordKind.History)
+            || changed.Contains(PlayerRecordKind.Tags) || changed.Contains(PlayerRecordKind.RewardDays)) Refresh();
+    }
     public EditTaskDetailsUI editor;
     public RectTransform listContent;
     public RectTransform detailsRoot;
@@ -46,7 +57,7 @@ public partial class TaskSystemUI : MonoBehaviour
     public Sprite roundedSprite;
     public Sprite tagTintSprite;
     public TMP_FontAsset font;
-    public TaskService Service { get; private set; }
+    public SqlitePlayerService Service { get; private set; }
     public TaskTab CurrentTab { get; private set; }
     public string SelectedKey { get; private set; }
     private TaskUIBuilder ui;
@@ -68,7 +79,8 @@ public partial class TaskSystemUI : MonoBehaviour
     public TaskFilterDialog filterDialogTemplate;
     private TaskFilterDialog filters;
     private float nextClockCheck;
-    private bool editing;
+    private bool editing, savingDraft;
+    private readonly HashSet<string> pendingCompletions = new HashSet<string>();
     private string savedDraftState;
     private int draftRevision;
     private sealed class BrowseState
@@ -83,8 +95,11 @@ public partial class TaskSystemUI : MonoBehaviour
     private float? pendingScrollOffset;
     private readonly List<RaycastResult> outsideClickHits = new List<RaycastResult>();
     private string outsideClickSelection;
+    private int refreshGeneration, historyVersion=-1;
+    private string historyCursor, historyNext, historyFilter;
+    private readonly Stack<string> historyPrevious = new Stack<string>();
 
-    private void Start()
+    private async void Start()
     {
         var tabBar=tabButtons[0].transform.parent;
         var tabs=tabBar.GetComponent<TaskTabsLayout>() ?? tabBar.gameObject.AddComponent<TaskTabsLayout>();
@@ -93,8 +108,8 @@ public partial class TaskSystemUI : MonoBehaviour
         TaskUIBuilder.Clear(listContent);
         rows = new TaskListViewport(listContent);
         var manager = GameDataManager.EnsureInstance();
-        Service = manager.Tasks;
-        Service.Changed += Refresh;
+        Service = manager.Service;
+        Service.RecordsChanged += RefreshRecords;
         for (int i = 0; i < tabButtons.Length; i++)
         {
             int index = i;
@@ -115,6 +130,9 @@ public partial class TaskSystemUI : MonoBehaviour
         editor.transform.Find("Header/Close").GetComponent<Button>().onClick.AddListener(CancelDraft);
         BuildDetails(); BuildModal();
         editor.gameObject.SetActive(false); detailsRoot.gameObject.SetActive(false);
+        var ready = await manager.Ready;
+        if (!this) return;
+        if (!ready.Succeeded) { Notify(manager.LoadNotice, true); return; }
         CurrentTab = Service.Settings.DefaultTaskTab;
         if (calendar) calendar.Initialize(this); else Refresh();
         if (!string.IsNullOrEmpty(manager.LoadNotice)) Notify(manager.LoadNotice, true);
@@ -122,7 +140,7 @@ public partial class TaskSystemUI : MonoBehaviour
     }
     private void Update()
     {
-        if (Service == null) return;
+        if (Service == null || !Service.IsReady || details == null) return;
         if(Input.GetMouseButtonDown(0) && EventSystem.current)
         {
             outsideClickHits.Clear();
@@ -133,17 +151,17 @@ public partial class TaskSystemUI : MonoBehaviour
         if (Time.unscaledTime >= nextClockCheck)
         {
             nextClockCheck = Time.unscaledTime + 1;
-            if (!Service.RefreshDate()) Notify(Service.LastError,true);
+            _ = Service.RefreshDateAsync();
             details.RefreshScheduleColor(Service);
         }
     }
     private void OnEnable()
     {
-        if(Service!=null) { Service.RefreshDate(); Service.Changed += Refresh; RestoreBrowseState(CurrentTab); Refresh(); }
+        if(Service!=null) { _ = Service.RefreshDateAsync(); Service.RecordsChanged += RefreshRecords; RestoreBrowseState(CurrentTab); Refresh(); }
     }
     public bool PrepareToLeavePage(Action continueNavigation = null)
     {
-        if(!CommitQuickAdd()) return false;
+        if(!CommitQuickAdd(false, continueNavigation)) return false;
         if(!PrepareToDiscardDraft(continueNavigation)) return false;
         outsideClickSelection=null; RememberBrowseState();
         CancelDraft(); CloseModal(); confirmation?.Dismiss();
@@ -169,8 +187,8 @@ public partial class TaskSystemUI : MonoBehaviour
         var draft=editor.ReadDraft(out var completed);
         return JsonUtility.ToJson(draft)+"\n"+string.Join(",",completed.OrderBy(id=>id));
     }
-    private void OnApplicationFocus(bool focus) { if (!focus) CloseTaskContext(); if (focus && isActiveAndEnabled && Service != null) { Service.RefreshDate(); Refresh(); } }
-    private void OnDestroy() { if (contextMenu) Destroy(contextMenu.gameObject); if (Service != null) Service.Changed -= Refresh; if(filters) Destroy(filters.gameObject); if(resultNotice) Destroy(resultNotice.gameObject); if(confirmation?.Root) Destroy(confirmation.Root); }
+    private void OnApplicationFocus(bool focus) { if (!focus) CloseTaskContext(); if (focus && isActiveAndEnabled && Service != null) { _ = Service.RefreshDateAsync(); Refresh(); } }
+    private void OnDestroy() { if (contextMenu) Destroy(contextMenu.gameObject); if (Service != null) Service.RecordsChanged -= RefreshRecords; if(filters) Destroy(filters.gameObject); if(resultNotice) Destroy(resultNotice.gameObject); if(confirmation?.Root) Destroy(confirmation.Root); }
 
     private void BuildDetails()
     {
@@ -218,7 +236,7 @@ public partial class TaskSystemUI : MonoBehaviour
         else resultNotice.Show(message);
     }
     private void CloseModal() { CloseTaskContext(); if(filters) filters.Dismiss(); }
-    private void OnDisable() { outsideClickSelection=null; RememberBrowseState(); StopContextFocus(); if (Service != null) Service.Changed -= Refresh; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
+    private void OnDisable() { refreshGeneration++; outsideClickSelection=null; RememberBrowseState(); StopContextFocus(); if (Service != null) Service.RecordsChanged -= RefreshRecords; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
     private void Confirm(string title,string message,Action accepted,string confirmLabel="Confirm")
     {
         CloseModal(); confirmation.Show(title,message,accepted,confirmLabel);
@@ -226,7 +244,7 @@ public partial class TaskSystemUI : MonoBehaviour
     public void SelectTab(TaskTab tab)
     {
         if(!Enum.IsDefined(typeof(TaskTab),tab)) return;
-        if(!CommitQuickAdd()) return;
+        if(!CommitQuickAdd(false,()=>SelectTab(tab))) return;
         if(!PrepareToDiscardDraft(()=>SelectTab(tab))) return;
         outsideClickSelection=null;
         RememberBrowseState(); CancelDraft();
@@ -248,31 +266,52 @@ public partial class TaskSystemUI : MonoBehaviour
         tagFilters.Clear(); tagFilters.UnionWith(state.tags);
         pendingScrollOffset=state.scrollOffset;
     }
-    public void Refresh()
+    public async void Refresh()
     {
-        if(Service==null || ui==null) return;
+        if(Service==null || !Service.IsReady || ui==null || !isActiveAndEnabled) return;
+        observedRewardLevel=Service.RewardLevel;
+        int generation=++refreshGeneration;
         CloseTaskContext();
         if(committingQuick) { pendingRefresh=true; return; }
         pendingRefresh=false;
         if (calendar && calendar.Active) { calendar.Refresh(); return; }
-        var data=Service.BrowseSnapshot(CurrentTab == TaskTab.History);
+        RefreshTabSelection();
+        // Coalesce repeated clicks in the same frame before creating worker jobs.
+        await System.Threading.Tasks.Task.Yield();
+        if(!this || !isActiveAndEnabled || generation!=refreshGeneration)return;
+        var browse=await Service.QueryBrowseAsync(CurrentTab,search.text,difficultyFilter,tagFilters);
+        if(!this || !isActiveAndEnabled || generation!=refreshGeneration)return;
+        if(!browse.Succeeded){Notify(browse.Message,true);return;}
+        if(browse.Version!=Service.ReadVersion){Refresh();return;}
+        var data=browse.Value;
+        var renderTimer=System.Diagnostics.Stopwatch.StartNew();
+        double headerMilliseconds=0;
         tagFilters.RemoveWhere(id=>!data.tags.Any(t=>t.id==id));
         for(int i=0;i<5;i++)
         {
-            int count = Service.BrowseCount(data, (TaskTab)i);
-            bool active=i==(int)CurrentTab;
-            Color color=active ? TaskUIBuilder.Blue : new Color32(121,143,173,255);
+            int count = data.counts[i];
             tabCounts[i].text=count.ToString(); tabCounts[i].color=Color.white;
             tabCounts[i].transform.parent.gameObject.SetActive(i<3);
-            tabLabels[i].color=color; tabFocus[i].SetActive(active);
-            var icon=tabButtons[i].transform.Find("Icon").GetComponent<Image>();
-            icon.color=color;
-            var badge=tabCounts[i].transform.parent.GetComponent<Image>(); if(badge) badge.color=color;
-            foreach(var button in tabButtons[i].GetComponentsInChildren<Button>(true)) button.transition=Selectable.Transition.None;
         }
         fishCoins.text=data.fishCoins.ToString(); tickets.text=data.tickets.ToString();
         listHeading.text=new[]{"Today's Tasks","Daily Tasks","Todo","Tags","History"}[(int)CurrentTab];
-        visible=CurrentTab == TaskTab.Todo ? QueryTodo(data,search.text,difficultyFilter,tagFilters) : Service.QuerySnapshot(data,CurrentTab,search.text,difficultyFilter,tagFilters);
+        if(CurrentTab == TaskTab.History) {
+            string filter=search.text+"\n"+difficultyFilter+"\n"+string.Join(",",tagFilters.OrderBy(x=>x));
+            if(historyFilter!=filter) {historyFilter=filter;historyCursor=null;historyPrevious.Clear();pendingScrollOffset=0;}
+            if(historyVersion!=Service.ReadVersion) {
+                pendingScrollOffset ??= rows.ScrollOffset;
+                historyVersion=Service.ReadVersion;
+            }
+            // A keyset position is stable across commits. Rebind its revision to
+            // the requested snapshot while retaining the user's page and scroll.
+            if(!string.IsNullOrEmpty(historyCursor)) historyCursor=historyVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)+historyCursor.Substring(historyCursor.IndexOf(':'));
+            headerMilliseconds=renderTimer.Elapsed.TotalMilliseconds;
+            var result=await Service.QueryHistoryPageAsync(historyCursor,search.text,difficultyFilter,tagFilters.ToArray());
+            renderTimer.Restart();
+            if(!this || !isActiveAndEnabled || generation!=refreshGeneration) return;
+            if(!result.Succeeded) {Notify(result.Message,true);return;}
+            visible=result.Value.Rows; historyNext=result.Value.NextCursor;
+        } else visible=data.rows;
         rowGroup = "";
         if (!addRow) {
             addRow = Instantiate(addTaskTemplate, listContent); addRow.name = "AddTask";
@@ -292,6 +331,10 @@ public partial class TaskSystemUI : MonoBehaviour
         if(CurrentTab==TaskTab.Todo) RenderDateGroups();
         else if(CurrentTab==TaskTab.Tags) RenderTagGroups(data.tags);
         else foreach(var row in visible) RenderRow(row);
+        if(CurrentTab==TaskTab.History) {
+            if(historyPrevious.Count>0) AddHistoryPageButton("previous", "Previous 100", false);
+            if(!string.IsNullOrEmpty(historyNext)) AddHistoryPageButton("next", "Next 100", true);
+        }
         rows.Update(true);
         var selected=visible.FirstOrDefault(v=>v.Key==SelectedKey);
         if(selected==null) SelectedKey=null;
@@ -301,6 +344,32 @@ public partial class TaskSystemUI : MonoBehaviour
             float offset=pendingScrollOffset.Value; pendingScrollOffset=null;
             rows.RestoreScrollOffset(offset);
         }
+        LastRefreshMainMilliseconds=headerMilliseconds+renderTimer.Elapsed.TotalMilliseconds;
+        RenderedVersion=browse.Version;
+    }
+    void RefreshTabSelection()
+    {
+        // Navigation feedback is immediate even while its data query is pending.
+        for(int i=0;i<5;i++) {
+            bool active=i==(int)CurrentTab;
+            Color color=active?TaskUIBuilder.Blue:new Color32(121,143,173,255);
+            tabLabels[i].color=color;tabFocus[i].SetActive(active);
+            tabButtons[i].transform.Find("Icon").GetComponent<Image>().color=color;
+            var badge=tabCounts[i].transform.parent.GetComponent<Image>();if(badge)badge.color=color;
+            foreach(var button in tabButtons[i].GetComponentsInChildren<Button>(true))button.transition=Selectable.Transition.None;
+        }
+    }
+    private void AddHistoryPageButton(string key,string label,bool next)
+    {
+        rows.Add("history/"+key,"historyPager",64,()=>Instantiate(addTaskTemplate,listContent),go=> {
+            go.SetActive(true);var text=go.GetComponentInChildren<TMP_Text>();if(text)text.text=label;
+            var button=go.GetComponent<Button>() ?? go.AddComponent<Button>();button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(()=> {
+                if(next) {historyPrevious.Push(historyCursor);historyCursor=historyNext;}
+                else historyCursor=historyPrevious.Pop();
+                pendingScrollOffset=0;SelectedKey=null;Refresh();
+            });
+        });
     }
     private void RenderRow(TaskView view)
     {
@@ -356,10 +425,12 @@ public partial class TaskSystemUI : MonoBehaviour
         {
             string historyId=view.IsHistory ? view.history.id : Service.CompletionId(view.task.id,view.occurrence.day);
             checkbox.interactable=Service.CanUndoCompletion(historyId);
-            checkbox.onClick.AddListener(()=>
+            checkbox.onClick.AddListener(async ()=>
             {
                 if(!CommitQuickAdd()) return;
-                if(!Service.UndoCompletion(historyId)) Notify(Service.LastError,true);
+                var saved=await Service.UndoCompletionAsync(historyId);
+                if(!this || !isActiveAndEnabled)return;
+                if(!saved.Succeeded) Notify(Service.LastError,true);
                 else Notify("Task restored. Previously earned rewards are kept.");
             });
         }
@@ -388,7 +459,7 @@ public partial class TaskSystemUI : MonoBehaviour
         return prefix + date.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
     }
     public void SelectTask(string key) {
-        if(!CommitQuickAdd() || !PrepareToDiscardDraft(()=>SelectTask(key))) return;
+        if(!CommitQuickAdd(false,()=>SelectTask(key)) || !PrepareToDiscardDraft(()=>SelectTask(key))) return;
         outsideClickSelection=null; CancelDraft();
         if(!visible.Any(view=>view.Key==key)) RevealFilteredTask(key);
         SelectedKey=key; detailsRoot.gameObject.SetActive(true); Refresh();
@@ -441,21 +512,24 @@ public partial class TaskSystemUI : MonoBehaviour
             else if(detailsRoot.gameObject.activeInHierarchy && SelectedKey==id)origin=detailsRoot;
             else origin=listContent.Cast<Transform>().FirstOrDefault(t=>t.gameObject.activeInHierarchy && t.name=="Task_"+id) as RectTransform;
         }
-        Action complete=()=>
+        Action complete=async ()=>
         {
             if (expectedDay != null && expectedDay != TaskService.DateKey(Service.LocalNow)) { Notify("The day has changed. Select today to complete this daily task.",true); Refresh(); return; }
+            if(!pendingCompletions.Add(id)) return;
             var before=Service.Query(TaskTab.Daily).Concat(Service.Query(TaskTab.Todo)).FirstOrDefault(v=>v.task.id==id);
             if(!rewardFlight)rewardFlight=GetComponentInParent<Canvas>().rootCanvas.GetComponentInChildren<RewardFlightUI>(true);
             rewardFlight?.SetRewardOrigin(origin);
             bool saved;
-            try {saved=Service.Complete(id,true);}finally {rewardFlight?.SetRewardOrigin(null);}
+            OperationResult<TaskCompletion> completion;
+            try {completion=await Service.CompleteAsync(id,true); saved=completion.Succeeded;}finally {pendingCompletions.Remove(id);rewardFlight?.SetRewardOrigin(null);}
+            if (!this || !isActiveAndEnabled) return;
             if(!saved) Notify(Service.LastError,true);
             else {
                 if(before==null || before.Completed) { Notify("Task already completed. No additional rewards."); return; }
                 SettingsAudio.Instance?.PlayTaskComplete();
                 if(before.occurrence.rewardGranted) Notify("Task completed again. No additional rewards; previous rewards are kept.");
                 else {
-                    var receipt=Service.Snapshot.history.First(h=>h.taskId==id && h.day==before.occurrence.day);
+                    var receipt=completion.Value;
                     Notify(receipt.experience==0 && receipt.fishCoins==0 && receipt.tickets==0
                         ? "Task completed. Daily task reward limit reached; no additional rewards."
                         : $"Task completed. +{receipt.experience} EXP, +{receipt.fishCoins} Fish Coins." + (receipt.tickets > 0 ? " +1 Ticket." : ""));
@@ -501,7 +575,14 @@ public partial class TaskSystemUI : MonoBehaviour
             if(t.name=="AddTask") return true;
         return false;
     }
-    public bool CommitQuickAdd(bool continueAdding=false)
+    public bool CommitQuickAdd(bool continueAdding=false, Action afterSaved=null)
+    {
+        if (TutorialOwnsInput && !continueAdding || !quickInput) return true;
+        if (committingQuick) return false;
+        if (string.IsNullOrWhiteSpace(quickInput.text)) { if (continueAdding) refocusQuick=true; else CancelQuickAdd(); return true; }
+        _ = CommitQuickAddAsync(continueAdding, afterSaved); return false;
+    }
+    private async System.Threading.Tasks.Task<bool> CommitQuickAddAsync(bool continueAdding, Action afterSaved)
     {
         // Reviewing guide steps can move keyboard focus or revisit tabs. Only
         // explicit Enter submits the draft while the tutorial owns input.
@@ -511,15 +592,20 @@ public partial class TaskSystemUI : MonoBehaviour
             if(continueAdding) refocusQuick=true; else CancelQuickAdd(); return true;
         }
         quickDraft.title=quickInput.text.Trim(); committingQuick=true;
-        bool saved=Service.Upsert(quickDraft,Array.Empty<string>(),out var id);
+        var input=quickInput; input.interactable=false;
+        var result=await Service.UpsertAsync(quickDraft,Array.Empty<string>());
+        bool saved=result.Succeeded; string id=result.Value;
+        if (!this) return saved;
         committingQuick=false;
+        if(input)input.interactable=true;
+        if(!isActiveAndEnabled || input!=quickInput) return saved;
         if(!saved) { pendingRefresh=false; refocusQuick=continueAdding; Notify(Service.LastError,true); return false; }
         SelectedKey=id;
         if(continueAdding) {
             quickDraft.id=null; quickDraft.title=""; quickInput.SetTextWithoutNotify("");
             pendingRefresh=true; refocusQuick=true;
         } else CancelQuickAdd();
-        Notify("Task saved."); return true;
+        Notify("Task saved."); afterSaved?.Invoke(); return true;
     }
     public void CancelQuickAdd()
     {
@@ -538,11 +624,17 @@ public partial class TaskSystemUI : MonoBehaviour
         editor.transform.Find("Header/Heading").GetComponent<TMP_Text>().text=title;
         editor.transform.Find("Footer/Actions/SaveChangesButton").GetComponentInChildren<TMP_Text>().text=string.IsNullOrEmpty(task.id) ? "Add Task" : "Save Changes";
     }
-    public void SaveDraft()
+    public async void SaveDraft()
     {
+        if(savingDraft || !Service.IsReady) return;
         var draft=editor.ReadDraft(out var done);
         if (calendar && calendar.Active && !calendar.ValidateDraftDate(draft)) return;
-        if(!Service.Upsert(draft,done,out var id)) { Notify(Service.LastError,true); return; }
+        savingDraft=true; int revision=draftRevision;
+        OperationResult<string> saved;
+        try { saved = await Service.UpsertAsync(draft,done); } finally { savingDraft=false; }
+        if (!this || !isActiveAndEnabled || revision!=draftRevision) return;
+        if(!saved.Succeeded) { Notify(saved.Message,true); return; }
+        string id=saved.Value;
         // Calendar owns its drawer selection independently of the retained List selection.
         if(!calendar || !calendar.Active) SelectedKey=id;
         CancelDraft();

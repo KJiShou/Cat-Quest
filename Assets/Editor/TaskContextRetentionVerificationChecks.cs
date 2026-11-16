@@ -61,6 +61,7 @@ public static class TaskContextRetentionVerificationChecks
     public static IEnumerable<double> Run(TaskSystemUI owner, MainMenuNavigation nav, Action<bool,string> check)
     {
         var manager = GameDataManager.EnsureInstance();
+        foreach(var wait in TaskCalendarPlayVerification.Await(manager.Ready))yield return wait;
         var isolatedRoot = Path.GetFullPath("Library") + Path.DirectorySeparatorChar;
         check(Path.GetFullPath(manager.SavePath).StartsWith(isolatedRoot, StringComparison.OrdinalIgnoreCase),
             "Context-retention fixtures use an isolated Library save");
@@ -70,22 +71,21 @@ public static class TaskContextRetentionVerificationChecks
         yield return .2;
         var service = owner.Service;
         string token = Guid.NewGuid().ToString("N"), prefix = "Browse " + token.Substring(0, 6);
-        string tagA = token + "-a", tagB = token + "-b", special = token + "-special";
-        manager.PlayerData.tags.Add(new QuestTag { id = tagA, name = prefix + " A" });
-        manager.PlayerData.tags.Add(new QuestTag { id = tagB, name = prefix + " B" });
+        string tagA = null, tagB = null, special = token + "-special";
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveTagAsync(null,prefix + " A"),value=>tagA=value))yield return wait;
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveTagAsync(null,prefix + " B"),value=>tagB=value))yield return wait;
         string today = TaskService.DateKey(service.LocalNow);
         // Fixture construction matches the existing long-list verifier; no per-row UI generation.
         for (int index = 0; index < 48; index++) {
-            manager.PlayerData.tasks.Add(new QuestTask { id = token + "-todo-" + index,
+            foreach(var wait in TaskCalendarPlayVerification.Await(service.UpsertAsync(new QuestTask { id = token + "-todo-" + index,
                 title = prefix + " Todo " + index.ToString("D2"), scheduled = true, date = today,
-                difficulty = TaskDifficulty.Normal, tagIds = new List<string> { tagA } });
-            manager.PlayerData.tasks.Add(new QuestTask { id = token + "-daily-" + index,
+                difficulty = TaskDifficulty.Normal, tagIds = new List<string> { tagA } },null)))yield return wait;
+            foreach(var wait in TaskCalendarPlayVerification.Await(service.UpsertAsync(new QuestTask { id = token + "-daily-" + index,
                 title = prefix + " Daily " + index.ToString("D2"), daily = true, scheduled = true, date = today,
-                repeatInterval = 1, difficulty = TaskDifficulty.Easy, tagIds = new List<string> { tagB } });
+                repeatInterval = 1, difficulty = TaskDifficulty.Easy, tagIds = new List<string> { tagB } },null)))yield return wait;
         }
-        manager.PlayerData.tasks.Add(new QuestTask { id = special, title = prefix + " Todo special",
-            scheduled = true, date = today, difficulty = TaskDifficulty.Easy, tagIds = new List<string> { tagA } });
-        manager.SaveData();
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.UpsertAsync(new QuestTask { id = special, title = prefix + " Todo special",
+            scheduled = true, date = today, difficulty = TaskDifficulty.Easy, tagIds = new List<string> { tagA } },null)))yield return wait;
         owner.Refresh();
         var scroll = owner.listContent.GetComponentInParent<ScrollRect>();
         if (EventSystem.current) EventSystem.current.SetSelectedGameObject(null);
@@ -119,15 +119,17 @@ public static class TaskContextRetentionVerificationChecks
             && Mathf.Abs(scroll.verticalNormalizedPosition - todoScroll) < .015f,
             "Clicking the current tab preserves its browsing context");
         var settingsBefore = service.Settings;
+        System.Threading.Tasks.Task<OperationResult<bool>> restoredSettings=null;
         try {
             var changed = service.Settings; changed.defaultTaskTab = TaskTab.Today;
-            check(service.SaveSettings(changed), "Change default tab in isolated settings");
+            foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(changed)))yield return wait;
             check(nav.ShowPage(MainMenuPage.Dashboard) && nav.ShowPage(MainMenuPage.Tasks), "Leave and return to Tasks");
             yield return .3;
             check(owner.CurrentTab == TaskTab.Todo && owner.search.text == prefix + " Todo" && owner.SelectedKey == todoSelected,
                 "Returning to Tasks keeps the current tab instead of reapplying Settings default");
             check(Mathf.Abs(scroll.verticalNormalizedPosition - todoScroll) < .015f, "Page return retains list scroll");
-        } finally { check(service.SaveSettings(settingsBefore), "Restore isolated default tab setting"); }
+        } finally { restoredSettings=service.SaveSettingsAsync(settingsBefore); }
+        foreach(var wait in TaskCalendarPlayVerification.Await(restoredSettings))yield return wait;
 
         owner.SelectTab(TaskTab.Daily); owner.SelectTab(TaskTab.Todo); owner.SelectTab(TaskTab.Daily);
         yield return .3;
@@ -158,14 +160,17 @@ public static class TaskContextRetentionVerificationChecks
             var date = service.LocalNow.Date;
             calendar.SelectDate(date);
             string editedId = token + "-todo-5", description = "Saved from Calendar while List keeps its own selection.";
-            var item = service.QueryCalendar(date, date).days[date].items.First(entry => entry.view.task.id == editedId);
+            TaskCalendarResult queried=null;
+            foreach(var wait in TaskCalendarPlayVerification.Await(service.QueryCalendarAsync(date,date),value=>queried=value))yield return wait;
+            var item = queried.days[date].items.First(entry => entry.view.task.id == editedId);
             calendar.OpenItem(item); owner.CalendarEdit(item);
             check(owner.IsEditing && calendar.Active, "Calendar opens an editor for a different task from the retained Daily selection");
             owner.editor.description.text = description;
             owner.editor.transform.Find("Footer/Actions/SaveChangesButton").GetComponent<Button>().onClick.Invoke();
+            foreach(var wait in TaskCalendarPlayVerification.WaitDraft(owner))yield return wait;
             yield return .2;
             var selectedCalendarItem = (CalendarTaskItem)typeof(TaskCalendarUI).GetField("selected", Hidden).GetValue(calendar);
-            check(!owner.IsEditing && service.Snapshot.tasks.Single(task => task.id == editedId).description == description,
+            check(!owner.IsEditing && service.TaskSnapshot.tasks.Single(task => task.id == editedId).description == description,
                 "Calendar SaveDraft commits the edited task through the existing save button");
             check(calendar.DrawerOpen && calendar.detailRoot.gameObject.activeInHierarchy && selectedCalendarItem?.view.task.id == editedId,
                 "Calendar SaveDraft keeps its own drawer on the saved task");
@@ -193,15 +198,16 @@ public static class TaskContextRetentionVerificationChecks
         check(owner.search.text == prefix + " Daily" && owner.SelectedKey == dailySelected, "Deep-link filter changes do not affect another tab");
         CheckFilter(owner, TaskDifficulty.Easy, new[] { tagB }, check);
 
-        check(service.Delete(special), "Delete inactive-tab selection through the service");
-        check(service.DeleteTag(tagA), "Delete inactive-tab filter tag through the service");
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.DeleteAsync(special)))yield return wait;
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.DeleteTagAsync(tagA)))yield return wait;
         owner.SelectTab(TaskTab.Todo); yield return .2;
         check(owner.SelectedKey == null && !owner.detailsRoot.gameObject.activeSelf, "Deleted selection is not restored from tab memory");
         CheckFilter(owner, null, Array.Empty<string>(), check);
         owner.SelectTab(TaskTab.Daily); owner.BeginAdd();
         owner.QuickAddInput.text = prefix + " quick add";
         owner.SelectTab(TaskTab.Todo); yield return .2;
-        check(service.Snapshot.tasks.Count(task => task.title == prefix + " quick add" && task.daily) == 1 && !owner.QuickAddInput,
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;
+        check(service.TaskSnapshot.tasks.Count(task => task.title == prefix + " quick add" && task.daily) == 1 && !owner.QuickAddInput,
             "Tab switching still saves quick-add exactly once with its originating Daily defaults");
     }
 }

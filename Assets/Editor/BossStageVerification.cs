@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -18,7 +19,7 @@ public static class BossStageVerification
         EditorApplication.playModeStateChanged+=s=>{
             if(!SessionState.GetBool(Flag,false))return;
             if(s==PlayModeStateChange.EnteredPlayMode){step=0;error=null;next=EditorApplication.timeSinceStartup+3;}
-            if(s==PlayModeStateChange.EnteredEditMode){
+            if(s==PlayModeStateChange.EnteredEditMode){SqlitePlayVerificationSupport.RestoreCustomSizes(Flag);
                 EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+"scene",""));
                 var prior=SessionState.GetString(Flag+"env","");Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",prior.Length==0?null:prior);
                 var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));view.GetType().GetProperty("selectedSizeIndex",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic).SetValue(view,SessionState.GetInt(Flag+"size",0));
@@ -29,7 +30,9 @@ public static class BossStageVerification
     static void Check(bool ok,string message){if(!ok)throw new Exception(message);}
     static void Resolution(int w,int h)=>typeof(DashboardRewardPlayVerification).GetMethod("Resolution",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{w,h});
     static void Capture(string name){if(!capture)capture=new GameObject("Stage Capture").AddComponent<RewardScreenshotCapture>();capture.Begin(Path.GetFullPath(Folder+"/"+name+".png"));}
-    static void Poll()
+    static bool polling;
+    static async void Poll(){if(polling)return;polling=true;try{await PollAsync();}finally{polling=false;}}
+    static async Task PollAsync()
     {
         if(EditorApplication.isCompiling||EditorApplication.isUpdating)return;
         if(!EditorApplication.isPlayingOrWillChangePlaymode&&File.Exists("Temp/verify-boss-stages.request")){
@@ -40,7 +43,7 @@ public static class BossStageVerification
             var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));SessionState.SetInt(Flag+"size",(int)view.GetType().GetProperty("selectedSizeIndex",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic).GetValue(view));
             SessionState.SetFloat(Flag+"start",(float)EditorApplication.timeSinceStartup);
             Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(Folder+"/save-"+Guid.NewGuid().ToString("N")+".json"));
-            EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");SessionState.SetBool(Flag,true);Resolution(1920,1080);EditorApplication.isPlaying=true;return;
+            EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");SqlitePlayVerificationSupport.RememberCustomSizes(Flag);SessionState.SetBool(Flag,true);Resolution(1920,1080);EditorApplication.isPlaying=true;return;
         }
         if(!SessionState.GetBool(Flag,false))return;
         if(EditorApplication.timeSinceStartup-SessionState.GetFloat(Flag+"start",0)>120){File.WriteAllText(Folder+"/play-result.txt","FAIL timeout");EditorApplication.isPlaying=false;return;}
@@ -66,7 +69,7 @@ public static class BossStageVerification
             if(step==13){panel.actors.ResetPose();panel.SelectStage(2,2);Check(panel.arena.Stage.name.StartsWith("OldForest"),"Master environment");nav.ShowPage(MainMenuPage.Dashboard);}
             if(step==14){Check(!panel.arena.Stage.gameObject.activeSelf&&!panel.arena.StageCamera.enabled,"Off-page stage active");nav.ShowPage(MainMenuPage.Boss);}
             if(step==15){Check(panel.actors.Ready&&panel.arena.StageCamera.enabled,"Reopen failed");panel.SelectStage(3);Capture("stage-3-reopened");}
-            if(step==16){Check(GameDataManager.Instance.PlayerData.battles.Count==0,"Preview settled a battle");File.WriteAllText(Folder+"/play-result.txt","PASS "+DateTime.UtcNow.ToString("O")+": all environments/actors, repeated 1/2/3 switching, run and impact animation smoke, Master mapping, page close/reopen, isolated save; 1920x1080 and 1280x720 captures.");EditorApplication.isPlaying=false;return;}
+            if(step==16){var snapshot=await SqlitePlayVerificationSupport.Bounded(GameDataManager.Instance.Service.ReadVerificationSnapshotAsync());Check(snapshot.Succeeded&&snapshot.Value.battles.Count==0,"Preview settled a battle");File.WriteAllText(Folder+"/play-result.txt","PASS "+DateTime.UtcNow.ToString("O")+": all environments/actors, repeated 1/2/3 switching, run and impact animation smoke, Master mapping, page close/reopen, isolated save; 1920x1080 and 1280x720 captures.");EditorApplication.isPlaying=false;return;}
             step++;next=EditorApplication.timeSinceStartup+.8;
         }catch(Exception e){File.WriteAllText(Folder+"/play-result.txt","FAIL "+DateTime.UtcNow.ToString("O")+" "+e);EditorApplication.isPlaying=false;}
     }

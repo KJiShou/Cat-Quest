@@ -42,7 +42,7 @@ public sealed class FocusTrainingBattle : MonoBehaviour
     {
         string current=Presentation is CompanionState remote
             ?(remote.connected?remote.equippedWeaponId:null)
-            :GameDataManager.Instance?GameDataManager.Instance.Tasks.EquippedItem(EquipmentSlot.Weapon):null;
+            :GameDataManager.Instance?GameDataManager.Instance.Service.EquippedItem(EquipmentSlot.Weapon):null;
         if(weaponId==current)return;weaponId=current;effectCycle=-1;
         int style=WeaponAttackArt.Style(current);
         animator.runtimeAnimatorController=style!=0&&weaponAttackArt?weaponAttackArt.unarmedTraining:defaultController;

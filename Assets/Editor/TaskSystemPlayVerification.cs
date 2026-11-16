@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -15,12 +16,16 @@ public static class TaskSystemPlayVerification
     private static string taskId;
     private static string dailyId;
     private static string groupedId;
+    private static bool ticking;
+    private static double deadline;
     static TaskSystemPlayVerification() { EditorApplication.playModeStateChanged += StateChanged; }
     [MenuItem("Tools/Cat Quest/Verify MainMenu Play Flow")]
     public static void Run()
     {
         if(EditorApplication.isPlaying) throw new Exception("Stop Play Mode first.");
         string path=Path.GetFullPath(Path.Combine(Application.dataPath,"../Library/TaskSystemPlayVerification",Guid.NewGuid().ToString("N"),"save.json"));
+        SessionState.SetBool("CatQuest.PlayVerification.hadStore",Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE")!=null);
+        SessionState.SetString("CatQuest.PlayVerification.store",Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE")??"");
         Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",path);
         SessionState.SetBool("CatQuest.PlayVerification",true);
         EditorApplication.isPlaying=true;
@@ -29,28 +34,48 @@ public static class TaskSystemPlayVerification
     {
         if(state==PlayModeStateChange.EnteredPlayMode && SessionState.GetBool("CatQuest.PlayVerification",false))
         {
-            EditorApplication.isPaused=false; step=0; next=EditorApplication.timeSinceStartup+2; EditorApplication.update+=Tick;
+            EditorApplication.isPaused=false; step=0; ticking=false; deadline=EditorApplication.timeSinceStartup+240; next=EditorApplication.timeSinceStartup+2; EditorApplication.update+=Tick;
         }
         if(state==PlayModeStateChange.EnteredEditMode)
         {
-            Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",null);
+            if(!SessionState.GetBool("CatQuest.PlayVerification",false))return;
+            Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",SessionState.GetBool("CatQuest.PlayVerification.hadStore",false)?SessionState.GetString("CatQuest.PlayVerification.store",""):null);
             SessionState.SetBool("CatQuest.PlayVerification",false); EditorApplication.update-=Tick;
         }
     }
     private static void Check(bool condition,string message) { if(!condition) throw new Exception(message); }
-    private static void Tick()
+    private static async Task<T> Command<T>(Task<OperationResult<T>> task)
+    {
+        Check(await Task.WhenAny(task,Task.Delay(10000))==task,"SQLite verification command timed out");
+        var result=await task;Check(result.Succeeded,result.Message);return result.Value;
+    }
+    private static async Task Settle(TaskSystemUI system)
+    {
+        const System.Reflection.BindingFlags flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        double deadline=EditorApplication.timeSinceStartup+10;
+        do {
+            Check(EditorApplication.isPlaying&&EditorApplication.timeSinceStartup<deadline,"UI command did not settle in time");
+            await Command(system.Service.FlushAsync());await Task.Delay(50);
+        } while((bool)typeof(TaskSystemUI).GetField("savingDraft",flags).GetValue(system)
+            ||(bool)typeof(TaskSystemUI).GetField("committingQuick",flags).GetValue(system)
+            ||((System.Collections.Generic.HashSet<string>)typeof(TaskSystemUI).GetField("pendingCompletions",flags).GetValue(system)).Count!=0);
+    }
+    private static async void Tick()
     {
         EditorApplication.QueuePlayerLoopUpdate();
-        if(EditorApplication.timeSinceStartup<next) return;
+        if(ticking||EditorApplication.timeSinceStartup<next) return;
+        ticking=true;
         try
         {
+            Check(EditorApplication.timeSinceStartup<deadline,"Task Play verification exceeded its four-minute bound");
             var navigationForTest=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
             if(step==0 && navigationForTest && !navigationForTest.taskSystem.gameObject.activeInHierarchy) { navigationForTest.ShowPage(MainMenuPage.Tasks); next=EditorApplication.timeSinceStartup+1; return; }
             var system=UnityEngine.Object.FindFirstObjectByType<TaskSystemUI>();
             Check(system && system.Service!=null,"MainMenu did not initialize the task system.");
+            await Command(GameDataManager.EnsureInstance().Ready);
             if(step==0)
             {
-                Check(system.Service.Snapshot.tasks.Count==0 && system.fishCoins.text=="0","Mock tasks or balances were imported.");
+                Check(system.Service.TaskSnapshot.tasks.Count==0 && system.fishCoins.text=="0","Mock tasks or balances were imported.");
                 Canvas.ForceUpdateCanvases();
                 var listPanel=(RectTransform)system.listContent.parent.parent;
                 Check(!system.detailsRoot.gameObject.activeSelf && listPanel.rect.width>((RectTransform)system.detailsRoot.parent).rect.width*.95f,"Empty selection did not give the list full width.");
@@ -86,19 +111,19 @@ public static class TaskSystemPlayVerification
                 Check(system.search.textComponent.fontSize==16 && ((TMP_Text)system.search.placeholder).fontSize==16,"Search font failed.");
                 navigation.buttons[1].onClick.Invoke();
                 system.BeginAdd(); system.QuickAddInput.text="Navigation quick task";
-                navigation.buttons[0].onClick.Invoke();
-                Check(navigation.CurrentPage==MainMenuPage.Dashboard && system.Service.Snapshot.tasks.Count==1,"Leaving task page did not save quick input.");
-                navigation.buttons[1].onClick.Invoke(); system.Service.Delete(system.Service.Snapshot.tasks.Single().id);
+                navigation.buttons[0].onClick.Invoke(); await Settle(system);
+                Check(navigation.CurrentPage==MainMenuPage.Dashboard && system.Service.TaskSnapshot.tasks.Count==1,"Leaving task page did not save quick input.");
+                navigation.buttons[1].onClick.Invoke(); await Command(system.Service.DeleteAsync(system.Service.TaskSnapshot.tasks.Single().id));
                 system.SelectTab(TaskTab.Today); system.BeginAdd();
                 var firstInput=system.QuickAddInput; system.BeginAdd(); Check(firstInput==system.QuickAddInput,"Duplicate quick-add row.");
                 firstInput.text="   "; firstInput.onDeselect.Invoke(firstInput.text);
-                Check(system.Service.Snapshot.tasks.Count==0 && !system.QuickAddInput,"Blank blur created task.");
+                Check(system.Service.TaskSnapshot.tasks.Count==0 && !system.QuickAddInput,"Blank blur created task.");
                 system.BeginAdd(); system.QuickAddInput.text="Escape task"; system.CancelQuickAdd();
-                Check(system.Service.Snapshot.tasks.Count==0,"Cancel quick add saved task.");
+                Check(system.Service.TaskSnapshot.tasks.Count==0,"Cancel quick add saved task.");
                 system.BeginAdd(); system.Refresh();
                 Check(!TaskUIBuilder.Find(system.listContent,"AddTask"),"Plus is still shown during quick add.");
-                var continuing=system.QuickAddInput; continuing.text="First quick task"; continuing.onSubmit.Invoke(continuing.text); continuing.DeactivateInputField();
-                Check(system.QuickAddInput==continuing && continuing.text=="" && system.Service.Snapshot.tasks.Count==1,"Enter did not continue quick add.");
+                var continuing=system.QuickAddInput; continuing.text="First quick task"; continuing.onSubmit.Invoke(continuing.text); continuing.DeactivateInputField(); await Settle(system);
+                Check(system.QuickAddInput==continuing && continuing.text=="" && system.Service.TaskSnapshot.tasks.Count==1,"Enter did not continue quick add.");
                 step=11; next=EditorApplication.timeSinceStartup+.5; return;
             }
             if(step==11)
@@ -106,8 +131,8 @@ public static class TaskSystemPlayVerification
                 var continuing=system.QuickAddInput;
                 Check(continuing && continuing.isFocused && !TaskUIBuilder.Find(system.listContent,"AddTask"),"Enter did not refocus input/hide plus after refresh.");
                 Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-quick-add-preview.png",true);
-                continuing.text="Second quick task"; continuing.onSubmit.Invoke(continuing.text); continuing.onSubmit.Invoke("");
-                Check(system.Service.Snapshot.tasks.Count==2 && system.QuickAddInput==continuing,"Consecutive Enter saved duplicate/blank task.");
+                continuing.text="Second quick task"; continuing.onSubmit.Invoke(continuing.text); continuing.onSubmit.Invoke(""); await Settle(system);
+                Check(system.Service.TaskSnapshot.tasks.Count==2 && system.QuickAddInput==continuing,"Consecutive Enter saved duplicate/blank task.");
                 step=12; next=EditorApplication.timeSinceStartup+.5; return;
             }
             if(step==12)
@@ -115,11 +140,11 @@ public static class TaskSystemPlayVerification
                 Check(system.QuickAddInput && system.QuickAddInput.isFocused,"Second Enter lost keyboard focus.");
                 system.QuickAddInput.onDeselect.Invoke(""); system.Refresh();
                 Check(!system.QuickAddInput && TaskUIBuilder.Find(system.listContent,"AddTask"),"Blur did not restore plus.");
-                foreach(var created in system.Service.Snapshot.tasks) system.Service.Delete(created.id);
+                foreach(var created in system.Service.TaskSnapshot.tasks) await Command(system.Service.DeleteAsync(created.id));
                 system.BeginAdd(); system.QuickAddInput.text="UI integration task";
-                var submitted=system.QuickAddInput; submitted.onDeselect.Invoke(submitted.text); submitted.onSubmit.Invoke(submitted.text);
-                Check(system.Service.Snapshot.tasks.Count==1,"Blur/submit duplicated task.");
-                taskId=system.Service.Snapshot.tasks.Single().id; system.SelectTask(taskId);
+                var submitted=system.QuickAddInput; submitted.onDeselect.Invoke(submitted.text); submitted.onSubmit.Invoke(submitted.text); await Settle(system);
+                Check(system.Service.TaskSnapshot.tasks.Count==1,"Blur/submit duplicated task.");
+                taskId=system.Service.TaskSnapshot.tasks.Single().id; system.SelectTask(taskId);
                 Canvas.ForceUpdateCanvases();
                 Check(system.detailsRoot.gameObject.activeSelf,"Selecting a task did not open details.");
                 Check(system.detailsRoot.Find("ScrollRect/Content/Title/GameObject/Title").GetComponent<TMP_Text>().text=="UI integration task","Original info panel not populated.");
@@ -143,8 +168,8 @@ public static class TaskSystemPlayVerification
                 Canvas.ForceUpdateCanvases();
                 VerifyFormLayout(form);
                 Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-edit-layout-preview.png",true);
-                system.SaveDraft(); Check(!form.gameObject.activeSelf && system.Service.Snapshot.tasks.Count==1,"Add Task was not committed.");
-                var task=system.Service.Snapshot.tasks.Single(); taskId=task.id;
+                system.SaveDraft(); await Settle(system); Check(!form.gameObject.activeSelf && system.Service.TaskSnapshot.tasks.Count==1,"Add Task was not committed.");
+                var task=system.Service.TaskSnapshot.tasks.Single(); taskId=task.id;
                 Check(task.date==TaskService.DateKey(system.Service.LocalNow) && task.tagIds.Count==1 && task.subtasks.Count==1,"Date schedule, tags or subtasks did not persist.");
                 system.SelectTask(taskId);
                 Canvas.ForceUpdateCanvases();
@@ -154,49 +179,49 @@ public static class TaskSystemPlayVerification
                 var dateCorners=new Vector3[4]; var tagCorners=new Vector3[4]; dateRect.GetWorldCorners(dateCorners); tagRect.GetWorldCorners(tagCorners);
                 Check(tagCorners[0].x>dateCorners[3].x,"Tags overlap date.");
                 TaskUIBuilder.Find(system.detailsRoot,"Edit Button").GetComponentInChildren<Button>().onClick.Invoke();
-                form.taskTitle.text="Cancelled title"; system.CancelDraft(); Check(system.Service.Snapshot.tasks.Single().title=="UI integration task","Cancel changed task data.");
-                TaskUIBuilder.Find(system.detailsRoot,"Edit Button").GetComponentInChildren<Button>().onClick.Invoke(); form.description.text="Saved from MainMenu"; system.SaveDraft();
-                Check(system.Service.Snapshot.tasks.Single().description=="Saved from MainMenu","Edit save failed.");
+                form.taskTitle.text="Cancelled title"; system.CancelDraft(); Check(system.Service.TaskSnapshot.tasks.Single().title=="UI integration task","Cancel changed task data.");
+                TaskUIBuilder.Find(system.detailsRoot,"Edit Button").GetComponentInChildren<Button>().onClick.Invoke(); form.description.text="Saved from MainMenu"; system.SaveDraft(); await Settle(system);
+                Check(system.Service.TaskSnapshot.tasks.Single().description=="Saved from MainMenu","Edit save failed.");
                 system.CompleteSelected(taskId);
                 var canvas=system.GetComponentInParent<Canvas>().rootCanvas;
                 Check(canvas.transform.Find("TaskConfirmDialog").gameObject.activeSelf,"GUI Pro confirmation was not shown.");
                 Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-confirm-preview.png",true);
                 TaskUIBuilder.Find(canvas.transform.Find("TaskConfirmDialog"),"Cancel").GetComponent<Button>().onClick.Invoke();
-                Check(system.Service.Snapshot.fishCoins==0,"Cancelling confirm completed task.");
+                Check(system.Service.FishCoins==0,"Cancelling confirm completed task.");
                 system.CompleteSelected(taskId);
-                TaskUIBuilder.Find(canvas.transform.Find("TaskConfirmDialog"),"Confirm").GetComponent<Button>().onClick.Invoke();
-                Check(system.Service.Snapshot.fishCoins==10 && system.Service.Snapshot.experience==20,"Normal task rewards failed.");
-                Check(system.tickets.text=="0" && system.Service.Snapshot.tickets==0,"XP rewards were shown as tickets.");
+                TaskUIBuilder.Find(canvas.transform.Find("TaskConfirmDialog"),"Confirm").GetComponent<Button>().onClick.Invoke(); await Settle(system);
+                Check(system.Service.FishCoins==10 && system.Service.Experience==20,"Normal task rewards failed.");
+                Check(system.tickets.text=="0" && system.Service.Tickets==0,"XP rewards were shown as tickets.");
                 Check(system.tabCounts[0].text=="0" && system.tabCounts[4].text=="1","Tab counts did not refresh.");
                 Check(!system.detailsRoot.gameObject.activeSelf && system.SelectedKey==null,"Completed selection kept the details panel open.");
-                system.SelectTab(TaskTab.History); system.SelectTask(system.Service.Query(TaskTab.History).Single().Key);
+                system.SelectTab(TaskTab.History); await Settle(system); system.SelectTask((await Command(system.Service.QueryHistoryPageAsync())).Rows.Single().Key);
                 Check(!system.detailsRoot.Find("Button").gameObject.activeSelf,"History is not read-only.");
-                var receiptId=system.Service.Query(TaskTab.History).Single().Key;
+                var receiptId=(await Command(system.Service.QueryHistoryPageAsync())).Rows.Single().Key;
                 var undoBox=TaskUIBuilder.Find(system.listContent,"Task_"+receiptId).Find("Image").GetComponent<Button>();
                 Check(undoBox.interactable,"History checkbox did not allow reopening.");
-                undoBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left});
-                Check(system.Service.Query(TaskTab.History).Count==0 && system.SelectedKey==null && !system.detailsRoot.gameObject.activeSelf,"History checkbox did not reopen/clear selection.");
-                Check(system.Service.Snapshot.fishCoins==10,"Undo removed rewards.");
+                undoBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left}); await Settle(system);
+                Check((await Command(system.Service.QueryHistoryPageAsync())).Rows.Count==0 && system.SelectedKey==null && !system.detailsRoot.gameObject.activeSelf,"History checkbox did not reopen/clear selection.");
+                Check(system.Service.FishCoins==10,"Undo removed rewards.");
                 system.SelectTab(TaskTab.Today);
                 var completeBox=TaskUIBuilder.Find(system.listContent,"Task_"+taskId).Find("Image").GetComponent<Button>();
-                completeBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left});
-                Check(system.Service.Query(TaskTab.History).Single().Key==receiptId && system.Service.Snapshot.fishCoins==10 && system.SelectedKey==null,"Checkbox completion selected the row, duplicated history or paid rewards again.");
+                completeBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left}); await Settle(system);
+                Check((await Command(system.Service.QueryHistoryPageAsync())).Rows.Single().Key==receiptId && system.Service.FishCoins==10 && system.SelectedKey==null,"Checkbox completion selected the row, duplicated history or paid rewards again.");
                 system.SelectTab(TaskTab.Daily); system.BeginAdd(); system.QuickAddInput.text="UI daily task";
-                system.SelectTab(TaskTab.Daily); // Switching tabs submits using the originating defaults.
-                dailyId=system.Service.Snapshot.tasks.First(t=>t.daily).id; system.SelectTask(dailyId);
+                system.SelectTab(TaskTab.Daily); await Settle(system); // Switching tabs submits using the originating defaults.
+                dailyId=system.Service.TaskSnapshot.tasks.First(t=>t.daily).id; system.SelectTask(dailyId);
                 TaskUIBuilder.Find(system.detailsRoot,"Edit Button").GetComponentInChildren<Button>().onClick.Invoke();
                 Check(form.dailyToggle.isOn && form.datePicker.HasDate,"Daily add defaults failed.");
-                form.taskTitle.text="UI daily task"; form.difficulty.value=(int)TaskDifficulty.Hard; system.SaveDraft(); dailyId=system.Service.Snapshot.tasks.First(t=>t.daily).id;
-                system.CompleteSelected(dailyId); system.CompleteSelected(dailyId);
-                Check(system.Service.Snapshot.fishCoins==25 && system.Service.Snapshot.history.Count==2,"Daily completion paid twice or wrong reward.");
+                form.taskTitle.text="UI daily task"; form.difficulty.value=(int)TaskDifficulty.Hard; system.SaveDraft(); await Settle(system); dailyId=system.Service.TaskSnapshot.tasks.First(t=>t.daily).id;
+                system.CompleteSelected(dailyId); system.CompleteSelected(dailyId); await Settle(system);
+                Check(system.Service.FishCoins==25 && (await Command(system.Service.ReadVerificationSnapshotAsync())).history.Count==2,"Daily completion paid twice or wrong reward.");
                 var dailyBox=TaskUIBuilder.Find(system.listContent,"Task_"+dailyId).Find("Image").GetComponent<Button>();
-                dailyBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left});
-                Check(!system.Service.Query(TaskTab.Daily).Single().Completed && system.Service.Snapshot.fishCoins==25,"Daily checkbox did not reopen without removing rewards.");
+                dailyBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left}); await Settle(system);
+                Check(!system.Service.Query(TaskTab.Daily).Single().Completed && system.Service.FishCoins==25,"Daily checkbox did not reopen without removing rewards.");
                 dailyBox=TaskUIBuilder.Find(system.listContent,"Task_"+dailyId).Find("Image").GetComponent<Button>();
-                dailyBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left});
-                Check(system.Service.Query(TaskTab.Daily).Single().Completed && system.Service.Snapshot.fishCoins==25,"Daily checkbox recompletion paid twice.");
-                system.SelectTab(TaskTab.Todo); system.BeginAdd(); system.QuickAddInput.text="Temporary todo"; system.CommitQuickAdd();
-                var temporary=system.Service.Snapshot.tasks.First(t=>t.title=="Temporary todo");
+                dailyBox.OnPointerClick(new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left}); await Settle(system);
+                Check(system.Service.Query(TaskTab.Daily).Single().Completed && system.Service.FishCoins==25,"Daily checkbox recompletion paid twice.");
+                system.SelectTab(TaskTab.Todo); system.BeginAdd(); system.QuickAddInput.text="Temporary todo"; system.CommitQuickAdd(); await Settle(system);
+                var temporary=system.Service.TaskSnapshot.tasks.First(t=>t.title=="Temporary todo");
                 Check(!temporary.scheduled,"Todo should default to no schedule.");
                 system.SelectTask(temporary.id); TaskUIBuilder.Find(system.detailsRoot,"Edit Button").GetComponentInChildren<Button>().onClick.Invoke();
                 form.taskTitle.text="Scrollable draft"; for(int i=0;i<16;i++) form.addSubtask.onClick.Invoke();
@@ -206,20 +231,20 @@ public static class TaskSystemPlayVerification
             {
                 var form=system.editor; Check(form.subtaskContent.rect.height>form.subtaskScroll.viewport.rect.height,"Subtask content does not scroll.");
                 Check(form.subtaskScroll.verticalNormalizedPosition<.01f && form.subtaskScroll.viewport.GetComponent<Mask>(),"Subtask scrolling/masking failed.");
-                system.CancelDraft(); Check(system.Service.Snapshot.tasks.First(t=>t.title=="Temporary todo").subtasks.Count==0,"Cancelling subtasks persisted them."); system.Service.Delete(system.Service.Snapshot.tasks.First(t=>t.title=="Temporary todo").id);
-                var tagged=system.Service.Snapshot.tasks.First(t=>t.daily);
-                var catalog=system.Service.Snapshot.tags;
+                system.CancelDraft(); Check(system.Service.TaskSnapshot.tasks.First(t=>t.title=="Temporary todo").subtasks.Count==0,"Cancelling subtasks persisted them."); await Command(system.Service.DeleteAsync(system.Service.TaskSnapshot.tasks.First(t=>t.title=="Temporary todo").id));
+                var tagged=system.Service.TaskSnapshot.tasks.First(t=>t.daily);
+                var catalog=system.Service.TagCatalog;
                 tagged.tagIds.Add(catalog[0].id); tagged.tagIds.Add(catalog[1].id);
-                system.Service.Upsert(tagged,Array.Empty<string>(),out _);
+                await Command(system.Service.UpsertAsync(tagged,Array.Empty<string>()));
                 // Completed daily tasks are excluded from Tags, so create an unfinished one for grouping.
                 var grouped=new QuestTask { title="Grouped task",tagIds=new System.Collections.Generic.List<string>{catalog[0].id,catalog[1].id} };
-                system.Service.Upsert(grouped,Array.Empty<string>(),out groupedId);
+                groupedId=await Command(system.Service.UpsertAsync(grouped,Array.Empty<string>()));
                 system.SelectTab(TaskTab.Tags);
                 Check(!TaskUIBuilder.Find(system.listContent,"TagActions") && !TaskUIBuilder.Find(system.listContent,"TagFilters"),"Tags management toolbar still exists.");
                 Check(TaskUIBuilder.Find(system.listContent,"TagGroup_"+catalog[0].id) && TaskUIBuilder.Find(system.listContent,"TagGroup_"+catalog[1].id),"Tag groups missing.");
                 Check(system.listContent.GetComponentsInChildren<Button>(false).Count(button=>button.name=="Task_"+groupedId)==2,"Multi-tag task not rendered in both groups.");
                 system.SelectTask(groupedId); Canvas.ForceUpdateCanvases();
-                VerifyDifficultyLayout(system,groupedId);
+                await VerifyDifficultyLayout(system,groupedId);
                 var tagContainer=system.detailsRoot.Find("ScrollRect/Content/Tags/Tags");
                 foreach(Transform chip in tagContainer) {
                     if(!chip.gameObject.activeSelf) continue;
@@ -227,8 +252,8 @@ public static class TaskSystemPlayVerification
                     Check(chipText.rectTransform.anchorMin==Vector2.zero && chipText.rectTransform.anchorMax==Vector2.one,"Tag text not contained by pill.");
                 }
                 Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-tags-preview.png",true);
-                var manyTags=system.Service.Snapshot.tasks.First(t=>t.id==groupedId);
-                manyTags.tagIds=catalog.Select(tag=>tag.id).ToList(); system.Service.Upsert(manyTags,Array.Empty<string>(),out _);
+                var manyTags=system.Service.TaskSnapshot.tasks.First(t=>t.id==groupedId);
+                manyTags.tagIds=catalog.Select(tag=>tag.id).ToList(); await Command(system.Service.UpsertAsync(manyTags,Array.Empty<string>()));
                 system.SelectTask(groupedId); Canvas.ForceUpdateCanvases();
                 var lines=tagContainer.Cast<Transform>().Where(chip=>chip.gameObject.activeSelf).Select(chip=>Mathf.RoundToInt(((RectTransform)chip).anchoredPosition.y)).Distinct().Count();
                 Check(lines>1,"Many detail tags did not wrap.");
@@ -254,10 +279,10 @@ public static class TaskSystemPlayVerification
                 Check(Mathf.Abs(caption.TransformPoint(caption.rect.center).y-selector.TransformPoint(selector.rect.center).y)<1,"Add tags placeholder is not vertically centered.");
                 Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-edit-empty-tags-preview.png",true);
                 system.CancelDraft();
-                var longTask=system.Service.Snapshot.tasks.Single(t=>t.id==groupedId);
+                var longTask=system.Service.TaskSnapshot.tasks.Single(t=>t.id==groupedId);
                 longTask.title=new string('W',100);
                 longTask.description="Today is a nice day";
-                Check(system.Service.Upsert(longTask,Array.Empty<string>(),out _),system.Service.LastError);
+                await Command(system.Service.UpsertAsync(longTask,Array.Empty<string>()));
                 system.SelectTask(groupedId);
                 step=15; next=EditorApplication.timeSinceStartup+.5; return;
             }
@@ -276,35 +301,44 @@ public static class TaskSystemPlayVerification
                 Check(iconCorners[1].y<=tagCorners[0].y,"Wrapped detail tags overlap Rewards.");
                 VerifyDescriptionLayout(system);
                 Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-max-title-preview.png",true);
-                var described=system.Service.Snapshot.tasks.Single(t=>t.id==groupedId);
+                var described=system.Service.TaskSnapshot.tasks.Single(t=>t.id==groupedId);
                 described.description=string.Join("\n",Enumerable.Repeat("A longer description that wraps within the task details panel.",6));
-                Check(system.Service.Upsert(described,Array.Empty<string>(),out _),system.Service.LastError);
+                await Command(system.Service.UpsertAsync(described,Array.Empty<string>()));
                 step=16; next=EditorApplication.timeSinceStartup+.5; return;
             }
             if(step==16)
             {
                 Canvas.ForceUpdateCanvases(); VerifyDescriptionLayout(system);
                 Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-description-preview.png",true);
-                VerifyOutsideDismissal(system);
-                system.Service.Delete(groupedId);
+                await VerifyOutsideDismissal(system);
+                await Command(system.Service.DeleteAsync(groupedId));
                 var dialog=system.GetComponentInParent<Canvas>().rootCanvas.transform.Find("TaskDialog");
                 system.SelectTab(TaskTab.Daily); system.SelectTask(dailyId); TaskUIBuilder.Find(system.detailsRoot,"DeleteButton").GetComponentInChildren<Button>().onClick.Invoke();
-                TaskUIBuilder.Find(system.GetComponentInParent<Canvas>().rootCanvas.transform.Find("TaskConfirmDialog"),"Confirm").GetComponent<Button>().onClick.Invoke(); Check(!system.Service.Snapshot.tasks.Any(t=>t.id==dailyId) && system.Service.Snapshot.history.Count==2,"Daily delete removed history.");
-                var disk=new PlayerDataStore(GameDataManager.Instance.SavePath); Check(disk.Data.history.Count==2 && disk.Data.fishCoins==25,"UI changes were not saved on disk.");
-                system.SelectTab(TaskTab.History); system.SelectTask(system.Service.Query(TaskTab.History).First().Key);
-                var deletedHistory=system.Service.Query(TaskTab.History).Single(v=>v.task.id==dailyId);
+                TaskUIBuilder.Find(system.GetComponentInParent<Canvas>().rootCanvas.transform.Find("TaskConfirmDialog"),"Confirm").GetComponent<Button>().onClick.Invoke(); await Settle(system); Check(!system.Service.TaskSnapshot.tasks.Any(t=>t.id==dailyId) && (await Command(system.Service.ReadVerificationSnapshotAsync())).history.Count==2,"Daily delete removed history.");
+                string isolatedPath=GameDataManager.Instance.SavePath;
+                Check(Path.GetFullPath(isolatedPath)==Path.GetFullPath(Path.ChangeExtension(Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE"),".sqlite3")),"Disk verification must use isolated SQLite");
+                var diskRead=Task.Run(()=>{
+                    using(var db=new SQLite.SQLiteConnection(isolatedPath,SQLite.SQLiteOpenFlags.ReadOnly|SQLite.SQLiteOpenFlags.FullMutex)) {
+                        var profile=JsonUtility.FromJson<PlayerData>(db.ExecuteScalar<string>("SELECT payload FROM cq_Profile WHERE id='profile'"));
+                        return db.ExecuteScalar<int>("SELECT count(*) FROM cq_History")==2&&profile.fishCoins==25;
+                    }
+                });
+                Check(await Task.WhenAny(diskRead,Task.Delay(10000))==diskRead&&await diskRead,"UI changes were not saved on disk.");
+                system.SelectTab(TaskTab.History); await Settle(system); system.SelectTask((await Command(system.Service.QueryHistoryPageAsync())).Rows.First().Key);
+                var deletedHistory=(await Command(system.Service.QueryHistoryPageAsync())).Rows.Single(v=>v.task.id==dailyId);
                 Check(!TaskUIBuilder.Find(system.listContent,"Task_"+deletedHistory.Key).Find("Image").GetComponent<Button>().interactable,"Deleted History checkbox remained enabled.");
-                system.search.text="UI integration"; Check(system.listContent.GetComponentsInChildren<Button>(false).Count(b=>b.name.StartsWith("Task_"))==1,"Search UI did not filter history.");
+                system.search.text="UI integration"; await Settle(system); Check(system.listContent.GetComponentsInChildren<Button>(false).Count(b=>b.name.StartsWith("Task_"))==1,"Search UI did not filter history.");
                 system.search.text=""; system.filterButton.onClick.Invoke();
                 var normal=dialog.GetComponentsInChildren<Toggle>(false).First(t=>t.name=="Medium"); normal.isOn=true;
-                TaskUIBuilder.Find(dialog,"Apply").GetComponent<Button>().onClick.Invoke(); Check(system.listContent.GetComponentsInChildren<Button>(false).Count(b=>b.name.StartsWith("Task_"))==1,"Difficulty filter UI failed.");
-                system.SelectTab(TaskTab.History); system.SelectTask(system.Service.Query(TaskTab.History).First(v=>v.task.title=="UI integration task").Key);
+                TaskUIBuilder.Find(dialog,"Apply").GetComponent<Button>().onClick.Invoke(); await Settle(system); Check(system.listContent.GetComponentsInChildren<Button>(false).Count(b=>b.name.StartsWith("Task_"))==1,"Difficulty filter UI failed.");
+                system.SelectTab(TaskTab.History); await Settle(system); system.SelectTask((await Command(system.Service.QueryHistoryPageAsync())).Rows.First(v=>v.task.title=="UI integration task").Key);
                 Capture(system);
                 File.WriteAllText(Path.Combine(Application.dataPath,"../Temp/task-system.play-result"),"PASS: full-width unselected list; independent completion/undo checkboxes; retained rewards and receipts; disabled deleted history; blue carets; description alignment; single/multiple/empty centered tag selectors; three difficulty badges and growing long-title heading; precise overdue color; six sidebar pages; quick-add; edit/cancel; grouped/wrapped tags; date/time/subtasks; completion confirmation; counters/history; scrolling/mask; delete; disk persistence.\nTest save: "+GameDataManager.Instance.SavePath);
             }
         }
         catch(Exception e) { File.WriteAllText(Path.Combine(Application.dataPath,"../Temp/task-system.play-result"),"FAIL: "+e); Debug.LogException(e); }
-        EditorApplication.update-=Tick; SessionState.SetBool("CatQuest.PlayVerification",false); Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",null); EditorApplication.isPlaying=false;
+        finally { ticking=false; }
+        EditorApplication.update-=Tick; EditorApplication.isPlaying=false;
     }
     private static void VerifyDescriptionLayout(TaskSystemUI system)
     {
@@ -315,7 +349,7 @@ public static class TaskSystemPlayVerification
         text.rectTransform.GetWorldCorners(descriptionCorners); schedule.GetWorldCorners(scheduleCorners);
         Check(scheduleCorners[1].y<=descriptionCorners[0].y,"Description overlaps Schedule.");
     }
-    private static void VerifyOutsideDismissal(TaskSystemUI system)
+    private static async Task VerifyOutsideDismissal(TaskSystemUI system)
     {
         const System.Reflection.BindingFlags flags=System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance;
         var capture=typeof(TaskSystemUI).GetMethod("CaptureOutsideClick",flags);
@@ -339,8 +373,8 @@ public static class TaskSystemPlayVerification
         var listPanel=(RectTransform)system.listContent.parent.parent;
         Check(listPanel.rect.width>((RectTransform)system.detailsRoot.parent).rect.width*.95f,"Dismissed details did not restore full-width list.");
         system.SelectTask(groupedId);
-        var empty=system.Service.Snapshot.tasks.Single(t=>t.id==groupedId); empty.description="";
-        Check(system.Service.Upsert(empty,Array.Empty<string>(),out _),system.Service.LastError);
+        var empty=system.Service.TaskSnapshot.tasks.Single(t=>t.id==groupedId); empty.description="";
+        await Command(system.Service.UpsertAsync(empty,Array.Empty<string>()));
         Check(!system.detailsRoot.Find("ScrollRect/Content/Description").gameObject.activeSelf,"Empty description left a visible section.");
     }
     private static void VerifyFormLayout(EditTaskDetailsUI form)
@@ -356,14 +390,14 @@ public static class TaskSystemPlayVerification
         Vector3 frameCenter=selector.TransformPoint(selector.rect.center);
         Check(Mathf.Abs(chipCenter.y-frameCenter.y)<1,"Tag chip is not vertically centered.");
     }
-    private static void VerifyDifficultyLayout(TaskSystemUI system,string id)
+    private static async Task VerifyDifficultyLayout(TaskSystemUI system,string id)
     {
-        var task=system.Service.Snapshot.tasks.Single(t=>t.id==id);
+        var task=system.Service.TaskSnapshot.tasks.Single(t=>t.id==id);
         task.title="A long task title that must wrap beside its difficulty badge without covering the badge";
         task.scheduled=true; task.date=TaskService.DateKey(system.Service.LocalNow.AddDays(-1));
         foreach(TaskDifficulty value in Enum.GetValues(typeof(TaskDifficulty)))
         {
-            task.difficulty=value; Check(system.Service.Upsert(task,Array.Empty<string>(),out _),system.Service.LastError);
+            task.difficulty=value; await Command(system.Service.UpsertAsync(task,Array.Empty<string>()));
             system.SelectTask(id); Canvas.ForceUpdateCanvases();
             var row=TaskUIBuilder.Find(system.listContent,"Task_"+id);
             var badge=TaskUIBuilder.Find(row,"Normal_Difficulty");
@@ -377,7 +411,7 @@ public static class TaskSystemPlayVerification
             var date=TaskUIBuilder.Find(row,"DateTime").GetComponent<TMP_Text>();
             Check(date.color==TaskUIBuilder.Overdue && !date.text.Contains("Overdue"),"Overdue date is not red or still has a prefix.");
             Check(system.detailsRoot.Find("ScrollRect/Content/Schedule/GameObject/Title (2)").GetComponent<TMP_Text>().color==TaskUIBuilder.Overdue,"Detail overdue date is not red.");
-            system.editor.LoadDraft(task,system.Service.Snapshot.tags,Array.Empty<string>());
+            system.editor.LoadDraft(task,system.Service.TagCatalog,Array.Empty<string>());
             Check(system.editor.difficulty.captionText.text==TaskService.DifficultyName(value) && system.editor.difficulty.captionText.color==TaskUIBuilder.DifficultyColor(value),"Editor difficulty mismatch.");
         }
         Capture(system); File.Copy("Temp/task-system-preview.png","Temp/task-long-title-preview.png",true);

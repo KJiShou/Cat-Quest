@@ -134,9 +134,10 @@ public static class DashboardAddVerification
         var owner=nav.pages[0].GetComponentInChildren<DashboardTasksUI>(true);
         Check(owner && owner.addTaskButton && owner.quickAddInput && owner.quickAddRoot,"Saved Dashboard add bindings missing");
         var manager=GameDataManager.EnsureInstance();
+        foreach(var wait in TaskCalendarPlayVerification.Await(manager.Ready))yield return wait;
         Check(Path.GetFullPath(manager.SavePath).StartsWith(Path.GetFullPath(Folder)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase),"Test must use isolated save");
         UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
-        var service=manager.Tasks;
+        var service=manager.Service;
         foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(2560,1080)}) {
             context=size.ToString(); Resolution(size.x,size.y); nav.ShowPage(MainMenuPage.Dashboard); yield return .7;
             Capture("dashboard-"+size.x); yield return .2;
@@ -170,48 +171,50 @@ public static class DashboardAddVerification
             Check(nav.CurrentPage==MainMenuPage.Dashboard && owner.quickAddRoot.activeInHierarchy && owner.quickAddInput.isFocused,"Add did not focus Dashboard input");
             Check(owner.GetComponentsInChildren<TMP_InputField>().Length==1,"Duplicate input");
             Capture("input-"+size.x); yield return .2;
-            int count=service.Snapshot.tasks.Count;
+            int count=service.TaskSnapshot.tasks.Count;
             owner.quickAddInput.text="   "; owner.quickAddInput.onSubmit.Invoke(owner.quickAddInput.text);
-            Check(service.Snapshot.tasks.Count==count && owner.quickAddRoot.activeSelf,"Blank input created task");
+            Check(service.TaskSnapshot.tasks.Count==count && owner.quickAddRoot.activeSelf,"Blank input created task");
             EventSystem.current.SetSelectedGameObject(null); yield return .3;
-            Check(!owner.quickAddRoot.activeSelf && service.Snapshot.tasks.Count==count,"Blank outside click did not cancel");
+            Check(!owner.quickAddRoot.activeSelf && service.TaskSnapshot.tasks.Count==count,"Blank outside click did not cancel");
             owner.BeginAddTask(); yield return .2;
             owner.quickAddInput.text="Dashboard task "+size.x;
             if(size.x==1920){
-                string temporary=manager.SavePath+".tmp"; Directory.CreateDirectory(temporary);
-                try {
+                using(TaskCalendarPlayVerification.FailSqliteWrites()) {
                     EventSystem.current.SetSelectedGameObject(null); yield return .2;
+                    foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;
                     Check(!nav.ShowPage(MainMenuPage.Tasks),"Navigation discarded failed draft");
+                    foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;
                     Check(nav.CurrentPage==MainMenuPage.Dashboard,"Save failure left Dashboard");
                 }
-                finally { Directory.Delete(temporary); }
-                Check(service.Snapshot.tasks.Count==count && owner.quickAddInput.text=="Dashboard task "+size.x,"Failure lost draft or created task");
+                Check(service.TaskSnapshot.tasks.Count==count && owner.quickAddInput.text=="Dashboard task "+size.x,"Failure lost draft or created task");
                 Capture("save-failure"); yield return .2;
                 var modal=owner.GetComponentInParent<Canvas>().rootCanvas.transform.Find("DashboardTaskConfirmDialog");
                 modal.Find("Popup/Confirm").GetComponent<Button>().onClick.Invoke();
                 owner.BeginAddTask(); yield return .2;
             }
             EventSystem.current.SetSelectedGameObject(null);
-            owner.quickAddInput.onDeselect.Invoke(owner.quickAddInput.text); yield return .4;
+            owner.quickAddInput.onDeselect.Invoke(owner.quickAddInput.text); foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;yield return .4;
             Check(nav.CurrentPage==MainMenuPage.Dashboard && !owner.quickAddRoot.activeSelf,"Save left Dashboard or kept submitted draft");
-            Check(service.Snapshot.tasks.Count==count+1,"Task not created exactly once");
-            Check(new PlayerDataStore(manager.SavePath).Data.tasks.Count==count+1,"Saved task missing on reload");
-            var task=service.Snapshot.tasks.Last(); Check(task.scheduled && !task.daily && task.date==TaskService.DateKey(service.LocalNow),"Wrong Today defaults");
+            Check(service.TaskSnapshot.tasks.Count==count+1,"Task not created exactly once");
+            var persisted=SqlitePlayVerificationSupport.ReloadAsync();foreach(var wait in SqlitePlayVerificationSupport.Wait(persisted))yield return wait;
+            Check(persisted.GetAwaiter().GetResult().tasks.Count==count+1,"Saved task missing on reload");
+            var task=service.TaskSnapshot.tasks.Last(); Check(task.scheduled && !task.daily && task.date==TaskService.DateKey(service.LocalNow),"Wrong Today defaults");
             Check(owner.GetComponentsInChildren<TMP_Text>().Any(t=>t.text==task.title),"Created task missing on Dashboard");
             Capture("saved-"+size.x); yield return .2;
             EventSystem.current.SetSelectedGameObject(button.gameObject);
             ExecuteEvents.Execute(button.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler); yield return .4;
             Check(owner.quickAddRoot.activeSelf,"Keyboard add failed"); owner.quickAddInput.text="Discard me";
             owner.quickAddInput.ProcessEvent(Event.KeyboardEvent("escape")); owner.quickAddInput.DeactivateInputField(); yield return .3;
-            Check(!owner.quickAddRoot.activeSelf && service.Snapshot.tasks.Count==count+1,"Escape did not cancel draft");
+            Check(!owner.quickAddRoot.activeSelf && service.TaskSnapshot.tasks.Count==count+1,"Escape did not cancel draft");
             owner.BeginAddTask(); yield return .2; owner.quickAddInput.text="Leave Dashboard "+size.x;
-            Check(nav.ShowPage(MainMenuPage.Tasks),"Navigation could not save draft"); yield return .3;
-            Check(service.Snapshot.tasks.Count==count+2 && !owner.quickAddRoot.activeSelf,"Leaving Dashboard did not save exactly once");
+            nav.ShowPage(MainMenuPage.Tasks);foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;yield return .3;
+            Check(nav.CurrentPage==MainMenuPage.Tasks,"Navigation could not save draft");
+            Check(service.TaskSnapshot.tasks.Count==count+2 && !owner.quickAddRoot.activeSelf,"Leaving Dashboard did not save exactly once");
             nav.ShowPage(MainMenuPage.Dashboard); yield return .3;
             owner.BeginAddTask(); yield return .2; owner.quickAddInput.text="Submit "+size.x;
             owner.quickAddInput.onSubmit.Invoke(owner.quickAddInput.text);
-            EventSystem.current.SetSelectedGameObject(null); yield return .3;
-            Check(service.Snapshot.tasks.Count==count+3,"Submit followed by blur duplicated task");
+            EventSystem.current.SetSelectedGameObject(null);foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait; yield return .3;
+            Check(service.TaskSnapshot.tasks.Count==count+3,"Submit followed by blur duplicated task");
         }
         var actions=DashboardTaskActionsVerification.Run(owner,nav,Resolution,Capture);
         while(actions.MoveNext())yield return actions.Current;

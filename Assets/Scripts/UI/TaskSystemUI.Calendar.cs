@@ -20,7 +20,7 @@ public partial class TaskSystemUI
     public void CalendarDelete(string id) => ConfirmDeleteTask(id);
     void ConfirmDeleteTask(string id)
     {
-        var task=Service.Snapshot.tasks.FirstOrDefault(t=>t.id==id);
+        var task=Service.TaskSnapshot.tasks.FirstOrDefault(t=>t.id==id);
         if(task==null) { Notify("This task no longer exists. Reopen the list to continue.",true); return; }
         // Bound only the name so the consequence remains visible in the authored popup.
         var name=new System.Globalization.StringInfo(task.title);
@@ -28,11 +28,13 @@ public partial class TaskSystemUI
         string body="\""+caption+"\"\n"+(task.daily?"This stops this task and all future repeats.\n":"")
             +"Completed history and rewards are kept.";
         Confirm(task.daily?"Delete repeating task?":"Delete task?",body,
-            () => { if (!Service.Delete(id)) Notify(Service.LastError, true); else Notify("Task deleted."); },"Delete");
+            async () => { var saved=await Service.DeleteAsync(id);if(!this || !isActiveAndEnabled)return; if (!saved.Succeeded) Notify(Service.LastError, true); else Notify("Task deleted."); },"Delete");
     }
-    public void CalendarUndo(string historyId)
+    public async void CalendarUndo(string historyId)
     {
-        if (!Service.UndoCompletion(historyId)) Notify(Service.LastError, true);
+        var saved=await Service.UndoCompletionAsync(historyId);
+        if(!this || !isActiveAndEnabled)return;
+        if (!saved.Succeeded) Notify(Service.LastError, true);
         else Notify("Task restored. Previously earned rewards are kept.");
     }
     public void CalendarEdit(CalendarTaskItem item)

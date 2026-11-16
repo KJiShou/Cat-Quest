@@ -109,3 +109,7 @@ InitTestScene*.unity*
 # Local Google/Firebase connection values; see Firebase configuration example.
 /Assets/Resources/AccountConnectionConfig.asset
 /Assets/Resources/AccountConnectionConfig.asset.meta
+
+# Unity's local scene recovery copies; retain locally, do not ship as project scenes.
+/Assets/_Recovery/
+/Assets/_Recovery.meta

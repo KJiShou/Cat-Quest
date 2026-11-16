@@ -1,7 +1,9 @@
 using System;
+using static SqlitePlayVerificationSupport;
 using System.IO;
 using System.Linq;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,38 +13,70 @@ using TMPro;
 public static class EquipmentPlayVerification
 {
     const string Flag="CatQuest.EquipmentPlay",Folder="Library/EquipmentVerification";
+    static readonly List<string> textFailures=new List<string>();
+    static string TextFailureReport=>textFailures.Count==0?"":"\nText overflow failures ("+textFailures.Count+"):\n"+string.Join("\n",textFailures);
     static IEnumerator run;static double next;static string error;static RewardScreenshotCapture capture;
     static EquipmentPlayVerification(){EditorApplication.update+=Poll;Application.logMessageReceived+=(m,s,t)=>{if(SessionState.GetBool(Flag,false)&&(t==LogType.Error||t==LogType.Exception))error=m;};EditorApplication.playModeStateChanged+=s=>{
         if(!SessionState.GetBool(Flag,false))return;
-        if(s==PlayModeStateChange.EnteredPlayMode){error=null;run=Run();next=EditorApplication.timeSinceStartup+2;}
-        if(s==PlayModeStateChange.EnteredEditMode){run=null;SessionState.SetBool(Flag,false);Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",SessionState.GetString(Flag+".env","") is string prior && prior.Length>0?prior:null);var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));view.GetType().GetProperty("selectedSizeIndex",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic).SetValue(view,SessionState.GetInt(Flag+".size",0));UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+".scene",""));}
+        if(s==PlayModeStateChange.EnteredPlayMode){error=null;textFailures.Clear();File.WriteAllText(Folder+"/text-overflow.txt","RUNNING "+DateTime.UtcNow.ToString("O"));run=Flatten(Run());next=EditorApplication.timeSinceStartup+2;}
+        if(s==PlayModeStateChange.EnteredEditMode)Restore();
     };}
+    static void Restore()
+    {
+        if(!SessionState.GetBool(Flag,false))return;
+        try {
+            (run as IDisposable)?.Dispose();run=null;
+            Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",SessionState.GetString(Flag+".env","") is string prior&&prior.Length>0?prior:null);
+            UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+".scene",""));
+            var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));
+            view.GetType().GetProperty("selectedSizeIndex",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic).SetValue(view,SessionState.GetInt(Flag+".size",0));
+            SqlitePlayVerificationSupport.RestoreCustomSizes(Flag);
+        } finally { SessionState.SetBool(Flag,false);capture=null; }
+    }
+    static void Stop(string result)
+    {
+        File.WriteAllText(Folder+"/play-result.txt",result+TextFailureReport);
+        (run as IDisposable)?.Dispose();run=null;
+        if(EditorApplication.isPlayingOrWillChangePlaymode)EditorApplication.isPlaying=false;
+        else Restore();
+    }
     static void Poll(){
         if(EditorApplication.isCompiling||EditorApplication.isUpdating)return;
-        if(!EditorApplication.isPlayingOrWillChangePlaymode&&File.Exists("Temp/verify-equipment-play.request")){
-            File.Delete("Temp/verify-equipment-play.request");Directory.CreateDirectory(Folder);File.WriteAllText(Folder+"/play-result.txt","RUNNING "+DateTime.UtcNow.ToString("O"));SessionState.SetString(Flag+".env",Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE")??"");var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));SessionState.SetInt(Flag+".size",(int)view.GetType().GetProperty("selectedSizeIndex",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic).GetValue(view));SessionState.SetFloat(Flag+".started",(float)EditorApplication.timeSinceStartup);SessionState.SetBool(Flag,true);SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene));UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(Folder+"/play-"+Guid.NewGuid().ToString("N")+".json"));EditorApplication.isPlaying=true;return;
+        if(SessionState.GetBool(Flag,false)&&File.Exists("Temp/verify-equipment-play.request")) {
+            File.Delete("Temp/verify-equipment-play.request");
+            File.AppendAllText(Folder+"/request-rejections.txt",DateTime.UtcNow.ToString("O")+" Rejected duplicate request while verification owns Editor state.\n");
         }
-        if(SessionState.GetBool(Flag,false)&&EditorApplication.timeSinceStartup-SessionState.GetFloat(Flag+".started",0)>180){File.WriteAllText(Folder+"/play-result.txt","FAIL: timeout");run=null;EditorApplication.isPlaying=false;return;}
+        if(!SessionState.GetBool(Flag,false)&&!EditorApplication.isPlayingOrWillChangePlaymode&&File.Exists("Temp/verify-equipment-play.request")){
+            File.Delete("Temp/verify-equipment-play.request");Directory.CreateDirectory(Folder);File.WriteAllText(Folder+"/play-result.txt","RUNNING "+DateTime.UtcNow.ToString("O"));SessionState.SetString(Flag+".env",Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE")??"");var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));SessionState.SetInt(Flag+".size",(int)view.GetType().GetProperty("selectedSizeIndex",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic).GetValue(view));SessionState.SetFloat(Flag+".started",(float)EditorApplication.timeSinceStartup);SqlitePlayVerificationSupport.RememberCustomSizes(Flag);SessionState.SetBool(Flag,true);SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene));UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(Folder+"/play-"+Guid.NewGuid().ToString("N")+".json"));EditorApplication.isPlaying=true;return;
+        }
+        if(SessionState.GetBool(Flag,false)) {
+            double elapsed=EditorApplication.timeSinceStartup-SessionState.GetFloat(Flag+".started",0);
+            if(elapsed>180){Stop("FAIL: timeout");return;}
+            if(!EditorApplication.isPlayingOrWillChangePlaymode&&elapsed>5){Stop("FAIL: Play Mode entry was aborted; prior Editor state restored.");return;}
+        }
         if(!EditorApplication.isPlaying||run==null||EditorApplication.timeSinceStartup<next||(capture&&capture.Pending))return;
-        EditorApplication.QueuePlayerLoopUpdate();try{if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);else{File.WriteAllText(Folder+"/play-result.txt","PASS "+DateTime.UtcNow.ToString("O")+": SimpleCasual inventory templates/six-column layout/filter and auto-select feedback, outside-click dismissal and inside/drag/right-click guards, full-screen modal/header/sidebar raycasts, both character cards stats/power at four sizes and both sidebar states, detail controls/raycast/feedback reset, empty/locked state, Stage claim entry, direct equip/unequip including failure/retry/repeated input, direct chest claim and direct upgrade/Auto Select/failure/retry, persistence, full nine-item inventory, 1920/1280 layouts, hover/press, set stats and faster attack animation.");run=null;EditorApplication.isPlaying=false;}}catch(Exception e){File.WriteAllText(Folder+"/play-result.txt",e.ToString());run=null;EditorApplication.isPlaying=false;}
+        EditorApplication.QueuePlayerLoopUpdate();try{if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);else{File.WriteAllText(Folder+"/play-result.txt","PASS "+DateTime.UtcNow.ToString("O")+": SimpleCasual inventory templates/authored-column layout/filter and auto-select feedback, outside-click dismissal and inside/drag/right-click guards, full-screen modal/header/sidebar raycasts, both character cards stats/power at four sizes and both sidebar states, detail controls/raycast/feedback reset, empty/locked state, Stage claim entry, direct equip/unequip including failure/retry/repeated input, direct chest claim and direct upgrade/Auto Select/failure/retry, persistence, full nine-item inventory, 1920/1280 layouts, hover/press, set stats and faster attack animation.");(run as IDisposable)?.Dispose();run=null;EditorApplication.isPlaying=false;}}catch(Exception e){File.WriteAllText(Folder+"/play-result.txt","FAIL "+DateTime.UtcNow.ToString("O")+"\n"+e+TextFailureReport);(run as IDisposable)?.Dispose();run=null;EditorApplication.isPlaying=false;}
     }
     static void Check(bool ok,string why){if(!ok)throw new Exception(why);}
-    static void Click(Transform root,string path){var b=root.Find(path).GetComponent<Button>();Check(b&&b.interactable&&b.gameObject.activeInHierarchy,"Unavailable "+path);b.onClick.Invoke();}
+    static void Click(Transform root,string path){var target=root.Find(path);Check(target,"Missing control path "+path);Click(target.GetComponent<Button>());}
+    static void Click(Button button){Check(button&&button.interactable&&button.gameObject.activeInHierarchy,"Unavailable "+(button?button.name:"unbound button"));button.onClick.Invoke();}
     static void Capture(string name){if(!capture)capture=new GameObject("Equipment Capture").AddComponent<RewardScreenshotCapture>();capture.Begin(Path.GetFullPath(Folder+"/"+name+".png"));}
     static void Resolution(int width,int height)=>typeof(DashboardRewardPlayVerification).GetMethod("Resolution",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static).Invoke(null,new object[]{width,height});
     static void Layout(EquipmentPageUI page){Canvas.ForceUpdateCanvases();
         foreach(var rect in page.GetComponentsInChildren<RectTransform>().Where(r=>r.name=="GradeEffect"||r.name.StartsWith("Item_boss")||(r.GetComponent<Button>()&&r.name.StartsWith("Choice")&&r.name!="Choices")||(r.name.StartsWith("Slot")&&r.parent.name=="EquippedGear"))){Check(Mathf.Abs(rect.rect.width-rect.rect.height)<.1f,"Equipment is not square: "+rect.name);}
         foreach(var text in page.GetComponentsInChildren<TMP_Text>().Where(t=>!page.claimsOnly||t.transform.IsChildOf(page.transform.Find("ItemModal"))||t.transform.IsChildOf(page.transform.Find("ItemDetail"))||t.transform.IsChildOf(page.transform.Find("ConfirmEquipment")))){text.ForceMeshUpdate();Check(!text.isTextOverflowing,"Clipped: "+text.text);}}
     static void CheckInventory(EquipmentPageUI page){
-        var view=page.GetComponentInChildren<EquipmentInventoryUI>();Check(view&&view.grid.constraintCount==6,"Six-column inventory binding");
-        Check(view.backpack.Cast<Transform>().Count(t=>t.gameObject.activeSelf)==24,"Inventory has four rows");
+        var view=page.GetComponentInChildren<EquipmentInventoryUI>();
+        var authored=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Canvas.prefab").GetComponentsInChildren<EquipmentInventoryUI>(true).Single();
+        Check(view&&view.grid.constraint==GridLayoutGroup.Constraint.FixedColumnCount&&view.Columns==authored.Columns,"Inventory must preserve authored column binding");
+        Check(view.backpack.Cast<Transform>().Count(t=>t.gameObject.activeSelf)==authored.Columns*4,"Inventory has four authored rows");
         Check(!view.GetComponentsInChildren<TMP_Text>().Any(t=>t.text=="Equipment"||t.text=="Equipment saved."||t.text=="Inventory"||t.text=="Sale"),"Removed inventory labels must stay absent");
         foreach(var cell in view.backpack.Cast<RectTransform>().Where(t=>t.gameObject.activeSelf)){
             var corners=new Vector3[4];cell.GetWorldCorners(corners);
             foreach(var corner in corners){var local=view.backpack.InverseTransformPoint(corner);Check(local.x>=view.backpack.rect.xMin-.1f&&local.x<=view.backpack.rect.xMax+.1f&&local.y>=view.backpack.rect.yMin-.1f&&local.y<=view.backpack.rect.yMax+.1f,"Inventory cell clipped: "+cell.name);}
         }
     }
-    static void CheckStats(EquipmentStatsUI view,TaskService service){
+    static void CheckStats(EquipmentStatsUI view,SqlitePlayerService service){
         Check(view&&view.totalPower.text==$"{service.CatStats.Power:N0}","Total Power must match equipped stats");
         var c=service.CatStats;string[] expected={$"{c.hp:0.##}",$"{c.atk:0.##}",$"{c.def:0.##}",$"{c.aspd:0.00}/s"};
         for(int i=0;i<4;i++)Check(view.values[i].text==expected[i],"Stats value "+i);
@@ -55,7 +89,7 @@ public static class EquipmentPlayVerification
             Check(!view.values[i].transform.parent.GetComponent<Image>().enabled,"Stat track still visible");
             Check(!view.values[i].transform.parent.Find("Fill"),"Obsolete stat fill remains");
         }
-        foreach(var text in view.GetComponentsInChildren<TMP_Text>()){text.ForceMeshUpdate();Check(!text.isTextOverflowing,"Stats text overflow: "+text.text);}
+        foreach(var text in view.GetComponentsInChildren<TMP_Text>()){text.ForceMeshUpdate();if(text.isTextOverflowing){textFailures.Add("Stats text overflow: "+text.text+" active="+text.gameObject.activeInHierarchy+" rect="+text.rectTransform.rect+" preferred="+text.GetPreferredValues(text.text)+" font="+text.fontSize+" mode="+text.overflowMode+" parent="+text.transform.parent.name+" canvas="+view.GetComponentInParent<Canvas>().rootCanvas.pixelRect);File.WriteAllText(Folder+"/text-overflow.txt",DateTime.UtcNow.ToString("O")+TextFailureReport);}}
     }
     static void CheckScreenModal(Transform modal){
         var root=modal.GetComponent<Canvas>().rootCanvas;var expected=new Vector3[4];var actual=new Vector3[4];
@@ -81,7 +115,7 @@ public static class EquipmentPlayVerification
         Check(prefab&&prefab.card&&prefab.itemName&&prefab.level&&prefab.currentValue&&prefab.nextValue&&prefab.setInfo&&prefab.status&&prefab.equip&&prefab.upgrade&&prefab.close,"Serialized detail bindings");
         foreach(var t in prefab.GetComponentsInChildren<Transform>(true))Check(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject)==0,"Missing detail script: "+t.name);
         UnityEngine.SceneManagement.SceneManager.LoadScene("CharacterHome");yield return 2;
-        Resolution(1920,1080);var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var manager=GameDataManager.EnsureInstance();var service=manager.Tasks;Check(manager.SavePath.Contains("EquipmentVerification"),"Must isolate saves");
+        Resolution(1920,1080);var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var manager=GameDataManager.EnsureInstance();var service=manager.Service;Check(manager.SavePath.Contains("EquipmentVerification"),"Must isolate saves");
         UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
         nav.ShowPage(MainMenuPage.CatHome);yield return 1;var page=nav.pages[4].GetComponent<EquipmentPageUI>();Check(page.Ready&&!service.EquipmentUnlocked,"Locked fresh state");Capture("equipment-empty-1920");Layout(page);yield return .4;
         foreach(int width in new[]{1920,1280}){
@@ -99,30 +133,34 @@ public static class EquipmentPlayVerification
         var reference=UnityEngine.Object.Instantiate(sourceInventory.transform.Find("Right_Panel").gameObject,page.GetComponentInParent<Canvas>().rootCanvas.transform);
         var referenceRect=(RectTransform)reference.transform;referenceRect.anchorMin=referenceRect.anchorMax=referenceRect.pivot=new Vector2(.5f,.5f);referenceRect.sizeDelta=new Vector2(1280,1280);referenceRect.anchoredPosition=Vector2.zero;referenceRect.localScale=Vector3.one*.70f;
         yield return .4;Capture("inventory-source-light");yield return .2;UnityEngine.Object.Destroy(reference);yield return .2;
-        manager.PlayerData.experience=2025;manager.PlayerData.fishCoins=1000;manager.PlayerData.rewardDays.Add(new RewardDay{day="2026-10-20",questsClaimed=true});foreach(var p in manager.PlayerData.bossProgress){p.wins=15;p.pendingClaims=3;}manager.SaveData();
+        var statsReference=UnityEngine.Object.Instantiate(sourceInventory.transform.Find("Panel_Left").gameObject,page.GetComponentInParent<Canvas>().rootCanvas.transform);
+        var statsReferenceRect=(RectTransform)statsReference.transform;statsReferenceRect.anchorMin=statsReferenceRect.anchorMax=statsReferenceRect.pivot=new Vector2(.5f,.5f);statsReferenceRect.sizeDelta=new Vector2(1200,1280);statsReferenceRect.anchoredPosition=Vector2.zero;statsReferenceRect.localScale=Vector3.one*.7f;
+        yield return .4;Capture("stats-source-light");yield return .2;UnityEngine.Object.Destroy(statsReference);yield return .2;
+        yield return Command(FixtureAsync(d=>{d.experience=2025;d.fishCoins=1000;d.equipmentUnlocked=true;d.rewardDays.Add(new RewardDay{day="2026-10-20",questsClaimed=true});foreach(var p in d.bossProgress){p.wins=15;p.pendingClaims=3;}}));
+        Check(service.EquipmentUnlocked,"Daily reward fixture must unlock equipment before claim UI opens");
         nav.ShowPage(MainMenuPage.Boss);yield return 1;var boss=nav.pages[3].GetComponent<BossPageUI>();boss.stageButton.onClick.Invoke();yield return .4;boss.masteryBars[0].transform.parent.GetComponent<Button>().onClick.Invoke();yield return .5;
         page=nav.pages[3].GetComponent<EquipmentPageUI>();Check(nav.CurrentPage==MainMenuPage.Boss,"Stage rewards must stay on Boss");Capture("equipment-claim-1920");Layout(page);yield return .4;
-        Click(page.transform,"ItemModal/Card/Choices/ChoiceArea0/Choice0");Check(service.Snapshot.equipment.Count==1&&service.Snapshot.bossProgress[0].pendingClaims==2,"Chest claim saved directly");Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Chest does not need a second confirmation");
+        Click(page.transform,"ItemModal/Card/Choices/ChoiceArea0/Choice0");yield return Ui(service);Check(service.EquipmentSnapshot.equipment.Count==1&&service.EquipmentSnapshot.bossProgress[0].pendingClaims==2,"Chest claim saved directly");Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Chest does not need a second confirmation");
         nav.ShowPage(MainMenuPage.CatHome);yield return .5;page=nav.pages[4].GetComponent<EquipmentPageUI>();page.OpenItem("boss1-weapon");
-        Click(page.transform,"ItemDetail/Popup/Button_Select");Check(service.Snapshot.equippedWeaponId=="boss1-weapon","Equip saved directly");
+        Click(page.transform,"ItemDetail/Popup/Button_Select");yield return Ui(service);Check(service.EquipmentSnapshot.equippedWeaponId=="boss1-weapon","Equip saved directly");
         Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Equip must not ask for confirmation");
-        Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.equippedWeaponId=="boss1-weapon","Direct equip persisted");
-        var blocked=new BattleAttempt{id="equipment-ui-gate",outcome=BattleOutcome.Running};manager.PlayerData.battles.Add(blocked);
+        var equipReload=ReloadAsync();foreach(var delay in Wait(equipReload))yield return delay;Check(equipReload.Result.equippedWeaponId=="boss1-weapon","Direct equip persisted");
+        IDisposable blocked=TaskCalendarPlayVerification.FailSqliteWrites();
         try{
-            Click(page.transform,"ItemDetail/Popup/Button_Select");
-            Check(service.Snapshot.equippedWeaponId=="boss1-weapon","Rejected direct unequip must preserve equipment");
+            Click(page.transform,"ItemDetail/Popup/Button_Select");yield return Ui(service);
+            Check(service.EquipmentSnapshot.equippedWeaponId=="boss1-weapon","Rejected direct unequip must preserve equipment");
             Check(page.transform.Find("ItemDetail").GetComponent<EquipmentItemDetailUI>().status.text==service.LastError&&!string.IsNullOrEmpty(service.LastError),"Direct failure must be visible");
             Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Failure must not open confirmation");
-        }finally{manager.PlayerData.battles.Remove(blocked);}
-        for(int repeat=0;repeat<4;repeat++)Click(page.transform,"ItemDetail/Popup/Button_Select");
-        Check(service.Snapshot.equippedWeaponId=="boss1-weapon"&&service.Snapshot.fishCoins==1000,"Repeated direct toggles preserve state and currency");
+        }finally{blocked.Dispose();}
+        for(int repeat=0;repeat<4;repeat++){Click(page.transform,"ItemDetail/Popup/Button_Select");yield return Ui(service);}
+        Check(service.EquipmentSnapshot.equippedWeaponId=="boss1-weapon"&&service.EquipmentSnapshot.fishCoins==1000,"Repeated direct toggles preserve state and currency");
         var upgradeFeedback=page.transform.Find("ItemDetail/Popup/Button_Price_Coin").GetComponent<EquipmentUpgradeFeedback>();
         var hoverEvent=new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
         upgradeFeedback.OnPointerEnter(hoverEvent);yield return .15;
         Check(upgradeFeedback.caption.text=="+0.5 ATK"&&upgradeFeedback.effectView.gameObject.activeSelf,"Upgrade hover previews delta and effect");
         Check(upgradeFeedback.caption.transform.parent.name=="StatsList 1","Upgrade delta belongs beside current stat");
         Check(!page.transform.Find("ItemDetail/Popup/StatsList 2").gameObject.activeSelf,"Next-level card removed from view");
-        Check(service.Snapshot.fishCoins==1000&&service.Snapshot.equipment[0].level==1,"Hover does not upgrade or charge");
+        Check(service.EquipmentSnapshot.fishCoins==1000&&service.EquipmentSnapshot.equipment[0].level==1,"Hover does not upgrade or charge");
         for(int frame=0;frame<5;frame++){Capture("upgrade-hover-motion-"+frame);yield return .16;}
         upgradeFeedback.OnPointerExit(hoverEvent);yield return .1;
         Check(!upgradeFeedback.effectView.gameObject.activeSelf&&!upgradeFeedback.caption.gameObject.activeSelf,"Pointer exit clears upgrade preview");
@@ -131,24 +169,24 @@ public static class EquipmentPlayVerification
         upgradeFeedback.GetComponent<Button>().interactable=false;yield return .1;
         Check(!upgradeFeedback.effectView.gameObject.activeSelf,"Disabled upgrade clears preview");upgradeFeedback.GetComponent<Button>().interactable=true;
         Check(!UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include,FindObjectsSortMode.None).Any(t=>t.name=="TaskStatus"),"Bottom notification strip removed");
-        manager.PlayerData.battles.Add(blocked);
+        blocked=TaskCalendarPlayVerification.FailSqliteWrites();
         try{
-            Click(page.transform,"ItemDetail/Popup/Button_Price_Coin");
-            Check(service.Snapshot.fishCoins==1000 && service.Snapshot.equipment[0].level==1,"Rejected upgrade charged coins");
+            Click(page.transform,"ItemDetail/Popup/Button_Price_Coin");yield return Ui(service);
+            Check(service.EquipmentSnapshot.fishCoins==1000 && service.EquipmentSnapshot.equipment[0].level==1,"Rejected upgrade charged coins");
             Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Upgrade failure opened confirmation");
             Check(page.transform.Find("ItemDetail").GetComponent<EquipmentItemDetailUI>().status.text==service.LastError && !string.IsNullOrEmpty(service.LastError),"Upgrade failure was not visible");
-        }finally{manager.PlayerData.battles.Remove(blocked);page.OpenItem("boss1-weapon");}
-        Click(page.transform,"ItemDetail/Popup/Button_Price_Coin");Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Upgrade must execute without confirmation");Check(service.Snapshot.fishCoins==985&&service.Snapshot.equipment[0].level==2,"Upgrade saved");yield return .5;Capture("equipment-item-1920");yield return .4;Layout(page);
+        }finally{blocked.Dispose();page.OpenItem("boss1-weapon");}
+        Click(page.transform,"ItemDetail/Popup/Button_Price_Coin");yield return Ui(service);Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Upgrade must execute without confirmation");Check(service.EquipmentSnapshot.fishCoins==985&&service.EquipmentSnapshot.equipment[0].level==2,"Upgrade saved");yield return .5;Capture("equipment-item-1920");yield return .4;Layout(page);
         nav.ShowPage(MainMenuPage.Dashboard);yield return .5;
-        var blueDashboard=nav.pages[0].GetComponentInChildren<DashboardEquipmentUI>();CheckStats(blueDashboard.GetComponentInChildren<EquipmentStatsUI>(),service);
+        var blueDashboard=nav.pages[0].GetComponentInChildren<DashboardEquipmentUI>();Capture("dashboard-blue-stats-before-check-1920");yield return .2;CheckStats(blueDashboard.GetComponentInChildren<EquipmentStatsUI>(),service);
         Check(blueDashboard.slots[0].GetComponent<Image>().color==Color.Lerp(new Color32(67,184,255,255),Color.white,.75f),"Dashboard blue equipped background");
         Capture("dashboard-blue-1920");yield return .3;
         nav.ShowPage(MainMenuPage.CatHome);yield return .2;page.OpenItem("boss1-weapon");yield return .2;
-        Click(page.transform,"ItemDetail/Popup/Button_Select");Check(string.IsNullOrEmpty(service.Snapshot.equippedWeaponId),"Unequip saved directly");
+        Click(page.transform,"ItemDetail/Popup/Button_Select");yield return Ui(service);Check(string.IsNullOrEmpty(service.EquipmentSnapshot.equippedWeaponId),"Unequip saved directly");
         Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Unequip must not ask for confirmation");
         yield return .3;Capture("direct-unequip-1920");yield return .2;
-        foreach(var def in EquipmentRules.Catalog)if(!service.Snapshot.equipment.Any(x=>x.id==def.Id))Check(service.ClaimEquipment(def.Id),"Claim "+def.Id);
-        foreach(var def in EquipmentRules.Catalog.Where(x=>x.Tier==3))Check(service.Equip(def.Id,def.Slot),"Equip full set");
+        foreach(var def in EquipmentRules.Catalog)if(!service.EquipmentSnapshot.equipment.Any(x=>x.id==def.Id))yield return Command(service.ClaimEquipmentAsync(def.Id));
+        foreach(var def in EquipmentRules.Catalog.Where(x=>x.Tier==3))yield return Command(service.EquipAsync(def.Id,def.Slot));
         foreach(var setId in new[]{"boss1-weapon","boss2-body","boss3-head"}){
             page.OpenItem(setId);yield return .2;
             var setView=page.transform.Find("ItemDetail").GetComponent<EquipmentItemDetailUI>();
@@ -159,25 +197,26 @@ public static class EquipmentPlayVerification
             Capture("set-cards-tier-"+tierIndex);yield return .3;
         }
         Click(page.transform,"ItemDetail/Popup/TopFrame/Button_Close");page.Refresh();yield return .8;Layout(page);Capture("equipment-full-1920");yield return .5;
-        for(int f=1;f<=3;f++){Click(page.transform,"EquipmentSurface/InventoryCard/TabMenu/Filter"+f);yield return .1;Check(page.transform.Find("EquipmentSurface/InventoryCard/Inventory/ScrollRect/Backpack").Cast<Transform>().Count(t=>t.name.StartsWith("Item_")&&t.gameObject.activeSelf)==3,"Category filter");}
-        Click(page.transform,"EquipmentSurface/InventoryCard/TabMenu/Filter0");
-        service.Unequip(EquipmentSlot.Head);
-        manager.PlayerData.battles.Add(blocked);
+        var inventoryView=page.GetComponentInChildren<EquipmentInventoryUI>();
+        Check(inventoryView&&inventoryView.backpack&&inventoryView.filters.Length==4&&inventoryView.autoSelect,"Inventory serialized control bindings");
+        for(int f=1;f<=3;f++){Click(inventoryView.filters[f]);yield return .1;Check(inventoryView.backpack.Cast<Transform>().Count(t=>t.name.StartsWith("Item_")&&t.gameObject.activeSelf)==3,"Category filter");}
+        Click(inventoryView.filters[0]);
+        yield return Command(service.UnequipAsync(EquipmentSlot.Head));
+        blocked=TaskCalendarPlayVerification.FailSqliteWrites();
         try{
-            Click(page.transform,"EquipmentSurface/InventoryCard/Bottom/Button_AutoSelect");
-            Check(string.IsNullOrEmpty(service.Snapshot.equippedHeadAccessoryId),"Blocked Auto Select changed equipment");
+            Click(inventoryView.autoSelect);yield return Ui(service);
+            Check(string.IsNullOrEmpty(service.EquipmentSnapshot.equippedHeadAccessoryId),"Blocked Auto Select changed equipment");
             Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Auto Select opened confirmation");
             Check(page.GetComponentsInChildren<TMP_Text>().Any(t=>t.text==service.LastError),"Auto Select failure missing");
-        }finally{manager.PlayerData.battles.Remove(blocked);}
-        Click(page.transform,"EquipmentSurface/InventoryCard/Bottom/Button_AutoSelect");Check(service.Snapshot.equippedHeadAccessoryId=="boss3-head","Auto Select saved best set directly");
+        }finally{blocked.Dispose();}
+        Click(inventoryView.autoSelect);yield return Ui(service);Check(service.EquipmentSnapshot.equippedHeadAccessoryId=="boss3-head","Auto Select saved best set directly");
         Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Auto Select must not confirm");
-        int autoCoins=service.Snapshot.fishCoins;
-        for(int repeat=0;repeat<3;repeat++)Click(page.transform,"EquipmentSurface/InventoryCard/Bottom/Button_AutoSelect");
-        Check(service.Snapshot.equippedHeadAccessoryId=="boss3-head"&&service.Snapshot.fishCoins==autoCoins,"Repeated Auto Select changed balance or best loadout");
-        Check(new PlayerDataStore(manager.SavePath).Data.equippedHeadAccessoryId=="boss3-head","Auto Select did not persist");
+        int autoCoins=service.EquipmentSnapshot.fishCoins;
+        for(int repeat=0;repeat<3;repeat++){Click(inventoryView.autoSelect);yield return Ui(service);}
+        Check(service.EquipmentSnapshot.equippedHeadAccessoryId=="boss3-head"&&service.EquipmentSnapshot.fishCoins==autoCoins,"Repeated Auto Select changed balance or best loadout");
+        var autoReload=ReloadAsync();foreach(var delay in Wait(autoReload))yield return delay;Check(autoReload.Result.equippedHeadAccessoryId=="boss3-head","Auto Select did not persist");
         yield return .2;Check(page.GetComponentsInChildren<EquipmentGradeEffect>(true).Length==0,"Equipment uses rounded UI tiles without animated borders");
         Resolution(1280,720);yield return .8;Layout(page);Capture("equipment-full-1280");yield return .5;
-        var inventoryView=page.GetComponentInChildren<EquipmentInventoryUI>();
         foreach(var control in inventoryView.filters.Concat(new[]{inventoryView.autoSelect})){
             var feedback=control.GetComponent<JuicyButton>();Check(feedback,"Inventory control feedback missing");
             var data=new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
@@ -194,7 +233,7 @@ public static class EquipmentPlayVerification
             feedback.OnDeselect(new UnityEngine.EventSystems.BaseEventData(eventSystem));
             control.interactable=false;yield return .2;Check(Vector2.Distance(feedback.DrawScale,Vector2.one)<.03f,"Inventory disabled feedback reset");control.interactable=true;
         }
-        var itemButton=page.transform.Find("EquipmentSurface/InventoryCard/Inventory/ScrollRect/Backpack/Item_boss3-head").GetComponent<JuicyButton>();Check(itemButton,"Inventory button feedback missing");itemButton.OnPointerEnter(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));yield return .4;Capture("equipment-hover-1280");yield return .3;itemButton.OnPointerDown(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));yield return .4;Capture("equipment-pressed-1280");yield return .3;itemButton.OnPointerUp(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));itemButton.OnPointerExit(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));
+        var itemTransform=inventoryView.backpack.Find("Item_boss3-head");Check(itemTransform,"Owned head item must be present in bound inventory backpack");var itemButton=itemTransform.GetComponent<JuicyButton>();Check(itemButton,"Inventory button feedback missing");itemButton.OnPointerEnter(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));yield return .4;Capture("equipment-hover-1280");yield return .3;itemButton.OnPointerDown(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));yield return .4;Capture("equipment-pressed-1280");yield return .3;itemButton.OnPointerUp(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));itemButton.OnPointerExit(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));
         PointerClick(RectTransformUtility.WorldToScreenPoint(null,itemButton.transform.position));Check(page.SelectedItem=="boss3-head"&&page.transform.Find("ItemDetail").gameObject.activeSelf,"Inventory item raycast opens its detail");
         page.OpenItem("boss3-head");yield return .5;Layout(page);Capture("equipment-item-1280");yield return .4;
         page.OpenItem("boss1-weapon");yield return .5;Layout(page);Capture("equipment-weapon-1280");yield return .3;
@@ -232,12 +271,12 @@ public static class EquipmentPlayVerification
             yield return .04;Capture("detail-motion-"+frame.ToString("00"));yield return .04;
         }
         detail.close.onClick.Invoke();Check(!detail.gameObject.activeSelf,"Detail dismissal");page.OpenItem("boss1-weapon");
-        int savedFish=manager.PlayerData.fishCoins;manager.PlayerData.fishCoins=0;manager.SaveData();page.OpenItem("boss1-weapon");yield return .3;
+        int savedFish=service.FishCoins;yield return Command(FixtureAsync(d=>d.fishCoins=0));page.OpenItem("boss1-weapon");yield return .3;
         Check(!detail.upgrade.interactable&&!string.IsNullOrEmpty(detail.status.text),"Insufficient Fish explanation");Layout(page);Capture("detail-no-fish-1280");yield return .3;
-        manager.PlayerData.fishCoins=savedFish;manager.SaveData();
+        yield return Command(FixtureAsync(d=>d.fishCoins=savedFish));
         nav.ShowPage(MainMenuPage.Dashboard);yield return .5;var mini=nav.pages[0].GetComponentInChildren<DashboardEquipmentUI>();Check(mini.slots.All(b=>b.interactable)&&mini.icons.All(i=>i.color==Color.white),"Dashboard gear not refreshed");Check(mini.GetComponentsInChildren<EquipmentGradeEffect>(true).Length==0,"Dashboard uses rounded UI tiles without animated borders");Capture("dashboard-equipment-grades");yield return .4;mini.slots[2].onClick.Invoke();yield return .5;Check(page.SelectedItem=="boss3-head"&&nav.CurrentPage==MainMenuPage.CatHome,"Dashboard slot link");
-        var loaded=new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock());Check(loaded.Snapshot.equipment.Count==9&&loaded.CatStats.aspd==service.CatStats.aspd,"Disk reload");
-        nav.ShowPage(MainMenuPage.Boss);yield return 1;boss.actors.ResetPose();boss.actors.StartCombat(BattleRules.Cat(manager.PlayerData.experience),BattleRules.Boss(1));float normal=boss.actors.CatAnimationSpeed;boss.actors.StartCombat(service.CatStats,BattleRules.Boss(1));Check(Math.Abs(boss.actors.CatAnimationSpeed/normal-service.CatStats.aspd)<.001,"Equipped ASPD animation");
+        var disk=ReloadAsync();foreach(var delay in Wait(disk))yield return delay;var loaded=disk.Result;Check(loaded.equipment.Count==9&&EquipmentRules.Calculate(loaded).Final.aspd==service.CatStats.aspd,"Disk reload");
+        nav.ShowPage(MainMenuPage.Boss);yield return 1;boss.actors.ResetPose();boss.actors.StartCombat(BattleRules.Cat(service.Experience),BattleRules.Boss(1));float normal=boss.actors.CatAnimationSpeed;boss.actors.StartCombat(service.CatStats,BattleRules.Boss(1));Check(Math.Abs(boss.actors.CatAnimationSpeed/normal-service.CatStats.aspd)<.001,"Equipped ASPD animation");
         boss.stagePicker.SetActive(false);boss.actors.Run(2);
         for(int tier=1;tier<=3;tier++){
             boss.actors.StartCombat(service.CatStats,BattleRules.Boss(1),"boss"+tier+"-weapon");boss.actors.Hit(true);
@@ -292,7 +331,7 @@ public static class EquipmentPlayVerification
                 PointerClick(new Vector2(Screen.width*.5f,Screen.height-30));Check(!dismissDetail.gameObject.activeSelf,"Reopened dismissDetail closes from header backdrop");
                 page.OpenItem("boss1-weapon");yield return .2;
                 Click(page.transform,"ItemDetail/Popup/TopFrame/Button_Close");
-                Click(page.transform,"EquipmentSurface/InventoryCard/Bottom/Button_AutoSelect");yield return .2;
+                Click(inventoryView.autoSelect);yield return Ui(service);yield return .2;
                 Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Auto Select must remain direct at every size");
             }
         }
@@ -310,6 +349,7 @@ public static class EquipmentPlayVerification
         }
         toggle.isOn=oldExpanded;
         Check(error==null,error);Resolution(1920,1080);
+        Check(textFailures.Count==0,"Business/UI flow completed but text overflow checks failed; see accumulated details and captures.");
     }
 }
 

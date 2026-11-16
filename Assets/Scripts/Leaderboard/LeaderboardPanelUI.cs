@@ -89,7 +89,7 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
         }
         powerCategoryIcon.color = categoryLabels[(int)LeaderboardKind.Power].color;
         scroll.StopMovement(); scroll.verticalNormalizedPosition = 1;
-        var tasks = GameDataManager.EnsureInstance().Tasks;
+        var tasks = GameDataManager.EnsureInstance().Service;
         if (!tasks.CanAccess(ProgressionFeature.Leaderboard))
         { empty.text = tasks.AccessMessage(ProgressionFeature.Leaderboard); ownMessage.text = "Complete tasks to grow your cat."; refresh.interactable = false; return; }
         Loading = true; refresh.interactable = false;

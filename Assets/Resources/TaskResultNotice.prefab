@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 4364150798617829295}
   - component: {fileID: 3308983538316050717}
   - component: {fileID: 2916397040315206191}
+  - component: {fileID: 7759033797440026752}
   m_Layer: 5
   m_Name: Text
   m_TagString: Untagged
@@ -137,6 +138,18 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!225 &7759033797440026752
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1241210679018286370}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!1 &3412321455925345867
 GameObject:
   m_ObjectHideFlags: 0
@@ -150,6 +163,8 @@ GameObject:
   - component: {fileID: 3471597902084172466}
   - component: {fileID: 3964618326818682353}
   - component: {fileID: 4344245966448641009}
+  - component: {fileID: 2433500490996099598}
+  - component: {fileID: 7188498894028519640}
   m_Layer: 5
   m_Name: TaskResultNotice
   m_TagString: Untagged
@@ -241,3 +256,34 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TaskResultNotice
   message: {fileID: 2916397040315206191}
   fade: {fileID: 3964618326818682353}
+  reveal: {fileID: 7188498894028519640}
+--- !u!114 &2433500490996099598
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3412321455925345867}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3312d7739989d2b4e91e6319e9a96d76, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RectMask2D
+  m_Padding: {x: 0, y: 0, z: 0, w: 0}
+  m_Softness: {x: 0, y: 0}
+--- !u!114 &7188498894028519640
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3412321455925345867}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b5af61f407ee8c46a5cf887f7001934, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::NotificationReveal
+  playOnEnable: 1
+  duration: 0.24
+  textFades:
+  - {fileID: 7759033797440026752}

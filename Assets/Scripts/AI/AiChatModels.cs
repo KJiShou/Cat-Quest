@@ -67,7 +67,7 @@ public static class AiChatProtocol
         return result;
     }
     public static string Fingerprint(QuestTask task, TaskOccurrence occurrence) => JsonUtility.ToJson(task) + "|" + JsonUtility.ToJson(occurrence);
-    public static AiTaskDraft Draft(Dictionary<string, object> proposal, TaskService service, Dictionary<string, TaskView> read)
+    public static AiTaskDraft Draft(Dictionary<string, object> proposal, SqlitePlayerService service, Dictionary<string, TaskView> read)
     {
         string target = ChatGptJson.Text(proposal, "targetId");
         TaskView original = null;
@@ -89,7 +89,7 @@ public static class AiChatProtocol
                 if (field == "daily") task.daily = value; else task.scheduled = value;
             }
         if (proposal.TryGetValue("tagIds", out var rawTags)) {
-            if (!(rawTags is List<object> ids) || ids.Count > 100 || ids.Any(id => !(id is string) || !service.Snapshot.tags.Any(t => t.id == (string)id)))
+            if (!(rawTags is List<object> ids) || ids.Count > 100 || ids.Any(id => !(id is string) || !service.TagCatalog.Any(t => t.id == (string)id)))
                 throw new ArgumentException("The AI selected an unknown tag. Refresh the proposal.");
             task.tagIds = ids.Cast<string>().Distinct().ToList();
         }

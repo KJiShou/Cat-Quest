@@ -16,6 +16,7 @@ namespace CatQuest.Updates
     [Serializable] public sealed class PackageFile { public string path, sha256; public long size; }
     [Serializable] public sealed class PackageInventory
     {
+        public bool sqlite;
         public int format = 1;
         public string version;
         public PackageFile[] files;
@@ -31,6 +32,7 @@ namespace CatQuest.Updates
         public const string Repository = "https://github.com/KJiShou/Cat-Quest";
         public const string Feed = Repository + "/releases/latest/download/catquest-update.json";
         public const string InventoryName = "catquest-package.json";
+        public const string SqliteNativePath = "CatQuest_Data/Plugins/x86_64/gilzoide-sqlite-net.dll";
         public const string LockName = ".catquest-update.lock";
         public static Version VersionOf(string value)
         {
@@ -75,6 +77,22 @@ namespace CatQuest.Updates
                     throw new InvalidDataException("Update paths cannot contain symbolic links or junctions.");
             return full;
         }
+        public static void ValidateX64NativeLibrary(string path)
+        {
+            using(var stream=File.OpenRead(path))using(var reader=new BinaryReader(stream)) {
+                if(stream.Length<64 || reader.ReadUInt16()!=0x5a4d)throw new InvalidDataException("SQLite native library is not a PE image.");
+                stream.Position=0x3c;int header=reader.ReadInt32();
+                if(header<64 || header>stream.Length-6)throw new InvalidDataException("SQLite native PE header is invalid.");
+                stream.Position=header;
+                if(reader.ReadUInt32()!=0x00004550 || reader.ReadUInt16()!=0x8664)throw new InvalidDataException("SQLite native library must target Windows x64.");
+            }
+        }
+        public static bool IsPlayerStoragePath(string path)
+        {
+            if(string.IsNullOrEmpty(path))return false;
+            return path.IndexOf("catquest-data",StringComparison.OrdinalIgnoreCase)>=0
+                || Regex.IsMatch(path,@"(^|/)[^/]*(\.sqlite3|\.catquestbackup)([^/]*)(/|$)|(^|/)[^/]+(-wal|-shm|\.migration\.json|\.pre-sqlite\.json|\.recovery-pending\.json)(\.bak)?$",RegexOptions.IgnoreCase);
+        }
         public static void ValidateInventory(PackageInventory inventory)
         {
             if (inventory == null || inventory.format != 1 || inventory.files == null || inventory.files.Length == 0 || inventory.files.Length > 50000)
@@ -84,10 +102,14 @@ namespace CatQuest.Updates
             foreach (var file in inventory.files)
             {
                 if (file == null || !seen.Add(file.path) || !ValidHash(file.sha256) || file.size < 0 ||
-                    file.path == InventoryName || file.path.StartsWith(".") || file.path.IndexOf("catquest-data", StringComparison.OrdinalIgnoreCase) >= 0)
+                    file.path == InventoryName || file.path.StartsWith(".") || IsPlayerStoragePath(file.path))
                     throw new InvalidDataException("Invalid or duplicate package entry.");
                 SafePath(Path.GetTempPath(), file.path);
             }
+            if(inventory.sqlite && !seen.Contains("CatQuestUpdater.exe.config"))
+                throw new InvalidDataException("Package is missing the updater runtime configuration.");
+            if(inventory.sqlite && !seen.Contains(SqliteNativePath))
+                throw new InvalidDataException("Package is missing its SQLite native library.");
             if (!seen.Contains("CatQuest.exe") || !seen.Contains("CatQuestUpdater.exe") || !seen.Contains("UnityPlayer.dll"))
                 throw new InvalidDataException("Package is missing required application files.");
         }

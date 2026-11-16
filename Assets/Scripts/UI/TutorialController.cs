@@ -36,12 +36,12 @@ public sealed class TutorialController : MonoBehaviour
     public Button[] topics;
     public TMP_Text nextLabel;
     public GameObject[] blockers;
-    TaskService service;
+    SqlitePlayerService service;
     FocusController focus;
     Coroutine typing;
     TutorialProgress progress;
     PlayerData snapshot;
-    bool dirty = true;
+    bool dirty = true, taskSnapshotDirty = true;
     string shown, manualTopic;
     int manualIndex, settingsStep;
     bool snoozed, focused = true, changing, ownsStagePicker;
@@ -56,12 +56,15 @@ public sealed class TutorialController : MonoBehaviour
     public string CurrentTopic => shown;
     public RectTransform CurrentTarget => target;
 
-    void Start()
+    async void Start()
     {
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         focus = FocusRunner.EnsureInstance().Controller;
-        if (!service.InitializeTutorial()) { enabled = false; return; }
-        progress = service.Tutorial; snapshot = service.Snapshot; service.Changed += DataChanged;
+        var ready=await GameDataManager.Instance.Ready;
+        if (!this || !ready.Succeeded || !(await service.InitializeTutorialAsync()).Succeeded) { if(this)enabled = false; return; }
+        progress = service.Tutorial; snapshot = service.TaskSnapshot; taskSnapshotDirty = false;
+        service.RecordsChanged += RecordsChanged;
+        if(!ReadAlready("reward"))RefreshLatestCompletion();
         leaderboard = navigation.GetComponentInParent<Canvas>().GetComponentInChildren<LeaderboardPanelUI>(true);
         equipmentPage = navigation.pages[(int)MainMenuPage.CatHome].GetComponentInChildren<EquipmentPageUI>(true);
         privacyTarget = settings.accountPage.GetComponentsInChildren<RectTransform>(true).FirstOrDefault(r => r.name == "Privacy");
@@ -75,12 +78,27 @@ public sealed class TutorialController : MonoBehaviour
         navigation.PageChanged += PageChanged; navigation.AccessDenied += LockedNotice;
         panel.SetActive(false); helpPanel.SetActive(false); highlight.gameObject.SetActive(false);
     }
-    void DataChanged() { dirty = true; }
+    TaskCompletion latestCompletion;
+    int completionQuery;
+    void RecordsChanged(System.Collections.Generic.IReadOnlyCollection<PlayerRecordKind> kinds)
+    {
+        if(kinds==null || kinds.Contains(PlayerRecordKind.Tasks) || kinds.Contains(PlayerRecordKind.Occurrences) || kinds.Contains(PlayerRecordKind.Tags) || kinds.Contains(PlayerRecordKind.History)) { taskSnapshotDirty=true; dirty=true; }
+        if(kinds==null || kinds.Contains(PlayerRecordKind.Tutorial)) dirty=true;
+        if((kinds==null || kinds.Contains(PlayerRecordKind.History)) && progress!=null && !ReadAlready("reward")) RefreshLatestCompletion();
+    }
+    async void RefreshLatestCompletion()
+    {
+        int request=++completionQuery;
+        var result=await service.QueryHistoryPageAsync(registerVisibleReceipts:false);
+        if(!this || request!=completionQuery || !result.Succeeded)return;
+        latestCompletion=result.Value.Rows.FirstOrDefault()?.history;dirty=true;
+    }
     void OnDestroy()
     {
         if(typingShield) typingShield.onClick.RemoveListener(CompleteTyping);
         Observe(null);
-        if(service != null) service.Changed -= DataChanged;
+        if(service != null) {service.RecordsChanged -= RecordsChanged;}
+        completionQuery++;
         if(navigation) { navigation.PageChanged -= PageChanged; navigation.AccessDenied -= LockedNotice; }
         next.onClick.RemoveListener(Continue); skip.onClick.RemoveListener(Skip);
         if(back) back.onClick.RemoveListener(GoBack);
@@ -96,13 +114,20 @@ public sealed class TutorialController : MonoBehaviour
         if(focus != null && focus.Phase == FocusPhase.Focusing
             && (page == MainMenuPage.Boss || page == MainMenuPage.Leaderboard)) snoozed = false;
     }
-    bool Save(Action<TutorialProgress> edit)
+    bool savingProgress;
+    async System.Threading.Tasks.Task<bool> Save(Action<TutorialProgress> edit)
     {
-        var candidate = service.Tutorial; edit(candidate);
-        if(!service.SaveTutorial(candidate)) { Show("error", service.LastError + " Your tasks are safe. Try again.", null, "Retry"); return false; }
-        progress = service.Tutorial; return true;
+        if (savingProgress || !service.IsReady) return false;
+        savingProgress=true;
+        try {
+            var candidate = service.Tutorial; edit(candidate);
+            var result=await service.SaveTutorialAsync(candidate);
+            if (!this) return result.Succeeded;
+            if(!result.Succeeded) { Show("error", result.Message + " Your tasks are safe. Try again.", null, "Retry"); return false; }
+            progress = service.Tutorial; return true;
+        } finally { savingProgress=false; }
     }
-    void Read(string topic) { Save(p => { if(!p.read.Contains(topic)) p.read.Add(topic); }); }
+    async void Read(string topic) { await Save(p => { if(!p.read.Contains(topic)) p.read.Add(topic); }); }
     bool ReadAlready(string topic) => progress.read.Contains(topic);
     bool Busy()
     {
@@ -110,10 +135,11 @@ public sealed class TutorialController : MonoBehaviour
             || (celebration && (celebration.IsShowing || celebration.PendingCount > 0))
             || (rewards && rewards.IsAnimating) || (tasks && tasks.gameObject.activeInHierarchy && tasks.TutorialBlocked)
             || blockers.Any(b => b && b.activeInHierarchy && !(ownsStagePicker && b == bossPage.stagePicker))
-            || snapshot.battles.Any(b => b.outcome == BattleOutcome.Running);
+            || service.HasActiveBattle;
     }
-    void Update()
+    async void Update()
     {
+        if (savingProgress || progress==null) return;
         if(queuedAction != null) {
             string key = queuedAction; queuedAction = null;
             if(key == shown && !IsTyping) {
@@ -125,7 +151,7 @@ public sealed class TutorialController : MonoBehaviour
         if(panel && panel.activeSelf && shown == "task-page-6") { target = progress != null && progress.taskStep == 3 ? tasks.TutorialTaskTarget(progress.taskId) : tasks.TutorialAddTarget; Position(false); }
         if(service == null || Time.unscaledTime < pollAt) return;
         pollAt = Time.unscaledTime + .25f;
-        if(dirty) { snapshot = service.Snapshot; progress = snapshot.tutorial; dirty = false; }
+        if(dirty) { if(taskSnapshotDirty) { snapshot = service.TaskSnapshot; taskSnapshotDirty=false; } progress = service.Tutorial; dirty = false; }
         if(focus.Phase == FocusPhase.Focusing && !ReadAlready("focus") && !progress.dismissed && navigation.CurrentPage == MainMenuPage.Focus)
         { Read("focus"); Hide(); Show("focus-running", "Your training has started. Switching pages or apps will keep the timer running. Time to focus!", null, "Got it"); noticeUntil = Time.unscaledTime + 6; return; }
         if(Busy()) { Hide(); return; }
@@ -137,17 +163,16 @@ public sealed class TutorialController : MonoBehaviour
             && navigation.CurrentPage != MainMenuPage.Boss && navigation.CurrentPage != MainMenuPage.Leaderboard) { Hide(); return; }
         if(snoozed || progress.dismissed) { Hide(); return; }
         if(shown != null && !shown.StartsWith("task-") && !shown.StartsWith("focus-step-") && !shown.StartsWith("boss-step-") && !shown.StartsWith("leaderboard-step-")) return;
-        var data = snapshot;
         if(progress.taskStep < 4)
         {
             if(progress.taskStep == 0) { Show("task-0", "Welcome, {playerName}. Let us grow stronger, one real task at a time. I will help you write your first task.", null, "Let's begin", true); return; }
             if(navigation.CurrentPage != MainMenuPage.Tasks) { Show("task-open", "Open Tasks to write down something you want to do.", navigation.buttons[(int)MainMenuPage.Tasks].transform as RectTransform, "Open Tasks"); return; }
-            if(progress.taskStep == 1 && !Save(p => p.taskStep = 2)) return;
+            if(progress.taskStep == 1 && !await Save(p => p.taskStep = 2)) return;
             ShowTasks(); return;
         }
-        if(!ReadAlready("reward") && data.history.Any(h => !h.revoked))
+        if(!ReadAlready("reward") && latestCompletion!=null)
         {
-            var receipt = data.history.Last(h => !h.revoked);
+            var receipt = latestCompletion;
             Show("reward", receipt.experience == 0 && receipt.fishCoins == 0 ? "Task complete and recorded. Today's task reward allowance is used up. Your work still counts." : $"Well done. This task earned {receipt.experience} EXP and {receipt.fishCoins} Fish Coins. EXP grows your cat. Fish Coins can upgrade equipment.", null, "Got it"); return;
         }
         int level = service.RewardLevel;
@@ -158,19 +183,19 @@ public sealed class TutorialController : MonoBehaviour
         if(navigation.CurrentPage == MainMenuPage.Focus && !ReadAlready("focus")) { ShowFocus(); return; }
         if(navigation.CurrentPage == MainMenuPage.Boss && !ReadAlready("boss")) { ShowBoss(); return; }
         if(navigation.CurrentPage == MainMenuPage.Leaderboard && !ReadAlready("leaderboard")) { ShowLeaderboard(); return; }
-        bool claimed = data.rewardDays.Any(d => d.questsClaimed || d.focusClaimed);
+        bool claimed = service.EquipmentUnlocked;
         if(!ReadAlready("equipment") && claimed) { ShowEquipment(); return; }
         if(!ReadAlready("daily") && navigation.CurrentPage == MainMenuPage.Dashboard && ((service.DailyGoalProgress(service.CurrentTaskGoal) >= TaskService.DailyGoalTarget(service.CurrentTaskGoal) && !service.DailyGoalClaimed(service.CurrentTaskGoal)) || (service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) >= 25 && !service.DailyGoalClaimed(DailyRewardGoal.Focus25Minutes))))
         { Show("daily", "A Daily Reward is ready. Use Claim on the completed goal to collect it. Your first claim also opens equipment management.", null, "Got it"); return; }
         Hide();
     }
-    void ShowTasks()
+    async void ShowTasks()
     {
         int step = Mathf.Clamp(progress.taskPageStep, 0, 26);
         // An unfinished older guide also gets to useful work before the tab tour.
         // This changes explanation progress only; drafts and saved tasks stay intact.
         if(progress.taskStep < 3 && step != 5 && step != 6) {
-            if(!Save(p => p.taskPageStep = 5)) return;
+            if(!await Save(p => p.taskPageStep = 5)) return;
             step = 5;
         }
         if(step == 5 && !tasks.TutorialAddTarget) {
@@ -375,20 +400,20 @@ public sealed class TutorialController : MonoBehaviour
         if(helpKeyboard) helpKeyboard.Open(topics.Concat(new[]{helpClose}).ToArray(),CloseHelp);
     }
     public void CloseHelp() { manualTopic = null; helpPanel.SetActive(false); if(helpBackdrop) helpBackdrop.SetActive(false); snoozed = true; }
-    public void OpenTopic(int index)
+    public async void OpenTopic(int index)
     {
         helpPanel.SetActive(false); if(helpBackdrop) helpBackdrop.SetActive(false); Hide(); manualTopic = "help"; manualIndex = index;
         if(index == 0)
         {
             manualTopic = null;
-            if(Save(p => { p.dismissed = false; if(p.taskStep >= 4) { p.taskStep = 0; p.taskPageStep = 0; p.taskId = null; } })) { snoozed = false; pollAt = 0; }
+            if(await Save(p => { p.dismissed = false; if(p.taskStep >= 4) { p.taskStep = 0; p.taskPageStep = 0; p.taskId = null; } })) { snoozed = false; pollAt = 0; }
             return;
         }
-        if(index == 1) { if(!Save(p => p.focusStep = 0)) return; if(service.CanAccess(ProgressionFeature.Focus) && !navigation.ShowPage(MainMenuPage.Focus)) { manualTopic = null; return; } ShowFocus(); }
+        if(index == 1) { if(!await Save(p => p.focusStep = 0)) return; if(service.CanAccess(ProgressionFeature.Focus) && !navigation.ShowPage(MainMenuPage.Focus)) { manualTopic = null; return; } ShowFocus(); }
         else if(index == 2) Show("help-rewards", "Complete real tasks to earn EXP and Fish Coins within daily allowances. Completed work is recorded even at the cap. Claim completed Daily Reward goals separately. The first claim opens equipment management.", null, "Close");
-        else if(index == 3) { if(!Save(p => p.bossStep = 0)) return; if(service.CanAccess(ProgressionFeature.Boss) && !navigation.ShowPage(MainMenuPage.Boss)) { manualTopic = null; return; } ShowBoss(); }
+        else if(index == 3) { if(!await Save(p => p.bossStep = 0)) return; if(service.CanAccess(ProgressionFeature.Boss) && !navigation.ShowPage(MainMenuPage.Boss)) { manualTopic = null; return; } ShowBoss(); }
         else if(index == 5) { manualTopic = "settings"; settingsStep = 0; ShowSettings(); }
-        else { if(!Save(p => p.leaderboardStep = 0)) return; if(service.CanAccess(ProgressionFeature.Leaderboard) && !navigation.ShowPage(MainMenuPage.Leaderboard)) { manualTopic = null; return; } ShowLeaderboard(); }
+        else { if(!await Save(p => p.leaderboardStep = 0)) return; if(service.CanAccess(ProgressionFeature.Leaderboard) && !navigation.ShowPage(MainMenuPage.Leaderboard)) { manualTopic = null; return; } ShowLeaderboard(); }
     }
     void ShowSettings()
     {
@@ -432,7 +457,7 @@ public sealed class TutorialController : MonoBehaviour
         || (shown.StartsWith("equipment-step-") && progress.equipmentStep > 0)
         || (shown.StartsWith("boss-step-") && progress.bossStep > 0)
         || (shown.StartsWith("leaderboard-step-") && progress.leaderboardStep > 0));
-    public void GoBack()
+    public async void GoBack()
     {
         if(!panel.activeSelf || !CanGoBack) return;
         // Rewind explanation progress only; keep real tasks, sessions and rewards committed.
@@ -440,20 +465,21 @@ public sealed class TutorialController : MonoBehaviour
         Action show;
         if(shown.StartsWith("task-page-")) {
             int previous = TaskPageOrder[TaskPagePosition - 1];
-            if(!Save(p => p.taskPageStep = previous)) return; show = ShowTasks;
+            if(!await Save(p => p.taskPageStep = previous)) return; show = ShowTasks;
         } else if(shown.StartsWith("focus-step-")) {
-            if(!Save(p => p.focusStep--)) return; show = ShowFocus;
+            if(!await Save(p => p.focusStep--)) return; show = ShowFocus;
         } else if(shown.StartsWith("equipment-step-")) {
-            if(!Save(p => p.equipmentStep--)) return; show = ShowEquipment;
+            if(!await Save(p => p.equipmentStep--)) return; show = ShowEquipment;
         } else if(shown.StartsWith("boss-step-")) {
-            if(!Save(p => p.bossStep--)) return; show = ShowBoss;
+            if(!await Save(p => p.bossStep--)) return; show = ShowBoss;
         } else {
-            if(!Save(p => p.leaderboardStep--)) return; show = ShowLeaderboard;
+            if(!await Save(p => p.leaderboardStep--)) return; show = ShowLeaderboard;
         }
         Hide(); show();
     }
-    public void Continue()
+    public async void Continue()
     {
+        if (savingProgress) return;
         if(typing != null) { CompleteTyping(); return; }
         if(RequiresTargetClick() && !advancingFromTarget) return;
         if(manualTopic == "settings") {
@@ -462,7 +488,7 @@ public sealed class TutorialController : MonoBehaviour
             return;
         }
         if(shown == "help-rewards") {
-            if(!Save(p => p.equipmentStep = 0)) return;
+            if(!await Save(p => p.equipmentStep = 0)) return;
             manualTopic = "equipment"; Hide(); ShowEquipment(); return;
         }
         if(shown == "equipment-open") {
@@ -470,14 +496,14 @@ public sealed class TutorialController : MonoBehaviour
             return;
         }
         if(shown != null && shown.StartsWith("equipment-step-")) {
-            if(progress.equipmentStep < 6) { if(!Save(p => p.equipmentStep++)) return; Hide(); ShowEquipment(); }
-            else { if(!Save(p => { if(!p.read.Contains("equipment")) p.read.Add("equipment"); })) return; manualTopic = null; Hide(); }
+            if(progress.equipmentStep < 6) { if(!await Save(p => p.equipmentStep++)) return; Hide(); ShowEquipment(); }
+            else { if(!await Save(p => { if(!p.read.Contains("equipment")) p.read.Add("equipment"); })) return; manualTopic = null; Hide(); }
             return;
         }
         if(shown != null && shown.StartsWith("focus-step-"))
         {
-            if(progress.focusStep < 6) { if(!Save(p => p.focusStep++)) return; Hide(); ShowFocus(); }
-            else { if(!Save(p => { if(!p.read.Contains("focus")) p.read.Add("focus"); })) return; manualTopic = null; Hide(); }
+            if(progress.focusStep < 6) { if(!await Save(p => p.focusStep++)) return; Hide(); ShowFocus(); }
+            else { if(!await Save(p => { if(!p.read.Contains("focus")) p.read.Add("focus"); })) return; manualTopic = null; Hide(); }
             return;
         }
         if(shown != null && shown.StartsWith("task-page-"))
@@ -485,40 +511,40 @@ public sealed class TutorialController : MonoBehaviour
             if(progress.taskPageStep == 6 && progress.taskStep != 3) return;
             if(TaskPagePosition < TaskPageOrder.Length - 1) {
                 int following = TaskPageOrder[TaskPagePosition + 1];
-                if(!Save(p => p.taskPageStep = following)) return;
+                if(!await Save(p => p.taskPageStep = following)) return;
                 if(!advancingFromTarget) Hide();
                 ShowTasks();
-            } else { if(!Save(p => { p.taskStep = 4; if(!p.read.Contains("tasks"))p.read.Add("tasks"); }))return; Hide(); }
+            } else { if(!await Save(p => { p.taskStep = 4; if(!p.read.Contains("tasks"))p.read.Add("tasks"); }))return; Hide(); }
             return;
         }
         if(shown != null && shown.StartsWith("boss-step-"))
         {
-            if(progress.bossStep < 6) { if(!Save(p => p.bossStep++)) return; Hide(); ShowBoss(); }
-            else { if(!Save(p => { if(!p.read.Contains("boss"))p.read.Add("boss"); }))return; manualTopic=null;Hide(); }
+            if(progress.bossStep < 6) { if(!await Save(p => p.bossStep++)) return; Hide(); ShowBoss(); }
+            else { if(!await Save(p => { if(!p.read.Contains("boss"))p.read.Add("boss"); }))return; manualTopic=null;Hide(); }
             return;
         }
         if(shown != null && shown.StartsWith("leaderboard-step-")) {
-            if(progress.leaderboardStep < 2) { if(!Save(p => p.leaderboardStep++)) return; Hide(); ShowLeaderboard(); }
-            else { if(!Save(p => { if(!p.read.Contains("leaderboard"))p.read.Add("leaderboard"); }))return; manualTopic=null;Hide(); }
+            if(progress.leaderboardStep < 2) { if(!await Save(p => p.leaderboardStep++)) return; Hide(); ShowLeaderboard(); }
+            else { if(!await Save(p => { if(!p.read.Contains("leaderboard"))p.read.Add("leaderboard"); }))return; manualTopic=null;Hide(); }
             return;
         }
         if(manualTopic != null) { manualTopic = null; Hide(); snoozed = true; return; }
         string key = shown;
-        if(key == "task-0") { if(!Save(p => { p.taskStep = 1; p.taskPageStep = 5; })) return; }
+        if(key == "task-0") { if(!await Save(p => { p.taskStep = 1; p.taskPageStep = 5; })) return; }
         else if(key == "task-open") { navigation.ShowPage(MainMenuPage.Tasks); return; }
-        else if(key == "task-missing") { if(!Save(p => { p.taskStep = 2; p.taskId = null; })) return; }
-        else if(key == "task-saved") { if(!Save(p => { p.taskStep = 4; if(!p.read.Contains("tasks")) p.read.Add("tasks"); })) return; }
+        else if(key == "task-missing") { if(!await Save(p => { p.taskStep = 2; p.taskId = null; })) return; }
+        else if(key == "task-saved") { if(!await Save(p => { p.taskStep = 4; if(!p.read.Contains("tasks")) p.read.Add("tasks"); })) return; }
         else if(key == "unlock")
         {
             bool focusFirst = progress.announcedLevel < 2;
-            if(!Save(p => p.announcedLevel = service.RewardLevel)) return;
+            if(!await Save(p => p.announcedLevel = service.RewardLevel)) return;
             Hide(); navigation.ShowPage(focusFirst ? MainMenuPage.Focus : MainMenuPage.Boss); return;
         }
         else if(key == "focus-start") { Hide(); return; }
-        else if(key is "reward" or "daily" or "equipment" or "boss" or "leaderboard") { if(!Save(p => { if(!p.read.Contains(key)) p.read.Add(key); })) return; }
+        else if(key is "reward" or "daily" or "equipment" or "boss" or "leaderboard") { if(!await Save(p => { if(!p.read.Contains(key)) p.read.Add(key); })) return; }
         Hide(); pollAt = Time.unscaledTime + .5f;
     }
-    public void Skip() { if(Save(p => p.dismissed = true)) { if(ownsSettings) { FinishSettingsGuide(); return; } snoozed = true; manualTopic = null; Hide(); } }
+    public async void Skip() { if(await Save(p => p.dismissed = true)) { if(ownsSettings) { FinishSettingsGuide(); return; } snoozed = true; manualTopic = null; Hide(); } }
     void LockedNotice(string message) { if(!Busy()) Show("locked", message + ". Complete tasks to grow your cat. You can read the guide in Settings > Help.", null, "Got it"); }
     void Show(string key, string text, RectTransform anchor, string button, bool welcome = false)
     {

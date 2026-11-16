@@ -200,7 +200,8 @@ try {
  $view=WaitFor $viewPath {param($v)$v.connected -and $v.connections -gt $steady.connections} 'new pipe and snapshot after heartbeat loss'
  Check ($view.phase -eq 'Focusing') 'reconnected window resumes active session'
  if($canMovePointer){ClickAt $window 215 18}else{Command @{action='close-widget'}|Out-Null}
- Check ($child.WaitForExit(6000)) 'native close exits companion'
+ Start-Sleep -Milliseconds 500
+ Check (!$child.HasExited -and ![FocusNative]::IsWindowVisible($window)) 'native close hides the warm companion'
  $r=ReadJson $resultPath;Check ($r.phase -eq 'Focusing') 'closing companion preserves main Focus'
  $r=Command @{action='end'}
  Check ($r.cancelPrompt -and $r.phase -eq 'Focusing') 'End Focus prompts before settlement'

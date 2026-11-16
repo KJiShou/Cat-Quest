@@ -13,7 +13,7 @@ public sealed class CharacterEquipmentAura : MonoBehaviour
     public Vector3 circleScale = Vector3.one * 3.5f;
     public float threePieceLift;
     SpriteRenderer character;
-    TaskService service;
+    SqlitePlayerService service;
     GameObject circle;
     SortingGroup ownedSortingGroup;
     bool remote;
@@ -57,7 +57,7 @@ public sealed class CharacterEquipmentAura : MonoBehaviour
     void Connect()
     {
         if (remote || service != null || !GameDataManager.Instance) return;
-        service = GameDataManager.Instance.Tasks;
+        service = GameDataManager.Instance.Service;
         if (service == null) return;
         service.Changed += Refresh;
         Refresh();

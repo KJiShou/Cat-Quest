@@ -16,9 +16,10 @@ public class UsernameInputController : MonoBehaviour
     [Header("Existing Player")]
     [SerializeField] private string existingPlayerScene = "CharacterHome";
 
-    private void Start()
+    private async void Start()
     {
-        if (ShowSaveVersionError()) return;
+        var ready = await GameDataManager.EnsureInstance().Ready;
+        if (!this || ShowSaveVersionError()) return;
         // Already has username -> skip intro completely
         if (GameDataManager.Instance.HasUsername())
         {
@@ -38,9 +39,9 @@ public class UsernameInputController : MonoBehaviour
         usernameInput.ActivateInputField();
     }
 
-    public void ConfirmUsername()
+    public async void ConfirmUsername()
     {
-        if (ShowSaveVersionError()) return;
+        if (!usernameInput.interactable || ShowSaveVersionError()) return;
         string username = usernameInput.text.Trim();
 
         if (string.IsNullOrWhiteSpace(username))
@@ -64,14 +65,17 @@ public class UsernameInputController : MonoBehaviour
             return;
         }
 
-        try { GameDataManager.Instance.SetUsername(username); }
+        usernameInput.interactable = false;
+        try { var saved = await GameDataManager.Instance.SetUsernameAsync(username); if (!saved.Succeeded) throw new System.IO.IOException(saved.Message); }
         catch (System.IO.IOException error) {
+            if(!this)return;
             if (errorText) errorText.text = AppPlatform.Browser
                 ? "Could not save. Check available browser storage."
                 : error.Message;
-            return;
+            usernameInput.interactable = true; return;
         }
-
+        if (!this) return;
+        usernameInput.interactable = true;
         usernamePanel.SetActive(false);
         skipButton.SetActive(true);
 
@@ -86,7 +90,7 @@ public class UsernameInputController : MonoBehaviour
         usernameInput.interactable = false;
         if (errorText) errorText.text = AppPlatform.Browser
             ? "Cannot open save. Check storage or app version."
-            : "Update Cat Quest to open this save.";
+            : GameDataManager.Instance.LoadNotice ?? "Wait for Cat Quest to finish opening your save.";
         return true;
     }
 }

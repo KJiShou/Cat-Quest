@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 
 public enum FocusPhase { Ready, Focusing, Saving, Resting, Finished, Interrupted }
 
@@ -47,22 +48,28 @@ public sealed class FocusController : IFocusPresentation
             if (Phase != FocusPhase.Focusing && Phase != FocusPhase.Saving)
                 return Phase == FocusPhase.Resting || Phase == FocusPhase.Finished ? LastResult?.fishCoins ?? 0 : 0;
             int minute = (int)(Math.Min(ElapsedSeconds, TaskService.FocusSessionMinuteCap * 60d) / 60);
-            var today = service.LocalNow.Date;
-            if (fishMinute != minute || fishReadVersion != service.ReadVersion || fishDate != today) {
-                fishCount = service.PreviewFocusFish(ElapsedSeconds);
-                fishMinute = minute; fishReadVersion = service.ReadVersion; fishDate = today;
+            var today = (service != null ? service.LocalNow : sqlite.LocalNow).Date;
+            int version = service != null ? service.ReadVersion : sqlite.ReadVersion;
+            if (fishMinute != minute || fishReadVersion != version || fishDate != today) {
+                fishCount = service != null ? service.PreviewFocusFish(ElapsedSeconds) : sqlite.PreviewFocusFish(ElapsedSeconds);
+                fishMinute = minute; fishReadVersion = version; fishDate = today;
             }
             return fishCount;
         }
     }
     private readonly TaskService service;
+    private readonly SqlitePlayerService sqlite;
+    private bool operationPending;
+    public bool OperationPending => operationPending;
     private string sessionId;
     private double restElapsed;
     private bool early, cancel, invalid;
     public FocusController(TaskService service) { this.service = service; }
+    public FocusController(SqlitePlayerService service) { sqlite = service; }
     public bool Start() => Start(Options);
     public bool Start(FocusSessionOptions options)
     {
+        if (sqlite != null) throw new InvalidOperationException("Use StartAsync for persistent Focus sessions.");
         if (Phase == FocusPhase.Focusing || Phase == FocusPhase.Saving || Phase == FocusPhase.Resting) return false;
         if (!service.BeginFocus(options, out sessionId)) {
             Message = ErrorMessage = service.LastError ?? "The Focus session could not be saved.";
@@ -83,9 +90,12 @@ public sealed class FocusController : IFocusPresentation
         if (Phase == FocusPhase.Focusing)
         {
             // A large gap cannot be verified as active time (sleep, paused player loop, debugger).
-            if (seconds > 10) { Cancel(true); return; }
+            if (seconds > 10) { if (sqlite != null) _ = CancelAsync(true); else Cancel(true); return; }
             ElapsedSeconds = CountsUp ? ElapsedSeconds + seconds : Math.Min(FocusSeconds, ElapsedSeconds + seconds);
-            if (!CountsUp && ElapsedSeconds >= FocusSeconds) Settle(false, false, false);
+            if (!CountsUp && ElapsedSeconds >= FocusSeconds) {
+                if (sqlite != null) _ = SettleAsync(false, false, false);
+                else Settle(false, false, false);
+            }
         }
         else if (Phase == FocusPhase.Resting)
         {
@@ -103,6 +113,7 @@ public sealed class FocusController : IFocusPresentation
     }
     public bool RetrySettlement()
     {
+        if (sqlite != null) throw new InvalidOperationException("Use RetrySettlementAsync for persistent Focus sessions.");
         if (Phase != FocusPhase.Saving) return false;
         bool saved = cancel ? service.CancelFocus(sessionId, invalid) : service.FinishFocus(sessionId, ElapsedSeconds, early);
         if (!saved) {
@@ -110,8 +121,12 @@ public sealed class FocusController : IFocusPresentation
             Message = ErrorMessage + " Retry to save this result.";
             Changed?.Invoke(); return false;
         }
+        return ApplySettlement(service.FocusReceipt(sessionId));
+    }
+    private bool ApplySettlement(FocusSession receipt)
+    {
         ErrorMessage = "";
-        LastResult = service.FocusReceipt(sessionId);
+        LastResult = receipt;
         if (cancel)
         {
             Phase = FocusPhase.Interrupted;
@@ -128,6 +143,56 @@ public sealed class FocusController : IFocusPresentation
         Changed?.Invoke();
         if (completedNormally) FocusCompleted?.Invoke(completedId);
         return true;
+    }
+    public Task<bool> StartAsync() => StartAsync(Options);
+    public async Task<bool> StartAsync(FocusSessionOptions options)
+    {
+        if (sqlite == null) return Start(options);
+        if (operationPending || Phase == FocusPhase.Focusing || Phase == FocusPhase.Saving || Phase == FocusPhase.Resting) return false;
+        var draft = options?.Copy();
+        operationPending = true;
+        var previous = Phase;
+        Phase = FocusPhase.Saving; Changed?.Invoke();
+        try {
+            var started = await sqlite.BeginFocusAsync(draft);
+            if (!started.Succeeded) { Phase = previous; Message = ErrorMessage = started.Message; Changed?.Invoke(); return false; }
+            sessionId = started.Value;
+            var fetched = await sqlite.FocusReceiptAsync(sessionId);
+            if (!fetched.Succeeded || fetched.Value == null) {
+                // Entry is already committed. Never start a second session because
+                // its presentation read failed; invalidate this exact identity.
+                await sqlite.CancelFocusAsync(sessionId, true);
+                Phase = FocusPhase.Interrupted; Message = ErrorMessage = fetched.Message ?? "Could not read the saved Focus session."; Changed?.Invoke(); return false;
+            }
+            var receipt = fetched.Value;
+            Options = draft;
+            Options.questTitle = receipt.questTitle; Options.occurrenceDay = receipt.occurrenceDay;
+            Options.tagIds = receipt.tagIds.ToList(); Options.tagNames = receipt.tagNames.ToList();
+            Phase = FocusPhase.Focusing; ElapsedSeconds = 0; restElapsed = 0; LastResult = null;
+            ErrorMessage = ""; Message = "Stay focused. Your cat is training with you."; Changed?.Invoke(); return true;
+        } finally { operationPending = false; Changed?.Invoke(); }
+    }
+    public Task<bool> EndEarlyAsync() => sqlite == null ? Task.FromResult(EndEarly())
+        : Phase == FocusPhase.Focusing ? SettleAsync(!CountsUp, false, false) : Task.FromResult(false);
+    public Task<bool> CancelAsync(bool invalidate = false) => sqlite == null ? Task.FromResult(Cancel(invalidate))
+        : Phase == FocusPhase.Focusing ? SettleAsync(false, true, invalidate) : Task.FromResult(false);
+    private Task<bool> SettleAsync(bool endedEarly, bool cancelled, bool invalidated)
+    {
+        if (operationPending) return Task.FromResult(false);
+        early = endedEarly; cancel = cancelled; invalid = invalidated;
+        Phase = FocusPhase.Saving; Changed?.Invoke();
+        return RetrySettlementAsync();
+    }
+    public async Task<bool> RetrySettlementAsync()
+    {
+        if (sqlite == null) return RetrySettlement();
+        if (operationPending || Phase != FocusPhase.Saving || string.IsNullOrEmpty(sessionId)) return false;
+        operationPending = true;
+        try {
+            var saved = cancel ? await sqlite.CancelFocusAsync(sessionId, invalid) : await sqlite.FinishFocusAsync(sessionId, ElapsedSeconds, early);
+            if (!saved.Succeeded) { ErrorMessage = saved.Message; Message = ErrorMessage + " Retry to save this result."; Changed?.Invoke(); return false; }
+            return ApplySettlement(saved.Value);
+        } finally { operationPending = false; Changed?.Invoke(); }
     }
     public void EndRest() => FinishRest(false);
     private void FinishRest(bool elapsed)

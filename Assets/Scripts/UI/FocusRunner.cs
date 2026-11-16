@@ -5,7 +5,7 @@ using UnityEngine;
 public sealed class FocusRunner : MonoBehaviour
 {
     private FocusController controller;
-    private TaskService service;
+    private SqlitePlayerService service;
     private WindowsFocusNotificationSink notificationSink;
     private FocusNotificationCoordinator notifications;
     private bool notificationsEnabled;
@@ -33,7 +33,7 @@ public sealed class FocusRunner : MonoBehaviour
     private void Initialize()
     {
         if (controller != null) return;
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         controller = new FocusController(service);
         if (!CompanionProtocol.HasArgument("--companion"))
         {
@@ -67,10 +67,10 @@ public sealed class FocusRunner : MonoBehaviour
     }
     private void OnApplicationPause(bool paused)
     {
-        if (paused) controller?.Cancel(true);
+        if (paused && controller != null) _ = controller.CancelAsync(true);
         lastTime = Now;
     }
-    private void OnApplicationQuit() { controller?.Cancel(true); DisposeNotifications(); }
+    private void OnApplicationQuit() { DisposeNotifications(); }
     private void OnDestroy() { DisposeNotifications(); }
     private void DisposeNotifications()
     {

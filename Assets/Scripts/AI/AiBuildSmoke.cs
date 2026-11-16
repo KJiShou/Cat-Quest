@@ -38,6 +38,10 @@ public sealed class AiBuildSmoke : MonoBehaviour
     IEnumerator Start()
     {
         string directory = DirectoryPath;
+        var ready=GameDataManager.EnsureInstance().Ready;
+        double readyDeadline=Time.realtimeSinceStartupAsDouble+15;
+        while(!ready.IsCompleted && Time.realtimeSinceStartupAsDouble<readyDeadline)yield return null;
+        if(!ready.IsCompleted || ready.IsFaulted || !ready.Result.Succeeded){Finish(false,"SQLite initialization failed or timed out.");yield break;}
         if (CompanionProtocol.HasArgument("--ai-chat-offline")) { yield return Offline(); yield break; }
         File.WriteAllText(Path.Combine(directory, "progress.txt"), "Opening isolated AI settings. Complete browser authorization after clicking Continue with ChatGPT.");
         yield return null;
@@ -94,11 +98,14 @@ public sealed class AiBuildSmoke : MonoBehaviour
             var messages=client.Chat.History.messages;
             if(messages.Count<2 || messages[messages.Count-1].drafts.Count!=1) { Finish(false,"Mock chat response failed."); yield break; }
             var draft=messages[messages.Count-1].drafts[0];
-            if(!client.Chat.Confirm(draft,draft.task)) { Finish(false,client.Chat.Status); yield break; }
+            var confirm=client.Chat.ConfirmAsync(draft,draft.task);
+            double deadline=Time.realtimeSinceStartupAsDouble+15;
+            while(!confirm.IsCompleted && Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+            if(!confirm.IsCompleted || confirm.IsFaulted || !confirm.Result) { Finish(false,client.Chat.Status); yield break; }
         }
         yield return new WaitForSecondsRealtime(.8f);
         var last=client.Chat.History.messages[client.Chat.History.messages.Count-1];
-        bool pass=last.drafts.Count==1&&last.drafts[0].state=="saved"&&GameDataManager.EnsureInstance().Tasks.Snapshot.tasks.Count==1;
+        bool pass=last.drafts.Count==1&&last.drafts[0].state=="saved"&&GameDataManager.EnsureInstance().Service.TaskSnapshot.tasks.Count==1;
         Finish(pass,restored?"Offline Windows restart: chat and one confirmed task restored. Live provider not tested.":"Offline Windows chat and confirmation passed. Live provider not tested.");
     }
     static async Task Verify(ChatGptConnection connection)
@@ -113,7 +120,7 @@ public sealed class AiBuildSmoke : MonoBehaviour
         ScreenCapture.CaptureScreenshot(Path.Combine(DirectoryPath, "ai-player.png"));
         File.WriteAllText(Path.Combine(DirectoryPath, "result.json"), ChatGptJson.Encode(new System.Collections.Generic.Dictionary<string, object> {
             ["utc"] = DateTime.UtcNow.ToString("O"), ["unity"] = Application.unityVersion, ["result"] = pass ? "PASS" : "FAIL",
-            ["message"] = message, ["isolatedSave"] = GameDataManager.Instance.SavePath == IsolatedSavePath
+            ["message"] = message, ["isolatedSave"] = GameDataManager.Instance.SavePath == Path.ChangeExtension(IsolatedSavePath,".sqlite3")
         }));
     }
 #endif

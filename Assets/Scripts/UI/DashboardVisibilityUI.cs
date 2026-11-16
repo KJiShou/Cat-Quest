@@ -5,7 +5,7 @@ using UnityEngine.UI;
 public sealed class DashboardVisibilityUI : MonoBehaviour
 {
     public GameObject tasks, dailyRewards, focus, ranking, character, topRow, bottomRow, emptyState;
-    TaskService service;
+    SqlitePlayerService service;
     int applied = -1;
     VerticalLayoutGroup layout;
     LayoutElement bottomSizing;
@@ -22,7 +22,7 @@ public sealed class DashboardVisibilityUI : MonoBehaviour
 
     void OnEnable()
     {
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         service.Changed += Refresh;
         applied = -1;
         Refresh();

@@ -19,18 +19,25 @@ public static class TutorialRulesVerification
         Check(service.Snapshot.focusSessions.Count==0&&service.Snapshot.battles.Count==0,"Locked operation mutated state");
         Check(service.InitializeTutorial()&&service.Tutorial.taskStep==4,"Legacy save auto-started guide");
         var progress=new TutorialProgress{taskStep=2};Check(service.SaveTutorial(progress),service.LastError);
-        store.fail=true;Check(!service.Upsert(new QuestTask{title="Real task"},null,out _)&&service.Tutorial.taskStep==2,"Failed task advanced guide");
-        store.fail=false;Check(service.Upsert(new QuestTask{title="Real task"},null,out var id),service.LastError);
+        store.fail=true;Check(!service.Upsert(new QuestTask{title="Real task",difficulty=TaskDifficulty.Normal},null,out _)&&service.Tutorial.taskStep==2,"Failed task advanced guide");
+        store.fail=false;Check(service.Upsert(new QuestTask{title="Real task",difficulty=TaskDifficulty.Normal},null,out var id),service.LastError);
         Check(service.Tutorial.taskStep==3&&service.Tutorial.taskId==id&&service.Snapshot.history.Count==0,"Task receipt or false completion");
         Check(service.Complete(id)&&service.Complete(id),service.LastError);
-        Check(service.Snapshot.history.Count==1&&service.Snapshot.experience==20&&service.Snapshot.fishCoins==10,"Task reward or duplicate changed");
+        // Current Medium task: 25 EXP, 10 Fish and one first-task daily ticket at Lv.1.
+        var completed=service.Snapshot;
+        Check(completed.history.Count==1&&completed.experience==25&&completed.fishCoins==10&&completed.tickets==1,"Medium task reward or duplicate changed");
+        Check(completed.history.Single().experience==25&&completed.history.Single().fishCoins==10&&completed.history.Single().tickets==1,"Task receipt must match credited balances");
         store.Data.experience=99;Check(!service.CanAccess(ProgressionFeature.Focus),"Focus early unlock");
         store.Data.experience=100;Check(service.CanAccess(ProgressionFeature.Focus)&&!service.CanAccess(ProgressionFeature.Boss),"Lv.2 boundary");
         Check(service.BeginFocus(out var session),service.LastError);
         store.Data.experience=0; // Existing live session remains settleable after gate changes.
         store.fail=true;Check(!service.FinishFocus(session,1500,true)&&service.Snapshot.focusSessions.Single().status==FocusSessionStatus.Running,"Failed settlement committed");
         store.fail=false;Check(service.FinishFocus(session,1500,true)&&service.FinishFocus(session,1500,true),service.LastError);
-        Check(service.Snapshot.focusSessions.Single().experience==27&&service.Snapshot.focusSessions.Single().tickets==1,"Saved entry level/rewards changed");
+        // Entry is Lv.2: floor(25 * 11 / 20)=13 EXP, floor(5 * 11 / 10)=5 Fish.
+        // Lowering current XP after entry must not change the saved reward level.
+        var settled=service.Snapshot;var receipt=settled.focusSessions.Single();
+        Check(receipt.rewardLevel==2&&receipt.status==FocusSessionStatus.EndedEarly&&receipt.experience==13&&receipt.fishCoins==5&&receipt.tickets==1,"Saved entry level/End Early rewards changed");
+        Check(settled.experience==13&&settled.fishCoins==15&&settled.tickets==2,"Focus retry credited rewards twice or changed totals");
         Check(!service.BeginFocus(out _),"Low-level continuation allowed new session");
         store.Data.experience=549;Check(!service.CanAccess(ProgressionFeature.Boss)&&!service.CanAccess(ProgressionFeature.Leaderboard),"Lv.5 early unlock");
         store.Data.experience=550;store.Data.tickets=3;

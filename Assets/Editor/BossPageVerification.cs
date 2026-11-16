@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 [InitializeOnLoad]
@@ -17,8 +18,17 @@ public static class BossPageVerification
         EditorApplication.playModeStateChanged+=s=>{
             if(!SessionState.GetBool(Flag,false))return;
             if(s==PlayModeStateChange.EnteredPlayMode){step=0;next=EditorApplication.timeSinceStartup+3;}
-            if(s==PlayModeStateChange.EnteredEditMode){SessionState.SetBool(Flag,false);Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",null);}
+            if(s==PlayModeStateChange.EnteredEditMode){SqlitePlayVerificationSupport.RestoreCustomSizes(Flag);Restore();}
         };
+    }
+    static EditorWindow View=>EditorWindow.GetWindow(typeof(Editor).Assembly.GetType("UnityEditor.GameView"));
+    static PropertyInfo Size=>View.GetType().GetProperty("selectedSizeIndex",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic);
+    static void Restore(){
+        Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",SessionState.GetBool(Flag+"hadStore",false)?SessionState.GetString(Flag+"store",""):null);
+        EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+"scene",""));
+        Size.SetValue(View,SessionState.GetInt(Flag+"size",0));
+        EditorApplication.isPaused=SessionState.GetBool(Flag+"paused",false);
+        SessionState.SetBool(Flag,false);
     }
     static void Resolution(int width,int height)=>typeof(DashboardRewardPlayVerification).GetMethod("Resolution",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{width,height});
     static void Poll()
@@ -26,9 +36,17 @@ public static class BossPageVerification
         if(EditorApplication.isCompiling||EditorApplication.isUpdating)return;
         if(!EditorApplication.isPlayingOrWillChangePlaymode&&File.Exists("Temp/verify-boss-page.request")){
             File.Delete("Temp/verify-boss-page.request");Directory.CreateDirectory(Folder);
+            string prior=Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");
+            SessionState.SetBool(Flag+"hadStore",prior!=null);SessionState.SetString(Flag+"store",prior??"");
+            SessionState.SetString(Flag+"scene",AssetDatabase.GetAssetPath(EditorSceneManager.playModeStartScene));
+            SessionState.SetInt(Flag+"size",(int)Size.GetValue(View));SessionState.SetBool(Flag+"paused",EditorApplication.isPaused);
+            SessionState.SetFloat(Flag+"started",(float)EditorApplication.timeSinceStartup);
+            EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");
+            File.WriteAllText(Folder+"/result.txt","RUNNING "+DateTime.UtcNow.ToString("O"));EditorApplication.isPaused=false;
             Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(Folder+"/save-"+Guid.NewGuid().ToString("N")+".json"));
-            SessionState.SetBool(Flag,true);Resolution(1920,1080);EditorApplication.isPlaying=true;return;
+            SqlitePlayVerificationSupport.RememberCustomSizes(Flag);SessionState.SetBool(Flag,true);Resolution(1920,1080);EditorApplication.isPlaying=true;return;
         }
+        if(SessionState.GetBool(Flag,false)&&EditorApplication.timeSinceStartup-SessionState.GetFloat(Flag+"started",0)>120){File.WriteAllText(Folder+"/result.txt","FAIL: Boss preview timed out.");EditorApplication.isPlaying=false;return;}
         if(!EditorApplication.isPlaying||!SessionState.GetBool(Flag,false)||EditorApplication.timeSinceStartup<next||(capture&&capture.Pending))return;
         EditorApplication.QueuePlayerLoopUpdate();
         try{
@@ -37,7 +55,7 @@ public static class BossPageVerification
                 UnityEngine.SceneManagement.SceneManager.LoadScene("CharacterHome");next=EditorApplication.timeSinceStartup+3;return;
             }
             if(!nav)throw new Exception("CharacterHome must contain the shared Canvas.");
-            if(step==0){tickets=GameDataManager.Instance.PlayerData.tickets;nav.ShowPage(MainMenuPage.Boss);}
+            if(step==0){tickets=GameDataManager.Instance.Service.Tickets;nav.ShowPage(MainMenuPage.Boss);}
             if(step==1){
                 var stage=UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None).Single(c=>c.name=="Arena Camera").transform.parent;
                 var anim=stage.Find("Cyclope").GetComponentInChildren<Animator>();animationTime=anim.GetCurrentAnimatorStateInfo(0).normalizedTime;
@@ -57,7 +75,7 @@ public static class BossPageVerification
             if(step==3)Capture("boss-1280.png");
             if(step==4){nav.ShowPage(MainMenuPage.Dashboard);if(UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None).Any(c=>c.name=="Arena Camera"&&c.enabled))throw new Exception("Arena camera remains active off-page.");nav.ShowPage(MainMenuPage.Boss);}
             if(step==5){
-                if(GameDataManager.Instance.PlayerData.tickets!=tickets)throw new Exception("Preview changed ticket balance.");
+                if(GameDataManager.Instance.Service.Tickets!=tickets)throw new Exception("Preview changed ticket balance.");
                 File.WriteAllText(Folder+"/result.txt","PASS: Boss page at 1920x1080 and 1280x720; Cyclope and cat idle animations advance; preview stops off-page and reopens; no ticket change.");
                 Resolution(1920,1080);EditorApplication.isPlaying=false;return;
             }

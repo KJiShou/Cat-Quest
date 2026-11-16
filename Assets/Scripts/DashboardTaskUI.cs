@@ -6,6 +6,15 @@ using UnityEngine.UI;
 
 public class DashboardTasksUI : MonoBehaviour
 {
+    int observedRewardLevel = -1;
+    void RefreshRecords(System.Collections.Generic.IReadOnlyCollection<PlayerRecordKind> changed)
+    {
+        bool levelChanged=observedRewardLevel!=service.RewardLevel;
+        observedRewardLevel=service.RewardLevel;
+        if(changed==null || levelChanged || changed.Contains(PlayerRecordKind.Tasks)
+            || changed.Contains(PlayerRecordKind.Occurrences) || changed.Contains(PlayerRecordKind.History)
+            || changed.Contains(PlayerRecordKind.Tags) || changed.Contains(PlayerRecordKind.RewardDays)) Refresh();
+    }
     public ScrollRect taskScroll;
     public DashboardTaskRow rowPrefab;
     public MainMenuNavigation navigation;
@@ -19,7 +28,7 @@ public class DashboardTasksUI : MonoBehaviour
     private TaskResultNotice resultNotice;
     private RewardFlightUI rewardFlight;
 
-    private TaskService service;
+    private SqlitePlayerService service;
     private TaskUIBuilder ui;
     private TaskListViewport rows;
 
@@ -42,12 +51,14 @@ public class DashboardTasksUI : MonoBehaviour
         return confirmation;
     }
 
-    private void RequestComplete(TaskView view,RectTransform origin)
+    private async void RequestComplete(TaskView view,RectTransform origin)
     {
         if (!PrepareToLeavePage()) return;
         if (view.Completed) {
             string receipt = service.CompletionId(view.task.id, view.occurrence.day);
-            if (!service.UndoCompletion(receipt)) ShowTaskNotice(service.LastError, true);
+            bool saved=(await service.UndoCompletionAsync(receipt)).Succeeded;
+            if(!this || !isActiveAndEnabled)return;
+            if (!saved) ShowTaskNotice(service.LastError, true);
             else ShowTaskNotice("Task restored. Previously earned rewards are kept.");
             return;
         }
@@ -65,13 +76,16 @@ public class DashboardTasksUI : MonoBehaviour
         }
     }
 
-    private void CompleteTask(string id,RectTransform origin)
+    private readonly System.Collections.Generic.HashSet<string> pendingCompletions = new System.Collections.Generic.HashSet<string>();
+    private async void CompleteTask(string id,RectTransform origin)
     {
+        if(!pendingCompletions.Add(id))return;
         int experience=service.Experience,coins=service.FishCoins,tickets=service.Tickets;
         if(!rewardFlight)rewardFlight=GetComponentInParent<Canvas>().rootCanvas.GetComponentInChildren<RewardFlightUI>(true);
         rewardFlight?.SetRewardOrigin(origin);
         bool saved;
-        try {saved=service.Complete(id,true);}finally {rewardFlight?.SetRewardOrigin(null);}
+        try {saved=(await service.CompleteAsync(id,true)).Succeeded;}finally {pendingCompletions.Remove(id);rewardFlight?.SetRewardOrigin(null);}
+        if (!this || !isActiveAndEnabled) return;
         if (!saved)
         {
             GetConfirmation().Show(
@@ -105,7 +119,7 @@ public class DashboardTasksUI : MonoBehaviour
             quickAddInput.onEndEdit.AddListener(EndTaskInput);
             quickAddInput.onDeselect.AddListener(LeaveTaskInput);
         }
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         if (rows == null) {
             TaskUIBuilder.Clear(taskScroll.content);
             rows = new TaskListViewport(taskScroll.content);
@@ -114,8 +128,8 @@ public class DashboardTasksUI : MonoBehaviour
             taskManager.font,
             taskManager.roundedSprite);
 
-        service.RefreshDate();
-        service.Changed += Refresh;
+        _ = service.RefreshDateAsync();
+        service.RecordsChanged += RefreshRecords;
         Refresh();
     }
 
@@ -131,7 +145,7 @@ public class DashboardTasksUI : MonoBehaviour
         }
         if (resultNotice) resultNotice.Dismiss();
         if (service != null)
-            service.Changed -= Refresh;
+            service.RecordsChanged -= RefreshRecords;
         confirmation?.Dismiss();
         if (contextMenu) contextMenu.Dismiss();
     }
@@ -155,7 +169,8 @@ public class DashboardTasksUI : MonoBehaviour
         pendingRefresh = false;
         var content = taskScroll.content;
         rows.Begin();
-        var snapshot = service.Snapshot;
+        observedRewardLevel=service.RewardLevel;
+        var snapshot = service.TaskSnapshot;
 
         var daily = service.QuerySnapshot(snapshot, TaskTab.Daily)
             .Where(view => service.Eligible(view.task))
@@ -245,7 +260,7 @@ public class DashboardTasksUI : MonoBehaviour
         else pendingBlur = true;
     }
 
-    public bool PrepareToLeavePage()
+    public bool PrepareToLeavePage(System.Action afterSaved = null)
     {
         if (!quickAddRoot || !quickAddRoot.activeSelf) return true;
         // An unsuccessful blur may already have opened the error dialog this click.
@@ -255,10 +270,15 @@ public class DashboardTasksUI : MonoBehaviour
             CancelAddTask();
             return true;
         }
-        return CommitAddTask();
+        return CommitAddTask(afterSaved);
     }
 
-    public bool CommitAddTask()
+    public bool CommitAddTask(System.Action afterSaved = null)
+    {
+        if (!isActiveAndEnabled || !quickAddRoot.activeSelf || savingTask || string.IsNullOrWhiteSpace(quickAddInput.text)) return false;
+        _ = CommitAddTaskAsync(afterSaved); return false;
+    }
+    private async System.Threading.Tasks.Task<bool> CommitAddTaskAsync(System.Action afterSaved)
     {
         if (!isActiveAndEnabled || !quickAddRoot.activeSelf || savingTask) return false;
         if (string.IsNullOrWhiteSpace(quickAddInput.text)) return false;
@@ -271,8 +291,9 @@ public class DashboardTasksUI : MonoBehaviour
         };
         savingTask = true;
         bool saved;
-        try { saved = service.Upsert(draft, System.Array.Empty<string>(), out _); }
+        try { saved = (await service.UpsertAsync(draft, System.Array.Empty<string>())).Succeeded; }
         finally { savingTask = false; }
+        if (!this || !isActiveAndEnabled || !quickAddRoot.activeSelf) return saved;
         if (!saved)
         {
             GetConfirmation().ShowNotice("Could not add task", service.LastError);
@@ -283,7 +304,7 @@ public class DashboardTasksUI : MonoBehaviour
             resultNotice = Instantiate(Resources.Load<TaskResultNotice>("TaskResultNotice"),
                 GetComponentInParent<Canvas>().rootCanvas.transform);
         resultNotice.Show("Task saved.");
-        return true;
+        afterSaved?.Invoke(); return true;
     }
 
     public void CancelAddTask()
@@ -335,7 +356,7 @@ public class DashboardTasksUI : MonoBehaviour
         string day = TaskService.DateKey(service.LocalNow);
         bool IsCurrent() => isActiveAndEnabled && version == service.ReadVersion
             && day == TaskService.DateKey(service.LocalNow) && CurrentContextTask(id) != null;
-        contextMenu.Show(current.task, service.TagCatalog, service.LocalNow,
+        contextMenu.ShowAsync(current.task, service.TagCatalog, service.LocalNow,
             !current.Completed && service.Eligible(current.task), point, action =>
         {
             if (!IsCurrent()) { ShowTaskNotice("This task changed. Reopen it to continue.", true); return; }
@@ -346,16 +367,18 @@ public class DashboardTasksUI : MonoBehaviour
                 string caption = name.LengthInTextElements > 40 ? name.SubstringByTextElements(0, 40) + "…" : current.task.title;
                 GetConfirmation().Show(current.task.daily ? "Delete repeating task?" : "Delete task?",
                     "\"" + caption + "\"\n" + (current.task.daily ? "This stops this task and all future repeats.\n" : "")
-                    + "Completed history and rewards are kept.", () =>
+                    + "Completed history and rewards are kept.", async () =>
                 {
                     if (!IsCurrent()) { ShowTaskNotice("This task changed. Reopen it to continue.", true); return; }
-                    if (!service.Delete(id)) ShowTaskNotice(service.LastError, true);
+                    var saved=await service.DeleteAsync(id);
+                    if(!this || !isActiveAndEnabled)return;
+                    if (!saved.Succeeded) ShowTaskNotice(service.LastError, true);
                     else ShowTaskNotice("Task deleted.");
                 }, "Delete");
             }
             else if (navigation.ShowPage(MainMenuPage.Tasks))
                 navigation.StartCoroutine(EditTaskWhenReady(id));
-        }, change =>
+        }, async change =>
         {
             if (!IsCurrent()) return "This task changed. Reopen the menu to continue.";
             var latest = CurrentContextTask(id);
@@ -369,9 +392,9 @@ public class DashboardTasksUI : MonoBehaviour
                 else draft.daily = false;
             }
             else return "Choose a field to change.";
-            if (!service.Upsert(draft, latest.occurrence.completedSubtaskIds, out _))
+            if (!(await service.UpsertAsync(draft, latest.occurrence.completedSubtaskIds)).Succeeded)
                 return service.LastError ?? "Could not save. Please try again.";
-            ShowTaskNotice("Task updated.");
+            if(this && isActiveAndEnabled)ShowTaskNotice("Task updated.");
             return null;
         });
     }
@@ -390,6 +413,6 @@ public class DashboardTasksUI : MonoBehaviour
     private void OnApplicationFocus(bool focused)
     {
         if (!focused && contextMenu) contextMenu.Dismiss();
-        if (focused && isActiveAndEnabled && service != null) { service.RefreshDate(); Refresh(); }
+        if (focused && isActiveAndEnabled && service != null) { _ = service.RefreshDateAsync(); Refresh(); }
     }
 }

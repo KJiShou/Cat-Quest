@@ -13,14 +13,14 @@ public sealed class FeatureLockUI : MonoBehaviour, IPointerEnterHandler, IPointe
     Selectable[] controls;
     bool[] enabledBeforeLock;
     bool wasLocked;
-    TaskService service;
+    SqlitePlayerService service;
     FocusController focus;
     SidebarNavigationButton navigation;
     bool hovered, selected;
     void OnEnable()
     {
         navigation = GetComponent<SidebarNavigationButton>();
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         focus = FocusRunner.EnsureInstance().Controller;
         if(card && controls == null) { controls = GetComponentsInChildren<Selectable>(true); enabledBeforeLock = new bool[controls.Length]; }
         service.Changed += Refresh; focus.Changed += Refresh; Refresh();

@@ -4,10 +4,10 @@ using UnityEngine;
 public sealed class RewardAllowanceUI : MonoBehaviour
 {
     public TMP_Text summary;
-    private TaskService service;
+    private SqlitePlayerService service;
     private void OnEnable()
     {
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         service.Changed += Refresh; Refresh();
     }
     private void OnDisable() { if (service != null) service.Changed -= Refresh; }

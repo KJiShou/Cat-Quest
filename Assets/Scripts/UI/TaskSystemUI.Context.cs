@@ -28,7 +28,7 @@ public partial class TaskSystemUI
         string day = TaskService.DateKey(Service.LocalNow);
         bool canComplete = !view.Completed && Service.Eligible(view.task)
             && (item == null || item.kind == CalendarTaskKind.Task);
-        contextMenu.Show(view.task, Service.TagCatalog, Service.LocalNow, canComplete, point, choice =>
+        contextMenu.ShowAsync(view.task, Service.TagCatalog, Service.LocalNow, canComplete, point, choice =>
         {
             var current = CurrentContextTask(id);
             if (current == null || version != Service.ReadVersion || day != TaskService.DateKey(Service.LocalNow))
@@ -46,7 +46,7 @@ public partial class TaskSystemUI
             }
             else { SelectedKey = id; BeginEdit(current); }
             if (editing) contextFocus = StartCoroutine(FocusContextField());
-        }, change =>
+        }, async change =>
         {
             var current = CurrentContextTask(id);
             if (current == null || version != Service.ReadVersion || day != TaskService.DateKey(Service.LocalNow))
@@ -62,14 +62,14 @@ public partial class TaskSystemUI
             }
             else return "Choose a field to change.";
             // Reuse current progress, including when editing a future Daily preview.
-            if (!Service.Upsert(draft, current.occurrence.completedSubtaskIds, out _))
+            if (!(await Service.UpsertAsync(draft, current.occurrence.completedSubtaskIds)).Succeeded)
             {
                 string error = Service.LastError;
                 return error != null && error.StartsWith("Could not save your changes.", System.StringComparison.Ordinal)
                     ? "Could not save. Your choices are kept. Please try again."
                     : error ?? "Could not save. Please try again.";
             }
-            Notify("Task updated.");
+            if(this && isActiveAndEnabled)Notify("Task updated.");
             return null;
         });
     }

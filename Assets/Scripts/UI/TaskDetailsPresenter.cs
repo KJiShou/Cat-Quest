@@ -61,7 +61,7 @@ public sealed class TaskDetailsPresenter
         rect.pivot=new Vector2(.5f,1); rect.anchoredPosition=Vector2.zero; rect.sizeDelta=Vector2.zero;
         var glow=root.Find("ScrollRect/BottomGlow"); if(glow) glow.gameObject.SetActive(false);
     }
-    public void Render(TaskView view, Func<TaskView,string> scheduleText, TaskService service,
+    public void Render(TaskView view, Func<TaskView,string> scheduleText, SqlitePlayerService service,
         Action<TaskView> onEdit, Action<string> onComplete, Action<string> onDelete, Action<string> error, bool readOnly = false)
     {
         currentView=view;
@@ -102,7 +102,13 @@ public sealed class TaskDetailsPresenter
             var toggle=row.GetComponentInChildren<Toggle>(true); toggle.onValueChanged.RemoveAllListeners();
             toggle.SetIsOnWithoutNotify(view.Completed || view.occurrence.completedSubtaskIds.Contains(sub.id));
             toggle.interactable=!readOnly && !view.IsHistory && !view.Completed && service.Eligible(view.task);
-            toggle.onValueChanged.AddListener(value=> { if((view.task.daily && view.occurrence.day != TaskService.DateKey(service.LocalNow)) || !service.SetSubtask(view.task.id,sub.id,value)) { error(service.LastError ?? "The day has changed. Reopen today’s task."); toggle.SetIsOnWithoutNotify(!value); } });
+            toggle.onValueChanged.AddListener(async value=> {
+                toggle.interactable=false;
+                bool saved=!(view.task.daily && view.occurrence.day != TaskService.DateKey(service.LocalNow)) && (await service.SetSubtaskAsync(view.task.id,sub.id,value)).Succeeded;
+                if(!toggle || !toggle.gameObject.activeInHierarchy)return;
+                toggle.interactable=true;
+                if(!saved) {error(service.LastError ?? "The day has changed. Reopen today’s task.");toggle.SetIsOnWithoutNotify(!value);}
+            });
         }
         body.Find("SubTasks").gameObject.SetActive(view.task.subtasks.Count>0);
         var reward = service.PreviewReward(view);
@@ -113,7 +119,7 @@ public sealed class TaskDetailsPresenter
         complete.onClick.AddListener(()=>onComplete(view.task.id)); edit.onClick.AddListener(()=>onEdit(view)); delete.onClick.AddListener(()=>onDelete(view.task.id));
         LayoutRebuilder.MarkLayoutForRebuild((RectTransform)body);
     }
-    public void RefreshScheduleColor(TaskService service)
+    public void RefreshScheduleColor(SqlitePlayerService service)
     {
         if(currentView!=null) schedule.color=service.IsOverdue(currentView) ? TaskUIBuilder.Overdue : TaskUIBuilder.ScheduleInk;
     }

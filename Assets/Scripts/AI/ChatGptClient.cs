@@ -57,7 +57,7 @@ public sealed class ChatGptClient : MonoBehaviour
         else if (!string.IsNullOrEmpty(testSave)) directory = Path.Combine(Path.GetDirectoryName(testSave), "ai");
         if (AiBuildSmoke.Enabled) directory = Path.Combine(AiBuildSmoke.DirectoryPath, "ai");
         Connection = new ChatGptConnection(verificationStorage ?? new ChatGptStorage(directory), verificationHttp ?? new ChatGptHttp());
-        Chat = new AiChatSession(Connection, verificationStorage ?? new ChatGptStorage(directory), GameDataManager.EnsureInstance().Tasks);
+        Chat = new AiChatSession(Connection, verificationStorage ?? new ChatGptStorage(directory), GameDataManager.EnsureInstance().Service);
 
         Status = "Loading AI settings...";
         StartOperation(Connection.Initialize(), () => { Chat.Load(); Ready = true; Status = Connection.Connected ? string.Empty : "Connect ChatGPT to chat and plan tasks."; });
@@ -147,7 +147,7 @@ public sealed class ChatGptClient : MonoBehaviour
         Chat?.Stop(); Connection.Dispose(); Ready = false;
         verificationStorage = storage; verificationHttp = http;
         Connection = new ChatGptConnection(storage, http);
-        Chat = new AiChatSession(Connection, storage, GameDataManager.EnsureInstance().Tasks);
+        Chat = new AiChatSession(Connection, storage, GameDataManager.EnsureInstance().Service);
         StartOperation(Connection.Initialize(), () => { Chat.Load(); Ready = true; Status = "Isolated AI verification."; });
     }
 #endif

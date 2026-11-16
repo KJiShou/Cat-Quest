@@ -10,9 +10,18 @@ Cat Quest 是使用 Unity 和 C# 开发的 Windows 桌面效率应用，也是�
 
 > **正式版：** [下载最新版 Cat Quest（Windows x64）](https://github.com/KJiShou/Cat-Quest/releases/latest)。完整解压 ZIP，运行 `CatQuest.exe`，并保留所有附带文件。本学生项目仍在持续开发，仓库提供 Unity 源工程；本项目没有采用开源许可证。
 
-> **网页版：** 使用桌面浏览器[在 itch.io 试玩](https://kjishou.itch.io/cat-quest)。保留任务、Focus 和本地成长，并支持导出浏览器备份。Pet Widget 等 Windows 集成功能需要桌面版，详见[平台差异](docs/web-release.zh-CN.md)。
+> **网页试玩：** [体验现有 itch.io 演示](https://kjishou.itch.io/cat-quest)。当前源码的 Web 版使用会话内 SQLite，刷新后重新开始；长期保存和设备搬迁请使用 Windows 版。本次 Windows 发布不会更新线上 Web 构建，详见[平台差异](docs/web-release.zh-CN.md)。
 
 ![Dashboard 展示猫咪、任务概览与每日奖励](docs/images/dashboard.png)
+
+## v1.4.0 更新
+
+- **历史越多，保存仍保持轻量：** 后台 SQLite 事务按受影响记录写入，不再为日常操作重写整个 JSON 存档。
+- **旧用户自动迁移：** 首次启动导入旧 JSON 并保留原档，之后启动和保存只使用 SQLite。
+- **备份与换设备：** 在设置中导出／导入 `.catquestbackup`，仍支持旧 JSON 导入；登录凭据和分享授权不会随进度转移。
+- **更稳定的交互：** 局部刷新保留滚动及选择状态，并改善任务反馈与装备文字布局。
+
+更新前请结束 Focus／战斗并保留备份。迁移后保留的 JSON **仅代表迁移前进度**，旧程序无法读取新增的 SQLite 进度。详见[更新说明](docs/releases/v1.4.0.md)与[验证结果及限制](SQLITE_VERIFICATION_REPORT.md)。
 
 ## 目录
 
@@ -211,9 +220,9 @@ Chat 可查询相关任务并提议创建或修改。所有建议均需本地审
 
 ```mermaid
 flowchart TD
-    UI[仪表盘 / 任务 / 专注 / Boss / 装备] --> Services[TaskService + FocusController]
-    Services --> Store[PlayerDataStore]
-    Store --> Save[本地 JSON 存档和备份]
+    UI[仪表盘 / 任务 / 专注 / Boss / 装备] --> Services[SqlitePlayerService + FocusController]
+    Services --> Store[IPlayerRepository / SQLite]
+    Store --> Save[SQLite WAL 与一致性备份]
     Companion[Windows 桌面伙伴] -->|经过校验的控制请求| Host[CompanionHost]
     Host --> Services
     Services -->|显示快照| Host
@@ -225,7 +234,7 @@ flowchart TD
 
 | 路径 | 职责 |
 | --- | --- |
-| [Tasks](Assets/Scripts/Tasks) | TaskService 分部类、奖励、专注控制、统计及本地存储 |
+| [Tasks](Assets/Scripts/Tasks) | SQLite 命令与仓库、旧格式迁移、奖励及专注统计 |
 | [Battle](Assets/Scripts/Battle) | 确定性战斗规则与表现辅助 |
 | [Equipment](Assets/Scripts/Equipment) | 装备定义、属性及角色光环 |
 | [UI](Assets/Scripts/UI) | 页面、导航、共用反馈、教学及桌面伙伴 |
@@ -240,25 +249,30 @@ flowchart TD
 
 ## 数据与隐私
 
-正常存档为 **`Application.persistentDataPath/catquest-data.json`**。当前 Windows 默认路径：
+正常存档为 **`Application.persistentDataPath/catquest-data.sqlite3`**。当前 Windows 默认路径：
 
 ```text
-%USERPROFILE%\AppData\LocalLow\DefaultCompany\Cat Quest\catquest-data.json
+%USERPROFILE%\AppData\LocalLow\DefaultCompany\Cat Quest\catquest-data.sqlite3
 ```
 
-保存使用临时文件、原子替换及 `.bak` 备份。主文件无法读取时可从有效备份恢复。手动恢复或迁移前应备份，应用运行时不要编辑存档。任务 JSON 是本地文件，不是加密保险库。
+Windows 使用 SQLite WAL 事务、FULL 持久化与后台串行执行器。首次启动迁移受支持的旧 JSON，校验后保留原档。迁移后数据库丢失或损坏时，不会静默重新加载旧 JSON；恢复需要明确选择备份。
+
+换设备请在设置中导出一致的 `.catquestbackup`，在相同或更新版本导入。应用运行时不要只复制主数据库，已提交数据可能仍在 WAL 中。导入会先备份现有进度，并保留目标设备的账号关联。本地进度不是加密保险库，详见[存储与备份说明](SQLITE_STORAGE.md)。
 
 | 数据 | 处理方式 |
 | --- | --- |
 | 任务、日程、子任务、历史、奖励和装备 | 保存在本地，不包含在排行榜上传中 |
 | AI 对话 | 独立存储在 Windows 当前用户 DPAPI 保护的 `ai/chat.dpapi`，已发送消息和请求查询的任务事实会发送到连接的 AI 服务 |
-| AI 连接 | 独立于玩家 JSON 的受保护连接记录 |
+| AI 连接 | 独立于玩家数据库 的受保护连接记录 |
 | Google/Firebase 凭证 | 刷新凭证保存在 Windows Credential Manager，访问令牌仅在内存中 |
 | 自愿参与的排名记录 | 仅 `playerId`、`playerName`、`bossStage`、`totalTasksCompleted`、`totalFocusMinutes`、`power`、`catLevel` 和服务器 `updatedAt` |
 
 关闭分享会停止上传并请求移除，离线时可能继续显示等待移除，需要恢复连接及关联账号。退出登录不删除本地进度，发布汇总也不能恢复另一台电脑上的完整存档。
 
 ## 验证
+
+2026-11-16 的 SQLite 验证包括 636 项存储／迁移检查、业务和 UI 回归，以及 29 项操作共 34,800 次测量。本机在 1,000 个活动任务、10 万条历史下，各项操作 P95 为 SQLite 33–37 ms、旧 JSON 866–1,226 ms。数字来自 Development 构建的命令测量，不是对所有硬件的延迟保证。真实旧版 1.2.1 更新路线因缺少隔离 Windows 环境仍未实测；Web Development 包也仍超过上传大小限制。[完整结果](SQLITE_VERIFICATION_REPORT.md)。
+
 
 仓库提供自定义 Unity 验证器及 Windows 冒烟脚本。它们是可用检查入口，**不代表每个版本的全部流程都已通过**。历史报告不是当前结果。
 

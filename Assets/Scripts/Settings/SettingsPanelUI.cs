@@ -37,7 +37,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public Sprite rankingNormal, rankingSelected;
     public Toggle showDashboardRanking, showDashboardTasks, showDashboardDailyRewards, showDashboardFocus, showDashboardCharacter;
     public Color settingsInk = new Color32(35, 78, 125, 255);
-    TaskService service;
+    SqlitePlayerService service;
     AccountController account;
     SettingsAudio audioPlayer;
     GameObject returnFocus;
@@ -58,7 +58,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     {
         if (initialized) return;
         initialized = true;
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         account = AccountController.EnsureInstance();
         audioPlayer = SettingsAudio.EnsureInstance();
         close.onClick.AddListener(Close);
@@ -288,45 +288,59 @@ public sealed class SettingsPanelUI : MonoBehaviour
         soundValue.text = sound.value <= 0 ? "Muted" : Mathf.RoundToInt(sound.value * 100) + "%";
         musicValue.text = music.value <= 0 ? "Muted" : Mathf.RoundToInt(music.value * 100) + "%";
     }
-    void TransferBackup(bool export)
+    bool transferPending;
+    async void TransferBackup(bool export)
     {
+        if(transferPending)return;transferPending=true;
         try
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
-            if (!export) throw new InvalidOperationException("Backup import is available in the Windows desktop version.");
-            soundCommit.Flush(); musicCommit.Flush();
-            string temporary = System.IO.Path.Combine(Application.temporaryCachePath, "backup-" + Guid.NewGuid().ToString("N") + ".json");
-            try {
-                service.TransferBackup(temporary, true);
-                BrowserPlayerSave.Download(System.IO.File.ReadAllText(temporary));
-            }
-            finally { if (System.IO.File.Exists(temporary)) System.IO.File.Delete(temporary); }
-            settingsStatus.color = settingsInk;
-            settingsStatus.text = "Backup download requested. Keep the downloaded JSON file.";
+            throw new InvalidOperationException("Backup transfer is available in the Windows application.");
 #else
             if (!export && GameDataManager.Instance.TryGetComponent<FocusRunner>(out var runner) && runner.Controller.Phase == FocusPhase.Resting)
                 throw new InvalidOperationException("Finish Rest before importing a backup.");
             if (!export && account.State.busy) throw new InvalidOperationException("Wait for the account operation to finish.");
             string path = SaveFileDialog.Pick(export);
             if (string.IsNullOrEmpty(path) || (!export && !SaveFileDialog.ConfirmImport(path))) return;
-            soundCommit.Flush(); musicCommit.Flush();
-            service.TransferBackup(path, export);
+            if(!await FlushPendingSettingsAsync())throw new InvalidOperationException("Settings could not be saved. Retry before transferring a backup.");
+            var transfer = await service.TransferBackupAsync(path, export);
+            if (!transfer.Succeeded) throw new InvalidOperationException(transfer.Message);
+            if (!this || !isActiveAndEnabled) return;
+            if (!service.IsReady) { settingsStatus.color = TaskUIBuilder.Overdue; settingsStatus.text = transfer.Message ?? service.LastError; return; }
             if (!export) { RefreshSettings(); audioPlayer.ApplySaved(); }
             settingsStatus.color = settingsInk;
             settingsStatus.text = export ? "Backup exported." : "Backup imported. Previous progress backed up.";
 #endif
         }
-        catch (Exception e) { settingsStatus.color = TaskUIBuilder.Overdue; settingsStatus.text = e.Message; }
+        catch (Exception e) { if(this && isActiveAndEnabled) {settingsStatus.color = TaskUIBuilder.Overdue; settingsStatus.text = e.Message;} }
+        finally {transferPending=false;}
     }
 
+    readonly System.Collections.Generic.List<System.Threading.Tasks.Task<bool>> pendingSettings = new System.Collections.Generic.List<System.Threading.Tasks.Task<bool>>();
     void SaveSettings()
     {
+        pendingSettings.RemoveAll(task=>task.Status==System.Threading.Tasks.TaskStatus.RanToCompletion && task.Result);
+        pendingSettings.Add(SaveSettingsAsync());
+    }
+    public async System.Threading.Tasks.Task<bool> FlushPendingSettingsAsync()
+    {
+        if(!initialized)return true;
+        soundCommit.Flush();musicCommit.Flush();
+        var pending=pendingSettings.ToArray();pendingSettings.Clear();
+        bool saved=true;
+        foreach(var task in pending) saved &= await task;
+        return saved;
+    }
+    async System.Threading.Tasks.Task<bool> SaveSettingsAsync()
+    {
         soundCommit.Clear(); musicCommit.Clear();
-        bool saved = service.SaveSettings(ReadSettings());
+        bool saved = (await service.SaveSettingsAsync(ReadSettings())).Succeeded;
+        if (!this || !isActiveAndEnabled) return saved;
         settingsStatus.text = saved ? "Settings saved" : service.LastError;
         settingsStatus.color = saved ? settingsInk : TaskUIBuilder.Overdue;
         if (!saved) RefreshSettings(false);
         if (audioPlayer) { audioPlayer.ApplySaved(); if (saved) audioPlayer.PlayPreview(); }
+        return saved;
     }
     void RefreshSettings(bool clearStatus = true)
     {
@@ -351,10 +365,10 @@ public sealed class SettingsPanelUI : MonoBehaviour
         soundCommit.Clear(); musicCommit.Clear(); RefreshVolumeLabels();
         if (!AppPlatform.WindowsDesktop) {
             notifications.interactable = importBackup.interactable = false;
-            exportBackup.interactable = AppPlatform.Browser;
+            exportBackup.interactable = false;
         }
         if (clearStatus) settingsStatus.text = AppPlatform.Browser
-            ? "Progress is saved in this browser. Export a backup before clearing site data. Desktop notifications and backup import require Windows."
+            ? "This is a session-only experience. Install the Windows application to keep your progress."
             : AppPlatform.WindowsDesktop ? "" : AppPlatform.DesktopMessage;
     }
     void OnDataChanged() { if (tagsPage.activeSelf) RefreshTags(); }
@@ -367,7 +381,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         bool selectedDelete = selectedRow && selected == selectedRow.delete.gameObject;
         foreach (var row in rows) if (row) { row.gameObject.SetActive(false); Destroy(row.gameObject); }
         rows.Clear();
-        var snapshot = service.Snapshot;
+        var snapshot = service.TaskSnapshot;
         emptyTags.gameObject.SetActive(snapshot.tags.Count == 0);
         foreach (var tag in snapshot.tags)
         {
@@ -395,7 +409,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     }
     public void EditTag(string id)
     {
-        var tag = service.Snapshot.tags.FirstOrDefault(t => t.id == id);
+        var tag = service.TagCatalog.FirstOrDefault(t => t.id == id);
         editingTagId = tag?.id; selectedColor = TagColors.Normalize(tag?.colorHex);
         tagName.SetTextWithoutNotify(tag?.name ?? "");
         tagEditorTitle.text = tag == null ? "New tag" : "Edit tag";
@@ -409,9 +423,13 @@ public sealed class SettingsPanelUI : MonoBehaviour
         TagColors.Apply(tagPreview, selectedColor, tagTintSprite);
         for (int i = 0; i < colorSelected.Length; i++) colorSelected[i].SetActive(TagColors.Palette[i] == selectedColor);
     }
-    void SaveTag()
+    bool tagPending;
+    async void SaveTag()
     {
-        if (service.SaveTag(editingTagId, tagName.text, selectedColor, out _)) OpenTags();
+        if(tagPending)return;tagPending=true;string id=editingTagId;
+        bool saved;try{saved=(await service.SaveTagAsync(id, tagName.text, selectedColor)).Succeeded;}finally{tagPending=false;}
+        if(!this || !isActiveAndEnabled || editingTagId!=id || !tagEditorPage.activeInHierarchy)return;
+        if (saved) OpenTags();
         else tagError.text = service.LastError;
     }
     static void FitChip(GameObject chip, float maximum)
@@ -424,16 +442,19 @@ public sealed class SettingsPanelUI : MonoBehaviour
     }
     void ConfirmTagDelete(string id)
     {
-        var snapshot = service.Snapshot; var tag = snapshot.tags.FirstOrDefault(t => t.id == id);
+        var snapshot = service.TaskSnapshot; var tag = snapshot.tags.FirstOrDefault(t => t.id == id);
         if (tag == null) { RefreshTags(); return; }
         deletingTagId = id;
         int count = snapshot.tasks.Count(t => t.tagIds.Contains(id));
         confirmMessage.text = "Delete \"" + tag.name + "\"?\n\nThis removes the tag from " + count + (count == 1 ? " task." : " tasks.") + " Your tasks and completion history will stay.";
         Show(confirmPage, "Confirm", cancelDelete.gameObject);
     }
-    void DeleteTag()
+    async void DeleteTag()
     {
-        if (service.DeleteTag(deletingTagId)) { deletingTagId = null; OpenTags(); }
+        if(tagPending)return;tagPending=true;string id=deletingTagId;
+        bool saved;try{saved=(await service.DeleteTagAsync(id)).Succeeded;}finally{tagPending=false;}
+        if(!this || !isActiveAndEnabled || deletingTagId!=id || !confirmPage.activeInHierarchy)return;
+        if (saved) { deletingTagId = null; OpenTags(); }
         else confirmMessage.text = service.LastError;
     }
     public void OpenAccount()

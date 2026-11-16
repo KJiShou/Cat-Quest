@@ -48,9 +48,12 @@ public sealed class JuicyButtonMesh : BaseMeshEffect
     protected override void OnDisable(){ResetRewardPulse();if(label)label.OnPreRenderText-=ModifyText;base.OnDisable();}
     void ModifyText(TMP_TextInfo info)
     {
-        for(int m=0;m<info.meshInfo.Length;m++){
+        // TMP retains unused material buffers when a label becomes shorter or
+        // changes fallback fonts. Only active, allocated vertices can be moved.
+        for(int m=0;m<Mathf.Min(info.materialCount,info.meshInfo.Length);m++){
             var mesh=info.meshInfo[m];
-            for(int i=0;i<mesh.vertexCount;i++)mesh.vertices[i]=TransformPoint(mesh.vertices[i]);
+            if(mesh.vertices==null)continue;
+            for(int i=0;i<Mathf.Min(mesh.vertexCount,mesh.vertices.Length);i++)mesh.vertices[i]=TransformPoint(mesh.vertices[i]);
         }
     }
     Vector3 TransformPoint(Vector3 position)

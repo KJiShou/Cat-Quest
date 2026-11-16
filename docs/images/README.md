@@ -2,25 +2,14 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-These PNGs are fresh, unretouched Unity Game View captures of the current project UI at **1920×1080**, taken on **2026-11-01 (Asia/Kuala_Lumpur)**. They replace the October 31 images and include the Tasks calendar, Todo date groups, default task tab setting and updated button colors/borders.
+The eight PNGs are fresh, unretouched **1920×1080** Unity Game View screenshots taken on **2026-11-16 (Asia/Kuala_Lumpur)** for **v1.4.0**. They replace the November 1 images and show the current authored UI, including the five-column inventory and saved Boss button typography.
 
-The capture uses an isolated synthetic save named **Mochi**, example study/personal tasks and sample progression/equipment. Future Daily entries in the calendar are previews. No personal tasks, live player save or connected account appear in these images. Chat is intentionally shown disconnected.
+The disposable SQLite database was migrated from synthetic JSON: **Mochi**, example study/personal tasks, Lv.10 and demonstration equipment. Chat is disconnected. No real save, credentials or private tasks appear. Future Daily calendar entries are previews.
 
-Source: main revision `23f6d343` plus the working tree at capture time. Concurrent local Companion changes were outside this screenshot update; the native Companion window is not pictured.
+Images: `dashboard.png`, `tasks.png`, `calendar.png`, `focus.png`, `boss.png`, `equipment.png`, `chat.png`, `settings.png` (displaying v1.4.0).
 
-| Published image | Original capture under `Library/ReadmeCapture-20261101/` |
-| --- | --- |
-| `dashboard.png` | `Dashboard.png` |
-| `tasks.png` | `Tasks.png` |
-| `calendar.png` | `Calendar.png` |
-| `focus.png` | `Focus.png` |
-| `boss.png` | `Boss.png` |
-| `equipment.png` | `CatHome.png` |
-| `chat.png` | `Chat.png` |
-| `settings.png` | `Settings.png` |
+The already-open Unity **6000.3.10f1** Editor rendered `Assets/Scenes/CharacterHome.unity` through existing page components. All eight images were visually inspected. The capture did not regenerate UI, save scene/prefab changes or edit image pixels. It restored the previous save/AI environment, Play Mode start scene, Game View selection/custom sizes and pause state.
 
-The capture runs in the already-open Unity **6000.3.10f1** Editor using `Assets/Scenes/CharacterHome.unity`. Page navigation and Settings opening are driven programmatically. These are documentation images, not evidence that all pointer/keyboard interactions, animations, persistence or Windows Companion behavior passed testing.
+Raw PNGs, the synthetic save, capture script and PASS/restoration result remain locally in ignored `Temp/ReadmeReleaseCapture/20261116-093203/`. The temporary script and `.meta` were removed from Assets. Only the curated images and notes are published.
 
-Raw captures, the disposable save and capture/restoration results remain in ignored `Library/ReadmeCapture-20261101/`. The temporary capture script is removed after use. The runner restores the previous save/AI environment, Play Mode start scene, Game View selection/custom sizes and pause state. It does not save authored scenes or prefabs.
-
-Only the eight curated PNGs are published. Earlier verification reports remain historical records and are not superseded by this capture. Screenshots retain the rights of the original project and third-party artwork; see [third-party notices](../../THIRD_PARTY_NOTICES.md).
+Screenshots demonstrate appearance, not complete interaction or native-window verification. See the [verification report](../../SQLITE_VERIFICATION_REPORT.md). Artwork retains its original [third-party rights](../../THIRD_PARTY_NOTICES.md).

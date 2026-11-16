@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Collections;
 using System.IO;
 using System.Linq;
@@ -19,7 +20,7 @@ public static class FocusLayoutVerification
     static double next;
     static RewardScreenshotCapture capture;
     static string questId, tagId;
-    static FileStream saveLock;
+    static IDisposable saveLock;
     static IEnumerator pointerFlow;
     static string FolderNow => SessionState.GetString(Flag + ".folder", Folder);
     static bool Before => SessionState.GetBool(Flag + ".before", false);
@@ -208,69 +209,131 @@ public static class FocusLayoutVerification
                 nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);yield return .2;
                 Check(juicy.DrawScale==Vector2.one&&juicy.DrawOffset==0,"Page close/reopen left feedback pressed");
                 Time.timeScale=oldTimeScale;
-                Click(panel.start); yield return .2;
+                Click(panel.start);var started=Idle();foreach(var delay in SqlitePlayVerificationSupport.Wait(started))yield return delay;yield return .2;
                 var previous=focus.Options.mode;Click(panel.stopwatchMode);
                 Check(focus.Phase==FocusPhase.Focusing&&focus.Options.mode==previous&&!panel.stopwatchMode.interactable,"Disabled mode accepted mouse input");
-                focus.Cancel();yield return .2;
+                var cancelled=focus.CancelAsync();foreach(var delay in SqlitePlayVerificationSupport.Wait(cancelled))yield return delay;Check(cancelled.GetAwaiter().GetResult(),"Cancel failed");yield return .2;
                 File.AppendAllText(FolderNow+"/interactions.txt",$"PASS {size.x}x{size.y}: topmost raycasts, modes, tags, slider, hover/press/release, stable hit area, unscaled spring, rapid input, disabled/page/focus reset. Pointer events dispatched through EventSystem; OS hardware mouse not driven.\n");
             }
         }
         finally { Time.timeScale=oldTimeScale; }
     }
-    static void Tick()
+    static bool tickBusy;
+    static async Task<T> Await<T>(Task<T> task) { if(await Task.WhenAny(task,Task.Delay(10000))!=task)throw new TimeoutException("Focus verification operation timeout");return await task; }
+    static async Task<T> Command<T>(Task<OperationResult<T>> task) { var result=await Await(task);Check(result.Succeeded,result.Message);return result.Value; }
+    static async Task Idle() { var deadline=DateTime.UtcNow.AddSeconds(10);while(FocusRunner.EnsureInstance().Controller.OperationPending){if(DateTime.UtcNow>deadline)throw new TimeoutException("Focus pending timeout");await Task.Delay(20);} }
+    static async void Tick()
+    {
+        if(tickBusy)return;tickBusy=true;
+        try { await Command(GameDataManager.EnsureInstance().Ready);await TickAsync(); }
+        catch(Exception e){File.WriteAllText(FolderNow+"/result.txt","FAIL: "+e);EditorApplication.isPlaying=false;}
+        finally{tickBusy=false;}
+    }
+    static async Task TickAsync()
     {
         var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         var panel = nav.pages[2].GetComponent<FocusPanelUI>();
-        var service = GameDataManager.Instance.Tasks;
+        var service = GameDataManager.Instance.Service;
         var focus = FocusRunner.EnsureInstance().Controller;
         Check(GameDataManager.Instance.SavePath.Contains("FocusLayoutVerification"), "Verification must use isolated save");
+        if(step==0) {
+            await Command(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=100;data.tutorial.dismissed=true;data.tutorial.announcedLevel=99;}));
+            Check(service.RewardLevel==2&&service.CanAccess(ProgressionFeature.Focus),"Explicit Lv.2 fixture must unlock Focus");
+        }
+
         if (SessionState.GetBool(Flag+".noticeOnly", false))
         {
             if (step == 0)
             {
                 UnityEngine.Object.FindFirstObjectByType<TutorialController>().Skip();
-                var player = GameDataManager.Instance.PlayerData;
+                await Command(SqlitePlayVerificationSupport.FixtureAsync(player=>{
                 player.experience = 100;
                 var today = service.TodayRewards;
                 player.rewardDays.RemoveAll(day => day.day == today.day);
-                today.focusMinutes = service.FocusDailyMinuteLimit;
-                today.focusTickets = TaskService.FocusTicketCap;
+                today.focusMinutes = 0;
+                today.focusTickets = 0;
                 player.rewardDays.Add(today);
-                GameDataManager.Instance.SaveData();
+                }));
                 Check(nav.ShowPage(MainMenuPage.Focus), "Cannot open unlocked Focus page");
                 panel.pomodoroMode.isOn = true;
             }
             if (step == 1 || step == 6)
             {
-                Click(panel.start);
+                Click(panel.start);await Idle();
                 Check(focus.Phase == FocusPhase.Focusing, "Start Focus did not begin a session");
             }
             if (step == 2 || step == 7)
             {
-                Click(panel.cancel); Click(panel.cancelConfirmation.confirm);
-                Check(focus.Phase == FocusPhase.Interrupted && panel.allowanceNotice.activeInHierarchy,
-                    "Cancelled session should display its notice");
+                if(!panel.cancelConfirmation.IsOpen)
+                {
+                for(int i=0;i<305;i++)focus.Advance(1);
+                Check(panel.endEarly.gameObject.activeInHierarchy && !panel.cancel.gameObject.activeInHierarchy,"Pomodoro must expose the earned-time action");
+                Click(panel.endEarly);
+                Check(panel.cancelConfirmation.heading.text=="End Focus?" && panel.cancelConfirmation.rewardPreview.activeSelf,"Pomodoro must preview earned rewards");
+                next=EditorApplication.timeSinceStartup+.5;return;
+                }
+                int beforeMinutes=service.TodayRewards.focusMinutes;
+                Click(panel.cancelConfirmation.confirm);await Idle();
+                Check(focus.Phase == FocusPhase.Resting && panel.allowanceNotice.activeInHierarchy
+                    && focus.LastResult.eligibleMinutes==5 && service.TodayRewards.focusMinutes==beforeMinutes+5,
+                    "Pomodoro End Early did not save elapsed minutes before Rest");
+                var receipt=(await Await(SqlitePlayVerificationSupport.ReloadAsync())).focusSessions.Last();
+                Check(receipt.eligibleMinutes==5 && receipt.status==FocusSessionStatus.EndedEarly,"Earned Pomodoro time did not survive reload");
+                panel.cancelConfirmation.Confirm();await Idle();
+                Check(service.TodayRewards.focusMinutes==beforeMinutes+5,"Duplicate confirm credited time twice");
             }
             if (step == 3 || step == 8)
             {
                 Check(panel.start.GetComponentInChildren<TMPro.TMP_Text>().color == TaskUIBuilder.Ink,
                     "Start Focus label color was overridden");
-                Capture("cancel-notice-" + (step == 3 ? "1920" : "1280"));
+                Capture("early-notice-" + (step == 3 ? "1920" : "1280"));
             }
             if (step == 4 || step == 9)
             {
-                Check(!panel.allowanceNotice.activeSelf, "Cancelled session notice did not expire");
+                Check(!panel.allowanceNotice.activeSelf, "Saved session notice did not expire");
                 nav.ShowPage(MainMenuPage.Dashboard);
                 nav.ShowPage(MainMenuPage.Focus);
                 Check(!panel.allowanceNotice.activeSelf, "Reopening Focus replayed the expired notice");
-                Capture("cancel-expired-" + (step == 4 ? "1920" : "1280"));
+                Capture("early-expired-" + (step == 4 ? "1920" : "1280"));
             }
-            if (step == 5) Resolution(1280,720);
+            if (step == 5) { focus.EndRest(); Resolution(1280,720); }
             if (step == 10)
             {
-                File.WriteAllText(FolderNow+"/result.txt", "PASS: Pomodoro cancellation, button ink, notice expiry and page reopen at both sizes.");
-                EditorApplication.isPlaying = false;
-                return;
+                focus.EndRest();
+                for(int i=0;i<20;i++)await Command(service.SaveTagAsync(null,"Long focus tag "+i));
+            }
+            if(step>=11 && step<=26)
+            {
+                int sample=(step-11)/2;
+                var sizes=new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)};
+                var size=sizes[sample/2];
+                if(step%2==1)
+                {
+                    Resolution(size.x,size.y);
+                    var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
+                    ((Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar)).isOn=sample%2==1;
+                    if(!panel.questPopup.gameObject.activeSelf)panel.questDropdown.onClick.Invoke();
+                }
+                else
+                {
+                    var insight=panel.transform.Find("FocusStatistics/OpenStatistics").GetComponent<Button>();
+                    var insightBounds=RectTransformUtility.CalculateRelativeRectTransformBounds(panel.transform,insight.transform);
+                    // Bounds of the popup's own rect, excluding its intentionally clipped scrolling contents.
+                    var corners=new Vector3[4];panel.questPopup.GetWorldCorners(corners);
+                    float bottom=corners.Min(c=>panel.transform.InverseTransformPoint(c).y);
+                    Check(bottom>insightBounds.max.y+4,"Focus tag popup overlaps Insights");
+                    Hit(insight,Pointer(insight,new Vector2(.5f,.5f)));
+                    var scroll=panel.questList.GetComponentInParent<ScrollRect>();
+                    Check(scroll.content.rect.height>scroll.viewport.rect.height,"Long tags should scroll");
+                    Capture("long-tags-"+size.x+"x"+size.y+(sample%2==1?"-expanded":"-collapsed"));
+                }
+            }
+            if(step==27)
+            {
+                panel.questList.GetComponentsInChildren<Button>().Last().onClick.Invoke();
+                Check(!panel.questPopup.gameObject.activeSelf && focus.Options.tagIds.Count==1,"Long tag list selection did not dismiss");
+                File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: Pomodoro visible End Early, earned minutes, persisted receipt, duplicate confirmation, Rest, notice expiry; scrolling tags and Insights raycasts at four sizes and both sidebar states.");
+                EditorApplication.isPlaying=false;return;
             }
             step++;
             next = EditorApplication.timeSinceStartup + (step == 4 || step == 9 ? 5 : .4);
@@ -324,12 +387,12 @@ public static class FocusLayoutVerification
             var preview = panel.GetComponentInChildren<FocusScenePreview>();
             Check(preview.transform.IsChildOf(panel.transform.Find("background")), "Scene must be inside Focus background");
             Check(preview.GetComponent<RectTransform>().anchorMin == Vector2.zero && preview.GetComponent<RectTransform>().anchorMax == Vector2.one, "Scene does not fill frame");
-            Check(service.Upsert(new QuestTask { title = "Read chapter", daily = false }, null, out questId), service.LastError);
-            Check(service.Upsert(new QuestTask { title = "Practice piano", daily = false }, null, out _), service.LastError);
-            Check(service.SaveTag(null, "Reading", out tagId), service.LastError);
+            questId=await Command(service.UpsertAsync(new QuestTask { title = "Read chapter", daily = false }, null));
+            await Command(service.UpsertAsync(new QuestTask { title = "Practice piano", daily = false }, null));
+            tagId=await Command(service.SaveTagAsync(null,"Reading"));
             panel.focusDuration.value = 37; panel.restDuration.value = 7;
             Check(focus.Options.focusMinutes == 37 && focus.Options.restMinutes == 7, "Sliders not bound");
-            Check(panel.rewards.text == "37" && panel.fishReward.text == "14" && panel.ticketReward.text == "1", "Reward numbers incorrect");
+            Check(panel.rewards.text == "20" && panel.fishReward.text == "7" && panel.ticketReward.text == "1", "Reward numbers incorrect");
             Capture("focus-ready-1920");
         }
         if (step == 2) {
@@ -353,13 +416,13 @@ public static class FocusLayoutVerification
             panel.questList.GetComponentsInChildren<Button>().Single(b => b.name != "NoTags").onClick.Invoke();
             Check(focus.Options.tagIds.Count == 1, "Repeated tag selection duplicated tag");
             Check(!panel.questPopup.gameObject.activeSelf && panel.questSearch.text == "", "Dropdown dismissal failed");
-            panel.start.onClick.Invoke();
+            panel.start.onClick.Invoke();await Idle();
             Check(focus.Phase == FocusPhase.Focusing && !panel.questSearch.interactable && !panel.restDuration.interactable, "Session settings not locked");
             Capture("focus-running-1920");
         }
         if (step == 5) {
-            for (int i=0; i<focus.FocusSeconds && focus.Phase==FocusPhase.Focusing; i++) focus.Advance(1);
-            Check(focus.Phase == FocusPhase.Resting && focus.RestSeconds == 420 && panel.rewards.text == "37", "Rest/rewards changed");
+            for (int i=0; i<focus.FocusSeconds && focus.Phase==FocusPhase.Focusing; i++) focus.Advance(1);await Idle();
+            Check(focus.Phase == FocusPhase.Resting && focus.RestSeconds == 420 && panel.rewards.text == "20" && focus.LastResult.rewardLevel==2 && focus.LastResult.experience==20 && focus.LastResult.fishCoins==7 && focus.LastResult.tickets==1 && service.TodayRewards.focusMinutes==37, "Rest/rewards changed");
             Capture("focus-rest-1920");
         }
         if (step == 6) {
@@ -369,9 +432,9 @@ public static class FocusLayoutVerification
         if (step == 7) { panel.questDropdown.onClick.Invoke(); Capture("focus-tags-1280"); }
         if (step == 8) { panel.questList.GetComponentsInChildren<Button>().Single(b => b.name == "NoTags").onClick.Invoke(); Check(focus.Options.tagIds.Count == 0 && !panel.questPopup.gameObject.activeSelf, "No tags did not clear selection"); }
         if(step==8){panel.stopwatchMode.isOn=true;Check(focus.CountsUp && !panel.focusDurationCard.activeSelf && !panel.restDurationCard.activeSelf && panel.rewards.text=="0","Stopwatch settings incorrect");Capture("stopwatch-ready-1280");}
-        if(step==9){panel.start.onClick.Invoke();for(int i=0;i<14400;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Focusing && panel.stopwatchMode.interactable==false,"Stopwatch limit/lock wrong");}
+        if(step==9){panel.start.onClick.Invoke();await Idle();for(int i=0;i<14400;i++)focus.Advance(1);await Idle();Check(focus.Phase==FocusPhase.Focusing && panel.stopwatchMode.interactable==false,"Stopwatch limit/lock wrong");}
         if(step==10)Capture("stopwatch-four-hours-1280");
-        if(step==11){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();Check(focus.Phase==FocusPhase.Finished && focus.LastResult.experience==180,"Stopwatch saved incorrectly");Capture("stopwatch-saved-1280");}
+        if(step==11){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();Check(focus.Phase==FocusPhase.Finished && focus.LastResult.rewardLevel==2 && focus.LastResult.rewardedMinutes==180 && focus.LastResult.experience==99 && focus.LastResult.fishCoins==39 && focus.LastResult.tickets==2 && service.TodayRewards.focusMinutes==217 && service.Experience==219,"Stopwatch saved incorrectly");Capture("stopwatch-saved-1280");}
         if(step==12){
             Check(!panel.allowance.text.Contains("Focus saved."), "Saved notice did not expire while timer was stopped");
             nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);
@@ -381,22 +444,23 @@ public static class FocusLayoutVerification
         }
         if(step==13){panel.countdownMode.isOn=true;panel.focusDuration.value=180;Check(focus.Options.focusMinutes==180 && !panel.restDurationCard.activeSelf,"Countdown settings incorrect");Resolution(1920,1080);}
         if(step==14)Capture("countdown-ready-1920");
-        if(step==15){panel.start.onClick.Invoke();for(int i=0;i<10800;i++)focus.Advance(1);Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==360,"Mixed mode cap incorrect");Capture("countdown-saved-1920");}
+        if(step==15){panel.start.onClick.Invoke();await Idle();for(int i=0;i<10800;i++)focus.Advance(1);await Idle();Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==240 && focus.LastResult.rewardLevel==2 && focus.LastResult.rewardedMinutes==23 && focus.LastResult.experience==12 && focus.LastResult.fishCoins==4 && focus.LastResult.tickets==0 && service.Experience==231 && service.RewardLevel==3,"Mixed mode cap or frozen starting level incorrect");Capture("countdown-saved-1920");}
         if(step==16){
-            Check(!panel.allowanceNotice.activeSelf && panel.rewardAllowanceBar.value == 360, "Capped session notice did not expire or cap progress disappeared");
+            if (DismissLevelUps(panel)) return;
+            Check(!panel.allowanceNotice.activeSelf && panel.rewardAllowanceBar.value == 240, "Capped session notice did not expire or cap progress disappeared");
             Capture("saved-notice-expired-1920");
         }
-        if(step==17){panel.stopwatchMode.isOn=true;panel.start.onClick.Invoke();for(int i=0;i<3600;i++)focus.Advance(1);}
+        if(step==17){panel.stopwatchMode.isOn=true;panel.start.onClick.Invoke();await Idle();for(int i=0;i<3600;i++)focus.Advance(1);}
         if(step==18)Capture("stopwatch-capped-1920");
-        if(step==19){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==360,"Capped End Focus changed allowance");}
+        if(step==19){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==240 && focus.LastResult.experience==0 && focus.LastResult.fishCoins==0 && focus.LastResult.tickets==0,"Capped End Focus changed allowance");}
         if(step==20){
             Check(!panel.allowanceNotice.activeSelf, "Interrupted notice did not expire");
-            panel.start.onClick.Invoke();for(int i=0;i<300;i++)focus.Advance(1);
-            saveLock=File.Open(GameDataManager.Instance.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
-            panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();Check(focus.Phase==FocusPhase.Saving,"Locked save did not enter retry state");
+            panel.start.onClick.Invoke();await Idle();for(int i=0;i<300;i++)focus.Advance(1);
+            saveLock=TaskCalendarPlayVerification.FailSqliteWrites();
+            panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();Check(focus.Phase==FocusPhase.Saving,"Locked save did not enter retry state");
         }
         if(step==21){Check(panel.allowance.gameObject.activeInHierarchy && panel.allowance.text.Contains("Retry") && panel.retry.gameObject.activeInHierarchy,"Save error/retry not visible");Capture("save-failure-1920");}
-        if(step==22){saveLock.Dispose();saveLock=null;panel.retry.onClick.Invoke();Check(focus.Phase==FocusPhase.Finished,"Retry did not finish");}
+        if(step==22){saveLock.Dispose();saveLock=null;panel.retry.onClick.Invoke();await Idle();Check(focus.Phase==FocusPhase.Finished,"Retry did not finish");}
         if(step==23)Capture("save-retried-1920");
         if(step==24){
             if (DismissLevelUps(panel)) return;
@@ -441,8 +505,8 @@ public static class FocusLayoutVerification
             if(step==38){ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerUpHandler);ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerClickHandler);Check(focus.Options.mode==FocusTimerMode.Countdown,"Mode card click did not select countdown");}
             if(step==39){ExecuteEvents.Execute(target,pointer,ExecuteEvents.pointerExitHandler);EventSystem.current.SetSelectedGameObject(null);}
             if(step==40){for(int i=0;i<12;i++){Click(panel.pomodoroMode);Click(mode);}Check(mode.isOn&&!panel.pomodoroMode.isOn&&!panel.stopwatchMode.isOn,"Rapid input broke exclusive mode selection");}
-            if(step==41){Click(panel.start);Click(panel.pomodoroMode);Check(focus.Options.mode==FocusTimerMode.Countdown&&!mode.interactable,"Locked mode changed");}
-            if(step==42){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);}
+            if(step==41){Click(panel.start);await Idle();Click(panel.pomodoroMode);Check(focus.Options.mode==FocusTimerMode.Countdown&&!mode.interactable,"Locked mode changed");}
+            if(step==42){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);}
             if(step==43){
                 Check(mode.isOn&&mode.interactable,"Mode did not survive page reopen");
                 foreach(var choice in new[]{panel.pomodoroMode,panel.stopwatchMode,panel.countdownMode}){
@@ -454,12 +518,12 @@ public static class FocusLayoutVerification
         }
         if (step == 44) {
             // Only this runner's isolated save: exercise late-game preview and larger allowance text.
-            if(!service.Snapshot.tasks.Any(t=>t.id==questId))
-                Check(service.Upsert(new QuestTask {title="Read chapter"},null,out questId),service.LastError);
-            var data=GameDataManager.Instance.PlayerData;
+            if(!service.TaskSnapshot.tasks.Any(t=>t.id==questId))
+                questId=await Command(service.UpsertAsync(new QuestTask {title="Read chapter"},null));
+            await Command(SqlitePlayVerificationSupport.FixtureAsync(data=>{
             data.experience=13050;
             foreach(var day in data.rewardDays) { day.focusMinutes=0; day.focusTickets=0; }
-            GameDataManager.Instance.SaveData();
+            }));
             // The fixture bypasses domain events; resync the existing HUD before capturing it.
             foreach(var feedback in UnityEngine.Object.FindObjectsByType<RewardFlightUI>(FindObjectsSortMode.None)) {
                 feedback.enabled=false; feedback.enabled=true;
@@ -467,12 +531,12 @@ public static class FocusLayoutVerification
             focus.Configure(new FocusSessionOptions()); nav.ShowPage(MainMenuPage.Focus); Resolution(1920,1080);
         }
         if(step==45) {
-            Check(panel.rewards.text=="97" && panel.fishReward.text=="39" && panel.ticketReward.text=="1", "Late-game reward preview");
-            Check(panel.rewardAllowanceBar.maxValue==360 && panel.rewardAllowanceLabel.text.Contains("360")
+            Check(panel.rewards.text=="48" && panel.fishReward.text=="19" && panel.ticketReward.text=="1", "Late-game reward preview");
+            Check(panel.rewardAllowanceBar.maxValue==240 && panel.rewardAllowanceLabel.text.Contains("240")
                 && !panel.allowanceNotice.activeSelf, "Late-game allowance progress without repeated rules");
             var target=nav.GetComponentsInChildren<RewardLimitHoverTarget>(true).Single(t=>t.kind==RewardLimitKind.Experience);
             target.tooltip.Show(target);
-            Check(target.tooltip.note.text.Contains("702") && target.tooltip.focusRewards.text.Contains("1404"), "Late-game session/daily caps remain available in the EXP tooltip");
+            Check(target.tooltip.note.text.Contains("351") && target.tooltip.focusRewards.text.Contains("468"), "Late-game session/daily caps remain available in the EXP tooltip");
             target.tooltip.Hide(target);
             Capture("level30-ready-1920");
         }
@@ -483,8 +547,8 @@ public static class FocusLayoutVerification
             Capture("level30-ready-1280");
         }
         if(step==48) {
-            panel.focusDuration.value=10;panel.start.onClick.Invoke(); for(int i=0;i<600;i++)focus.Advance(1);
-            Check(focus.Phase==FocusPhase.Resting && panel.rewards.text=="39" && panel.fishReward.text=="15", "Late-game completed Pomodoro UI settlement");
+            panel.focusDuration.value=10;panel.start.onClick.Invoke();await Idle(); for(int i=0;i<600;i++)focus.Advance(1);await Idle();
+            Check(focus.Phase==FocusPhase.Resting && panel.rewards.text=="19" && panel.fishReward.text=="7" && focus.LastResult.rewardLevel==30, "Late-game completed Pomodoro UI settlement");
             Capture("level30-completed-1280");
         }
         if (step == 49) {
@@ -503,11 +567,12 @@ public static class FocusLayoutVerification
             var body=owner.detailsRoot.Find("ScrollRect/Content/Rewards/RewardsItem");
             var xp=body.Find("EXP/Text (TMP)").GetComponent<TMPro.TMP_Text>();
             var fish=body.Find("FishCoins/Text (TMP)").GetComponent<TMPro.TMP_Text>();
-            Check(xp.text=="78" && fish.text=="39" && !xp.isTextOverflowing && !fish.isTextOverflowing,
+            // Medium task at Lv.30: floor(25 * 39 / 10)=97 EXP, 39 Fish.
+            Check(xp.text=="97" && fish.text=="39" && !xp.isTextOverflowing && !fish.isTextOverflowing,
                 "Level-30 task preview or clipping: EXP="+xp.text+" overflow="+xp.isTextOverflowing+" Fish="+fish.text+" overflow="+fish.isTextOverflowing+" active="+owner.detailsRoot.gameObject.activeInHierarchy);
             var row=owner.listContent.Find("Task_"+owner.SelectedKey);
             Check(row && row.Find("FishNum").GetComponent<TMPro.TMP_Text>().text=="39"
-                && row.Find("FishNum (1)").GetComponent<TMPro.TMP_Text>().text=="78", "Task row and detail rewards differ");
+                && row.Find("FishNum (1)").GetComponent<TMPro.TMP_Text>().text=="97", "Task row and detail rewards differ");
         }
         if(step==52)Resolution(1920,1080);
         if (step == 54 && !SessionState.GetBool(Flag+".lateOnly",false))

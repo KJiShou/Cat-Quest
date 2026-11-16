@@ -107,25 +107,31 @@ public static class FocusStatisticsVerification
         Check(hits.Count>0&&ExecuteEvents.GetEventHandler<IPointerClickHandler>(hits[0].gameObject)==button.gameObject,"Blocked statistics button "+button.name+": "+string.Join(",",hits.Select(h=>h.gameObject.name)));
         ExecuteEvents.Execute(button.gameObject,p,ExecuteEvents.pointerDownHandler);ExecuteEvents.Execute(button.gameObject,p,ExecuteEvents.pointerUpHandler);ExecuteEvents.Execute(button.gameObject,p,ExecuteEvents.pointerClickHandler);ExecuteEvents.Execute(button.gameObject,p,ExecuteEvents.pointerExitHandler);
     }
+    static IEnumerable<double> QueryReady(FocusStatisticsUI ui)
+    {
+        var deadline=DateTime.UtcNow.AddSeconds(10);
+        while(ui.Data==null||ui.detail.text=="Loading...") { if(DateTime.UtcNow>deadline)throw new TimeoutException("Statistics query did not complete.");yield return .02; }
+        Check(ui.Data.start==FocusStatistics.Start(ui.Date,ui.Period),"Statistics response belongs to stale date or period");
+    }
     static IEnumerator Run()
     {
-        var manager=GameDataManager.EnsureInstance();Check(manager.SavePath.Contains("FocusStatisticsVerification"),"Isolated save required");
+        var manager=GameDataManager.EnsureInstance();foreach(var wait in TaskCalendarPlayVerification.Await(manager.Ready))yield return wait;Check(manager.SavePath.Contains("FocusStatisticsVerification"),"Isolated save required");
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();nav.ShowPage(MainMenuPage.Focus);yield return .5;
         var ui=nav.pages[2].GetComponentInChildren<FocusStatisticsUI>(true);Check(ui,"Statistics prefab missing");
         var focus=nav.pages[2].GetComponent<FocusPanelUI>();
-        var data=manager.PlayerData;data.tags=new List<QuestTag>{new QuestTag{id="study",name="Study",colorHex="#3D5FC3"},new QuestTag{id="project",name="Final year project",colorHex="#3D5FC3"},new QuestTag{id="reading",name="Reading",colorHex="#3D5FC3"}};data.focusSessions.Clear();
-        var now=manager.Tasks.LocalNow.Date;
+        var fixture=SqlitePlayVerificationSupport.FixtureAsync(data=>{data.tags=new List<QuestTag>{new QuestTag{id="study",name="Study",colorHex="#3D5FC3"},new QuestTag{id="project",name="Final year project",colorHex="#3D5FC3"},new QuestTag{id="reading",name="Reading",colorHex="#3D5FC3"}};data.focusSessions.Clear();
+        var now=manager.Service.LocalNow.Date;
         for(int d=0;d<35;d++)for(int tag=0;tag<3;tag++){
             var end=now.AddDays(-d).AddHours(8+tag*3).ToUniversalTime();var receipt=Receipt("fixture-"+d+"-"+tag,end,(20+(d*7+tag*13)%85)*60,data.tags[tag].id);receipt.tagNames=new List<string>{data.tags[tag].name};data.focusSessions.Add(receipt);}
         for(int month=1;month<12;month++)data.focusSessions.Add(Receipt("month-"+month,now.AddMonths(-month).AddHours(12).ToUniversalTime(),(month+2)*3600,"project"));
-        manager.SaveData();
+        });foreach(var wait in TaskCalendarPlayVerification.Await(fixture))yield return wait;
         Check(File.Exists(manager.SavePath),"Fixture persistence failed");
         foreach(int width in new[]{1920,1280,1024,2560})
         {
             int height=width==1280?720:width==1024?768:1080;
             Resolution(width,height);yield return .5;
             Capture("focus-entry-"+width);yield return .1;
-            Click(ui.open);yield return .3;Check(ui.panel.activeSelf,"Statistics not open");
+            Click(ui.open);yield return .3;foreach(var wait in QueryReady(ui))yield return wait;Check(ui.panel.activeSelf,"Statistics not open");
             Check(EventSystem.current.currentSelectedGameObject==null,"Opening insights selected a control without keyboard navigation");
             var closeHint=ui.close.GetComponent<ControlHint>();
             Check(!closeHint.hint.activeSelf,"Close hint appeared without pointer hover or keyboard navigation");
@@ -137,16 +143,36 @@ public static class FocusStatisticsVerification
                 Check(EventSystem.current.currentSelectedGameObject==ui.close.gameObject&&closeHint.hint.activeSelf,"Tab did not start keyboard navigation with a visible Close hint");
                 InputSystem.QueueStateEvent(testKeyboard,new KeyboardState());yield return .1;
             } finally { InputSystem.RemoveDevice(testKeyboard);if(priorKeyboard!=null&&priorKeyboard.added)priorKeyboard.MakeCurrent(); }
-            ui.Hide();ui.Show();yield return .2;
+            ui.Hide();ui.Show();yield return .2;foreach(var wait in QueryReady(ui))yield return wait;
             Check(EventSystem.current.currentSelectedGameObject==null&&!closeHint.hint.activeSelf,"Reopening retained Close focus or hint");
             Check(!ui.panel.transform.Find("Card/AboutData") && !ui.panel.transform.Find("Card/Note"), "Removed explanation UI still exists");
             foreach(FocusStatisticsPeriod period in Enum.GetValues(typeof(FocusStatisticsPeriod)))
             {
-                Click(ui.periods[(int)period]);yield return .2;
+                Click(ui.periods[(int)period]);yield return .2;foreach(var wait in QueryReady(ui))yield return wait;
                 Check(ui.Period==period&&ui.Data.seconds>0&&!ui.next.interactable,"Period / future navigation");
                 Check(!ui.range.isTextOverflowing&&!ui.total.isTextOverflowing,"Statistics text clipped");
                 Check(ui.graph.SeriesCount==ui.Data.tags.Count&&ui.graph.SeriesCount==3,"All tags not shown together by default");
                 Check(ui.sessionCount.text==ui.Data.sessions.ToString(CultureInfo.InvariantCulture),"Session metric does not match committed data");
+                if(width==1920&&period==FocusStatisticsPeriod.Week) {
+                    var service=manager.Service;var savedSettings=service.Settings;var savedAccount=service.AccountSettings;
+                    var shown=ui.Data;var rows=ui.tagContent.GetComponentsInChildren<Transform>().Select(t=>t.GetInstanceID()).ToArray();
+                    var selected=ui.SelectedTag;var scroll=ui.tagContent.GetComponentInParent<ScrollRect>();var offset=scroll?scroll.content.anchoredPosition:Vector2.zero;
+                    var altered=service.Settings;altered.musicVolume=altered.musicVolume>.5f?.25f:.75f;
+                    foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(altered)))yield return wait;
+                    var account=service.AccountSettings;account.playerName="Scoped stats test";
+                    foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveAccountSettingsAsync(account)))yield return wait;
+                    yield return .4;
+                    Check(ReferenceEquals(shown,ui.Data)&&rows.SequenceEqual(ui.tagContent.GetComponentsInChildren<Transform>().Select(t=>t.GetInstanceID())),"Unrelated settings/account writes replaced visible statistics or legend");
+                    Check(ui.SelectedTag==selected&&(!scroll||Vector2.Distance(offset,scroll.content.anchoredPosition)<.1f),"Unrelated write lost statistics selection/scroll");
+                    foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveTagAsync("study","Scoped study","#3D5FC3")))yield return wait;
+                    foreach(var wait in QueryReady(ui))yield return wait;
+                    Check(!ReferenceEquals(shown,ui.Data)&&ui.Data.tags.Single(t=>t.id=="study").name=="Scoped study","Relevant tag rename did not refresh rendered statistics");
+                    foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveTagAsync("study","Study","#3D5FC3")))yield return wait;
+                    foreach(var wait in QueryReady(ui))yield return wait;
+                    foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(savedSettings)))yield return wait;
+                    foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveAccountSettingsAsync(savedAccount)))yield return wait;
+                }
+
                 foreach(var tagRow in ui.tagContent.GetComponentsInChildren<Button>()) {
                     var series=ui.Data.tags.Single(t=>t.id==tagRow.name);
                     Check(tagRow.transform.Find("Duration").GetComponent<TMPro.TMP_Text>().text==FocusStatistics.Duration(series.seconds),"Tag duration missing");
@@ -194,7 +220,7 @@ public static class FocusStatisticsVerification
             Check(ui.SelectedTag==row.name&&ui.chartTitle.text==ui.Data.tags.Single(t=>t.id==row.name).name,"Tag filter not applied");
             ui.graph.OnPointerMove(Pointer(ui.graph.transform));Check(ui.detail.text.Contains(" / "),"Graph hover missing");Capture("tag-filter-"+width);yield return .1;
             var currentTodayColor=ui.today.targetGraphic.color;
-            Click(ui.previous);yield return .1;
+            Click(ui.previous);yield return .1;foreach(var wait in QueryReady(ui))yield return wait;
             Check(ui.next.interactable,"Previous period cannot advance");
             Check(ui.today.targetGraphic.color!=currentTodayColor,"Today must change to its inactive colour outside the current period");
             Capture("today-away-"+width);yield return .1;
@@ -218,8 +244,8 @@ public static class FocusStatisticsVerification
             Check(todayFeedback.DrawScale.y<1,"Today press missing");
             todayFeedback.OnPointerUp(todayPointer);todayFeedback.OnPointerExit(todayPointer);EventSystem.current.SetSelectedGameObject(null);yield return .7;
             Check(todayRect.anchoredPosition==todayPosition && Vector2.Distance(todayFeedback.DrawScale,Vector2.one)<.02f,"Today feedback did not settle");
-            ui.today.OnSubmit(new BaseEventData(EventSystem.current));yield return .1;
-            Check(ui.Date==manager.Tasks.LocalNow.Date && ui.today.targetGraphic.color==currentTodayColor,"Today must restore the date and selected colour");
+            ui.today.OnSubmit(new BaseEventData(EventSystem.current));yield return .1;foreach(var wait in QueryReady(ui))yield return wait;
+            Check(ui.Date==manager.Service.LocalNow.Date && ui.today.targetGraphic.color==currentTodayColor,"Today must restore the date and selected colour");
             ui.allTags.OnSubmit(new BaseEventData(EventSystem.current));Check(ui.SelectedTag==null&&ui.graph.SeriesCount==3,"Keyboard All focus did not restore all series");
             Click(ui.close);yield return .1;Check(!ui.panel.activeSelf,"Back did not close");
             var juicy=ui.open.GetComponent<JuicyButton>();Check(juicy,"Missing shared feedback");var pointer=Pointer(ui.open.transform);var rect=(RectTransform)ui.open.transform;var pos=rect.anchoredPosition;
@@ -231,17 +257,17 @@ public static class FocusStatisticsVerification
             Click(ui.open);nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);yield return .2;Check(!ui.panel.activeSelf,"Page reopen left statistics overlay active");
         }
         Resolution(1280,720);yield return .5;
-        var legacy=manager.PlayerData.focusSessions.First();legacy.tagIds.Add("reading");legacy.tagNames.Add("Reading");manager.SaveData();
-        Click(ui.open);yield return .2;
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{var legacy=data.focusSessions.First();legacy.tagIds.Add("reading");legacy.tagNames.Add("Reading");})))yield return wait;
+        Click(ui.open);yield return .2;foreach(var wait in QueryReady(ui))yield return wait;
         Check(ui.Data.legacyMultipleTags && !ui.panel.transform.Find("Card/Note"),"Legacy receipts should remain supported without the removed explanation");
         Capture("legacy-1280");yield return .1;Click(ui.close);
-        manager.PlayerData.tags.First(t=>t.id=="project").name="Research / literature review and dissertation preparation";manager.SaveData();
-        Click(ui.open);yield return .2;
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>data.tags.First(t=>t.id=="project").name="Research / literature review and dissertation preparation")))yield return wait;
+        Click(ui.open);yield return .2;foreach(var wait in QueryReady(ui))yield return wait;
         var longRow=ui.tagContent.GetComponentsInChildren<Button>().Single(b=>b.name=="project");Click(longRow);yield return .2;
-        Check(ui.chartTitle.text==manager.PlayerData.tags.First(t=>t.id=="project").name,"Long tag name lost");
+        Check(ui.chartTitle.text==manager.Service.TagCatalog.First(t=>t.id=="project").name,"Long tag name lost");
         Check(longRow.transform.Find("Text").GetComponent<TMPro.TMP_Text>().overflowMode==TMPro.TextOverflowModes.Ellipsis,"Long tag must not wrap into its duration");
         Capture("long-tag-1280");yield return .1;Click(ui.close);
-        manager.PlayerData.focusSessions.Clear();manager.SaveData();Click(ui.open);yield return .2;Check(ui.Data.seconds==0&&ui.empty.gameObject.activeSelf,"Empty state missing");Capture("empty-1280");yield return .1;
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>data.focusSessions.Clear())))yield return wait;Click(ui.open);yield return .2;foreach(var wait in QueryReady(ui))yield return wait;Check(ui.Data.seconds==0&&ui.empty.gameObject.activeSelf,"Empty state missing");Capture("empty-1280");yield return .1;
         var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_Component_Buttons/Btn_MenuButton_Rectangle01-Group.prefab");
         var reference=UnityEngine.Object.Instantiate(source.transform.Find("Btn_MenuButton_Rectangle01_Light").gameObject,ui.panel.transform);
         var referenceRect=(RectTransform)reference.transform;referenceRect.anchorMin=referenceRect.anchorMax=new Vector2(.55f,.65f);referenceRect.anchoredPosition=Vector2.zero;referenceRect.localScale=Vector3.one*.5f;

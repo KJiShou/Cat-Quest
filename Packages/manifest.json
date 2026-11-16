@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.gilzoide.sqlite-net": "https://github.com/gilzoide/unity-sqlite-net.git#34340bf93526b5143ac404f13cb5c4fefabaa461",
     "com.unity.2d.animation": "13.0.4",
     "com.unity.2d.aseprite": "3.0.1",
     "com.unity.2d.pixel-perfect": "5.1.1",

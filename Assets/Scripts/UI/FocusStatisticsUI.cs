@@ -23,15 +23,16 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     public DateTime Date { get; private set; }
     public FocusStatistics.Result Data { get; private set; }
     public string SelectedTag { get; private set; }
-    TaskService service;
+    SqlitePlayerService service;
     readonly Dictionary<string,Color> chartColors = new Dictionary<string,Color>();
     FocusStatistics.Series[] displayedSeries = Array.Empty<FocusStatistics.Series>();
     readonly List<Button> rows = new List<Button>();
     readonly Dictionary<string,Button> rowsByTag = new Dictionary<string,Button>();
-    TaskService colorService;
+    SqlitePlayerService colorService;
     int colorVersion = -1;
     UnityEngine.Events.UnityAction[] periodActions;
     DateTime observedDay;
+    int queryGeneration;
     void Awake()
     {
         open.onClick.AddListener(Show); close.onClick.AddListener(Hide);
@@ -41,8 +42,17 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         for (int i=0;i<periods.Length;i++) { int index=i;periodActions[i]=()=>ChoosePeriod((FocusStatisticsPeriod)index);periods[i].onClick.AddListener(periodActions[i]); }
         graph.Hovered += Hover;
     }
-    void OnEnable() { service=GameDataManager.EnsureInstance().Tasks;service.Changed+=RefreshIfOpen; }
-    void OnDisable() { if(service!=null)service.Changed-=RefreshIfOpen;panel.SetActive(false); }
+    async void OnEnable()
+    {
+        int generation = ++queryGeneration;
+        open.interactable = false;
+        var manager = GameDataManager.EnsureInstance();
+        if (manager.Ready == null) return;
+        var ready = await manager.Ready;
+        if (!this || !isActiveAndEnabled || generation != queryGeneration || !ready.Succeeded) return;
+        service = manager.Service; service.RecordsChanged += RefreshIfOpen; open.interactable = true;
+    }
+    void OnDisable() { ++queryGeneration;if(service!=null)service.RecordsChanged-=RefreshIfOpen;panel.SetActive(false); }
     void OnDestroy()
     {
         open.onClick.RemoveListener(Show);close.onClick.RemoveListener(Hide);
@@ -52,7 +62,7 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     }
     void Update()
     {
-        if(!panel.activeSelf)return;
+        if(!panel.activeSelf || service == null || !service.IsReady)return;
         if(Keyboard.current!=null&&Keyboard.current.escapeKey.wasPressedThisFrame)Hide();
         if(service.LocalNow.Date!=observedDay)Refresh();
         var events=EventSystem.current;
@@ -67,19 +77,35 @@ public sealed class FocusStatisticsUI : MonoBehaviour
             keyboard.leftArrowKey.wasPressedThisFrame||keyboard.rightArrowKey.wasPressedThisFrame))
             events.SetSelectedGameObject(close.gameObject);
     }
-    public void Show() { Date=service.LocalNow.Date;SelectedTag=null;panel.SetActive(true);panel.transform.SetAsLastSibling();Refresh();if(EventSystem.current)EventSystem.current.SetSelectedGameObject(null); }
-    public void Hide() { panel.SetActive(false);if(EventSystem.current&&open.gameObject.activeInHierarchy)EventSystem.current.SetSelectedGameObject(open.gameObject); }
+    public void Show() { if(service == null || !service.IsReady)return;Date=service.LocalNow.Date;SelectedTag=null;panel.SetActive(true);panel.transform.SetAsLastSibling();Refresh();if(EventSystem.current)EventSystem.current.SetSelectedGameObject(null); }
+    public void Hide() { ++queryGeneration;panel.SetActive(false);if(EventSystem.current&&open.gameObject.activeInHierarchy)EventSystem.current.SetSelectedGameObject(open.gameObject); }
     public void ChoosePeriod(FocusStatisticsPeriod period) { Period=period;Refresh(); }
     void Previous() { Date=FocusStatistics.Move(Date,Period,-1);Refresh(); }
     void Next() { if(!next.interactable)return;Date=FocusStatistics.Move(Date,Period,1);Refresh(); }
     void Today() { Date=service.LocalNow.Date;Refresh(); }
     void AllTags() { SelectedTag=null;RefreshGraph(); }
-    void RefreshIfOpen() { if(panel.activeSelf)Refresh(); }
-    public void Refresh()
+    void RefreshIfOpen(IReadOnlyCollection<PlayerRecordKind> changed)
     {
+        if(panel.activeSelf && (changed==null || changed.Contains(PlayerRecordKind.FocusSessions) || changed.Contains(PlayerRecordKind.Tags)))Refresh();
+    }
+    public async void Refresh()
+    {
+        if (!isActiveAndEnabled || !panel.activeSelf || service == null || !service.IsReady) return;
+        int generation = ++queryGeneration;
+        var ownerService = service;
+        var requestedDate = Date;
+        var requestedPeriod = Period;
         observedDay=service.LocalNow.Date;
-        BuildColors();
-        Data=service.QueryFocusStatistics(Date,Period,TimeZoneInfo.Local);
+        detail.text = "Loading...";
+        var statistics = await ownerService.QueryFocusStatisticsAsync(requestedDate,requestedPeriod,TimeZoneInfo.Local);
+        if (!this || !isActiveAndEnabled || !panel.activeSelf || generation != queryGeneration || service != ownerService) return;
+        if (!statistics.Succeeded) { detail.text = statistics.Message; return; }
+        var colors = await ownerService.QueryFocusStatisticsTagCatalogAsync();
+        if (!this || !isActiveAndEnabled || !panel.activeSelf || generation != queryGeneration || service != ownerService) return;
+        if (!colors.Succeeded) { detail.text = colors.Message; return; }
+        if (statistics.Version != colors.Version) { Refresh(); return; }
+        Data=statistics.Value;
+        BuildColors(colors.Value);
         range.text=Period==FocusStatisticsPeriod.Year?Data.start.ToString("yyyy"):Period==FocusStatisticsPeriod.Month?Data.start.ToString("MMMM yyyy",CultureInfo.InvariantCulture)
             :Period==FocusStatisticsPeriod.Day?Data.start.ToString("ddd, dd MMM yyyy",CultureInfo.InvariantCulture):Data.start.ToString("dd MMM",CultureInfo.InvariantCulture)+" - "+Data.end.AddDays(-1).ToString("dd MMM yyyy",CultureInfo.InvariantCulture);
         total.text=FocusStatistics.Duration(Data.seconds);
@@ -117,6 +143,7 @@ public sealed class FocusStatisticsUI : MonoBehaviour
     }
     void RefreshGraph()
     {
+        if (Data == null) return;
         var selected=Data.tags.FirstOrDefault(t=>t.id==SelectedTag);
         var values=selected?.buckets??Data.buckets;
         displayedSeries=selected==null?Data.tags.ToArray():new[]{selected};
@@ -143,14 +170,13 @@ public sealed class FocusStatisticsUI : MonoBehaviour
         detail.richText=false;
         detail.text=Data.labels[index]+(Period==FocusStatisticsPeriod.Day?":00":"")+" / "+(tag?.name??selected?.name??"Total")+" / "+FocusStatistics.Duration(seconds);
     }
-    void BuildColors()
+    void BuildColors(IReadOnlyList<QuestTag> catalog)
     {
         int version=service.ReadVersion;
-        if(ReferenceEquals(colorService,service) && colorVersion==version)return;
         chartColors.Clear();
         chartColors[FocusStatistics.Untagged]=new Color32(115,139,157,255);
         // Include the whole catalog/history so changing the date cannot recolor a tag.
-        foreach(var tag in service.FocusStatisticsTagCatalog())
+        foreach(var tag in catalog)
         {
             string id=tag.id;
             if(chartColors.ContainsKey(id))continue;

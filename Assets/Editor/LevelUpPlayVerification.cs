@@ -68,7 +68,7 @@ public static class LevelUpPlayVerification
     static void Check(bool ok,string why){if(!ok)throw new Exception(why);}
     static void Resolution(int w,int h)=>typeof(DashboardRewardPlayVerification).GetMethod("Resolution",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{w,h});
     static void Capture(string name)=>ScreenCapture.CaptureScreenshot(Path.GetFullPath(Folder+"/"+name+".png"));
-    static void Seed(int xp){var manager=GameDataManager.Instance;manager.PlayerData.experience=xp;manager.SaveData();var flight=UnityEngine.Object.FindFirstObjectByType<RewardFlightUI>();flight.enabled=false;flight.enabled=true;}
+    static System.Collections.Generic.IEnumerable<double> Seed(int xp){foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>data.experience=xp)))yield return wait;var flight=UnityEngine.Object.FindFirstObjectByType<RewardFlightUI>();flight.enabled=false;flight.enabled=true;}
     static void CheckBackground(LevelUpCelebrationUI ui, Image reference)
     {
         Canvas.ForceUpdateCanvases();
@@ -90,7 +90,8 @@ public static class LevelUpPlayVerification
     }
     static IEnumerator Run()
     {
-        var manager=GameDataManager.EnsureInstance();var service=manager.Tasks;
+        var manager=GameDataManager.EnsureInstance();var service=manager.Service;
+        foreach(var wait in TaskCalendarPlayVerification.Await(manager.Ready))yield return wait;
         Check(manager.SavePath.Contains("LevelUpPlayVerification"),"Must use isolated save");
         var ui=UnityEngine.Object.FindFirstObjectByType<LevelUpCelebrationUI>();Check(ui,"Missing editable level-up prefab binding");
         var tutorial=UnityEngine.Object.FindFirstObjectByType<TutorialController>();if(tutorial)tutorial.enabled=false;
@@ -107,10 +108,11 @@ public static class LevelUpPlayVerification
             }
             yield break;
         }
-        Seed(549);yield return .2;
+        foreach(var wait in Seed(549))yield return wait;yield return .2;
         Time.timeScale=0;
-        Check(service.Upsert(new QuestTask{title="Level-five test",difficulty=TaskDifficulty.Hard},null,out var id)&&service.Complete(id,true),service.LastError);
-        int balance=service.Snapshot.fishCoins;
+        string id=null;foreach(var wait in TaskCalendarPlayVerification.Await(service.UpsertAsync(new QuestTask{title="Level-five test",difficulty=TaskDifficulty.Hard},null),value=>id=value))yield return wait;
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.CompleteAsync(id,true)))yield return wait;
+        int balance=service.FishCoins;
         var rewardFlight=UnityEngine.Object.FindFirstObjectByType<RewardFlightUI>();
         Check(rewardFlight && rewardFlight.IsAnimating,"Timing regression requires active reward feedback");
         yield return .05;
@@ -145,32 +147,36 @@ public static class LevelUpPlayVerification
         }
         expand.isOn=oldExpanded;instant.SetValue(side,oldInstant);Resolution(1280,720);yield return .5;
         ((ISubmitHandler)ui.continueButton).OnSubmit(new BaseEventData(EventSystem.current));yield return .3;
-        ui.Dismiss();ui.Dismiss();Check(!ui.IsShowing&&service.Snapshot.fishCoins==balance,"Dismiss paid or replayed reward");
-        Check(service.Complete(id,true)&&ui.PendingCount==0,"Duplicate completion queued popup");
+        ui.Dismiss();ui.Dismiss();Check(!ui.IsShowing&&service.FishCoins==balance,"Dismiss paid or replayed reward");
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.CompleteAsync(id,true)))yield return wait;Check(ui.PendingCount==0,"Duplicate completion queued popup");
         // Current Focus rewards cannot span several levels and Focus is locked at Lv.1.
         // Exercise the same committed multi-level boundary as RewardBalanceVerification.
-        Seed(99);Action<PlayerData> award=data=>data.experience+=300;
-        Check((bool)typeof(TaskService).GetMethod("Commit",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(service,new object[]{award}),service.LastError);
+        foreach(var wait in Seed(99))yield return wait;
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.ApplyVerificationFixtureAsync(tx=>{
+            var data=tx.Read<PlayerData>(PlayerRecordKind.Profile,"profile");int before=data.experience;data.experience+=300;
+            typeof(SqlitePlayerService).GetMethod("ApplyLevelUp",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{data,before});tx.Put(PlayerRecordKind.Profile,data);
+        })))yield return wait;
         for(int i=0;i<100&&!ui.IsShowing;i++)yield return .05;
         yield return .8;Check(ui.level.text=="4"&&ui.fish.text=="+45"&&!ui.ticketCard.activeSelf&&ui.info.text.Contains("1"),"Multi-level presentation");
         Capture("multi-level-1280");yield return .3;
         ui.SendMessage("OnApplicationFocus",false);yield return .1;Check(Math.Abs(ui.badge.localScale.x-1)<.001,"Focus loss accumulated scale");
-        Seed(749);
-        Check(service.Upsert(new QuestTask{title="Queued level"},null,out var queuedId)&&service.Complete(queuedId,true),service.LastError);
+        foreach(var wait in Seed(749))yield return wait;
+        string queuedId=null;foreach(var wait in TaskCalendarPlayVerification.Await(service.UpsertAsync(new QuestTask{title="Queued level"},null),value=>queuedId=value))yield return wait;
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.CompleteAsync(queuedId,true)))yield return wait;
         Check(ui.PendingCount==1&&ui.level.text=="4","Consecutive level replaced the visible celebration");
         ui.Dismiss();ui.Dismiss();
         for(int i=0;i<100&&!ui.IsShowing;i++)yield return .05;
         yield return .8;Check(ui.IsShowing&&ui.level.text=="6"&&ui.fish.text=="+30"&&ui.PendingCount==0,"Queued level missing or duplicated");
         ui.enabled=false;ui.enabled=true;yield return .2;Check(!ui.IsShowing&&ui.PendingCount==0,"Re-enable replayed historical reward");
-        Check(service.ClaimDailyGoal(DailyRewardGoal.FirstQuest),service.LastError);
-        Seed(13050);
-        for(int i=0;i<2;i++){service.Upsert(new QuestTask{title="Daily goal "+i},null,out var task);service.Complete(task,true);}
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.ClaimDailyGoalAsync(DailyRewardGoal.FirstQuest)))yield return wait;
+        foreach(var wait in Seed(13050))yield return wait;
+        for(int i=0;i<2;i++){string task=null;foreach(var wait in TaskCalendarPlayVerification.Await(service.UpsertAsync(new QuestTask{title="Daily goal "+i},null),value=>task=value))yield return wait;foreach(var wait in TaskCalendarPlayVerification.Await(service.CompleteAsync(task,true)))yield return wait;}
         var goal=UnityEngine.Object.FindObjectsByType<DailyGoalUI>(FindObjectsSortMode.None).Single(g=>g.goal==DailyRewardGoal.ThreeQuests);
         Check(goal.experienceReward.text=="78"&&goal.fishReward.text=="39"&&goal.claim.interactable,"Daily reward bindings/level preview");
         Capture("daily-ready-1280");yield return .3;Resolution(1920,1080);yield return .5;Capture("daily-ready-1920");yield return .3;
-        goal.claim.onClick.Invoke();yield return .3;
+        goal.claim.onClick.Invoke();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;yield return .3;
         Check(service.DailyGoalClaimed(goal.goal)&&goal.experienceReward.text=="78"&&goal.fishReward.text=="39","Claimed daily reward changed");
-        int coins=service.Snapshot.fishCoins;goal.claim.onClick.Invoke();Check(service.Snapshot.fishCoins==coins,"Repeated claim paid");
+        int coins=service.FishCoins;goal.claim.onClick.Invoke();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;Check(service.FishCoins==coins,"Repeated claim paid");
         Capture("daily-claimed-1920");yield return .3;
     }
 }

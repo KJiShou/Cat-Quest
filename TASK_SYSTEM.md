@@ -54,7 +54,7 @@ Calendar projection regressions run within Verify Task System (and its existing 
 
 ## Task context menu
 
-Right-click an active task row (including Calendar previews/drawer rows), or press Shift+F10/the Menu key on a focused row, to open task actions. Only **Edit task** opens the full editor. Difficulty, Tags and Schedule have inline panels with **Save** and **Cancel**: select a difficulty, toggle multiple tags, or choose Today, Tomorrow, a calendar date or No date. Save commits only that field through the existing task service; other task metadata and current subtask progress are preserved. A failed save leaves the inline choices open with an error for retry. Cancel returns to the main menu without saving.
+Right-click an active task row (including Calendar previews/drawer rows), or press Shift+F10/the Menu key on a focused row, to open a single vertical column of icon actions. Hovering or keyboard-focusing an action expands its label sideways with a 0.24-second unscaled ease and fade; the icon column stays fixed. Complete uses green, Delete uses pale red. Reduced Motion reveals labels immediately. Leaving, dismissal or focus loss resets the reveal. The Tags panel uses the same colored name chips as Task Details. Only **Edit task** opens the full editor. Difficulty, Tags and Schedule have inline panels with **Save** and **Cancel**: select a difficulty, toggle multiple tags, or choose Today, Tomorrow, a calendar date or No date. Save commits only that field through the existing task service; other task metadata and current subtask progress are preserved. A failed save leaves the inline choices open with an error for retry. Cancel returns to the main menu without saving.
 
 Clearing a repeating task's date explicitly warns that saving also stops repetition. Future Daily previews edit the current template and retain today's progress; they cannot complete early. Complete and confirmed Delete reuse existing task actions, and History remains read-only with its existing eligible undo.
 
@@ -147,3 +147,6 @@ Today uses a blue date marker independently of the selected-date background. Lis
 The grid labels future recurrence counts as `Daily · N`; opening one explains its preview status. Preview means a future Daily projection, not a saved occurrence or an opportunity to complete early.
 
 Save I/O failures show a concise retry message without exception details or local paths. The existing error dialog and newer-version read-only explanation are preserved.
+
+
+Notification presentation: Task and Dashboard result banners and task error notices share NotificationReveal. The frame expands horizontally from its center over 0.24 seconds while text fades at its full layout size. Reduced Motion reveals immediately. Existing four-second result lifetime, dismissal, and ordinary confirmation behavior remain unchanged.

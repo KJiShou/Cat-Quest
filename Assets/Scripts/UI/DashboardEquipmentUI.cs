@@ -12,11 +12,11 @@ public sealed class DashboardEquipmentUI : MonoBehaviour
     public Sprite[] emptySlotIcons;
     Sprite[] equippedIcons;
     Color[] emptyColors;
-    TaskService service;
+    SqlitePlayerService service;
     void Awake(){
         equippedIcons=icons.Select(i=>i.sprite).ToArray();
         emptyColors=slots.Select(b=>b.GetComponent<Image>().color).ToArray();
-        service=GameDataManager.EnsureInstance().Tasks;for(int i=0;i<slots.Length;i++){int index=i;slots[i].onClick.AddListener(()=>{if(navigation.ShowPage(MainMenuPage.CatHome))navigation.pages[4].GetComponent<EquipmentPageUI>().OpenSlot((EquipmentSlot)index);});}}
+        service=GameDataManager.EnsureInstance().Service;for(int i=0;i<slots.Length;i++){int index=i;slots[i].onClick.AddListener(()=>{if(navigation.ShowPage(MainMenuPage.CatHome))navigation.pages[4].GetComponent<EquipmentPageUI>().OpenSlot((EquipmentSlot)index);});}}
     void OnEnable(){if(service!=null){service.Changed+=Refresh;Refresh();}}
     void OnDisable(){if(service!=null)service.Changed-=Refresh;}
     void Refresh(){

@@ -38,7 +38,7 @@ public sealed class BossPageUI : MonoBehaviour
     public RewardFlightUI rewardFlights;
     public TMP_Text resultFishValue;
     public Button[] resultContinue;
-    TaskService service;
+    SqlitePlayerService service;
     BattleAttempt attempt;
     BattleSimulation simulation;
     bool approaching,confirmStop,quitting,settlementPending;
@@ -72,7 +72,7 @@ public sealed class BossPageUI : MonoBehaviour
         damageNumbers=GetComponent<BattleDamageNumbers>()??gameObject.AddComponent<BattleDamageNumbers>();
         damageNumbers.Initialize(catDamage,criticalIcon);catDamage.gameObject.SetActive(false);bossDamage.gameObject.SetActive(false);
         for(int i=0;i<masteryParticles.Length;i++)masteryParticles[i].Bind(masteryIcons[i].rectTransform);
-        service=GameDataManager.EnsureInstance().Tasks;
+        service=GameDataManager.EnsureInstance().Service;
         action.onClick.AddListener(Action);
         stageButton.onClick.AddListener(ShowStages);
         closeStages.onClick.AddListener(()=>stagePicker.SetActive(false));
@@ -120,7 +120,7 @@ public sealed class BossPageUI : MonoBehaviour
     }
     public void SelectStage(int id,int stage=0)
     {
-        if(resultAwaitingConfirmation||returningFromResult||attempt!=null||victoryResultAt>0)return;
+        if(commandPending||resultAwaitingConfirmation||returningFromResult||attempt!=null||victoryResultAt>0)return;
         returnToIdleAt=0;resetPreview=false;selected=id;master=stage;actors.ResetPose();simulation=null;stagePicker.SetActive(false);arena.SelectStage(id);
     }
     string Name => selected==1?"Cyclope":selected==2?"Orc":"Demon";
@@ -217,9 +217,10 @@ public sealed class BossPageUI : MonoBehaviour
         if(isActiveAndEnabled&&UnityEngine.EventSystems.EventSystem.current)
             UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(action.gameObject);
     }
-    public void Confirm()
+    bool commandPending;
+    public async void Confirm()
     {
-        if(!confirmation.activeSelf||resultAwaitingConfirmation||returningFromResult||victoryResultAt>0)return;
+        if(commandPending||!confirmation.activeSelf||resultAwaitingConfirmation||returningFromResult||victoryResultAt>0)return;
         if(confirmStop&&(attempt==null||attempt.id!=confirmationAttemptId)){DismissConfirmation();return;}
         confirmation.SetActive(false);
         confirmationAttemptId=null;
@@ -231,7 +232,16 @@ public sealed class BossPageUI : MonoBehaviour
         if(attempt!=null)return;
         EnsureActors();
         if(!arena.IsReady||!actors.Ready){message.text="Battle scene is not ready. No ticket was used.";return;}
-        if(!service.BeginBattle(selected,master,out var entry)){message.text=service.LastError;return;}
+        commandPending=true;
+        OperationResult<BattleAttempt> started;
+        try { started=await service.BeginBattleAsync(selected,master); }
+        finally { commandPending=false; }
+        if(!this || !isActiveAndEnabled) {
+            if(started.Succeeded)await service.ResolveBattleAsync(started.Value.id,BattleOutcome.Error);
+            return;
+        }
+        if(!started.Succeeded){message.text=service.LastError;return;}
+        var entry=started.Value;
         SettingsAudio.Instance?.SetBattleMusic(true);
         attempt=entry;simulation=new BattleSimulation(entry);
         skippedPresentation=false;
@@ -273,20 +283,24 @@ public sealed class BossPageUI : MonoBehaviour
         else bossBar.SetValueWithoutNotify((float)bh/bm);
         bossValue.text=$"{bh}/{bm}";
     }
-    public void Settle(BattleOutcome outcome)
+    public async void Settle(BattleOutcome outcome)
     {
-        if(attempt==null)return;
+        if(attempt==null||commandPending)return;
+        commandPending=true;settlementPending=true;
         pendingOutcome=outcome;
         float presentationDelay=outcome==BattleOutcome.Victory&&!skippedPresentation&&isActiveAndEnabled&&actors.Ready?BossBattleActors.VictoryDuration:0;
         bool saved;
+        OperationResult<BattleAttempt> resolved;
         if(rewardFlights)rewardFlights.SetRewardOrigin(resultValues[0].rectTransform, resultFishValue ? resultFishValue.rectTransform : null,presentationDelay);
-        try { saved=service.ResolveBattle(attempt.id,outcome); }
-        finally { if(rewardFlights)rewardFlights.SetRewardOrigin(null); }
+        try { resolved=await service.ResolveBattleAsync(attempt.id,outcome); saved=resolved.Succeeded; }
+        finally { commandPending=false; if(rewardFlights)rewardFlights.SetRewardOrigin(null); }
+        if(!this)return;
+        if(!isActiveAndEnabled && saved) {attempt=null;simulation=null;settlementPending=false;return;}
         if(!saved){
             if(!leaveConfirmed)DismissConfirmation();
             actors.Finish(BattleOutcome.Error);settlementPending=true;message.text=service.LastError;Refresh();return;
         }
-        var receipt=service.BattleReceipt(attempt.id);
+        var receipt=resolved.Value;
         var continueNavigation=leaveConfirmed&&leaveAttemptId==attempt.id?leavePage:null;
         // A natural finish while the prompt is open invalidates its stop action.
         // Clear before invoking navigation so repeated confirmation cannot replay it.
@@ -407,7 +421,7 @@ public sealed class BossPageUI : MonoBehaviour
         if(!returningFromResult)return;
         CancelReturn();SyncMasterSelection();Refresh();
     }
-    void OnApplicationQuit(){quitting=true;if(attempt!=null)service.ResolveBattle(attempt.id,settlementPending?pendingOutcome:simulation!=null&&simulation.Outcome!=BattleOutcome.Running?simulation.Outcome:BattleOutcome.Error);}
+    void OnApplicationQuit(){quitting=true;}
     void OnDisable()
     {
         arena.StageChanged-=ArenaChanged;

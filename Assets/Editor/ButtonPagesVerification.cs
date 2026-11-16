@@ -1,4 +1,5 @@
 using System;
+using static SqlitePlayVerificationSupport;
 using System.IO;
 using System.Linq;
 using System.Collections;
@@ -22,7 +23,8 @@ public static class ButtonPagesVerification
     static int Count(string method)=>(int)Group.GetType().GetMethod(method).Invoke(Group,null);
     static void Resolution(int width,int height)=>typeof(DashboardRewardPlayVerification).GetMethod("Resolution",Hidden).Invoke(null,new object[]{width,height});
     static void Restore(){
-        run=null;
+        RestoreCustomSizes(Flag);
+        (run as IDisposable)?.Dispose();run=null;
         Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",SessionState.GetBool(Flag+".hadStore",false)?SessionState.GetString(Flag+".store",""):null);
         Environment.SetEnvironmentVariable("CATQUEST_AI_TEST_DIRECTORY",SessionState.GetBool(Flag+".hadAi",false)?SessionState.GetString(Flag+".ai",""):null);
         UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+".scene",""));
@@ -32,7 +34,7 @@ public static class ButtonPagesVerification
     static readonly List<string> failures=new List<string>();
     static ButtonPagesVerification(){EditorApplication.update+=Poll;EditorApplication.playModeStateChanged+=s=>{
         if(!SessionState.GetBool(Flag,false))return;
-        if(s==PlayModeStateChange.EnteredPlayMode){run=Run();next=EditorApplication.timeSinceStartup+2;}
+        if(s==PlayModeStateChange.EnteredPlayMode){run=Flatten(Run());next=EditorApplication.timeSinceStartup+2;}
         if(s==PlayModeStateChange.EnteredEditMode)Restore();
     };}
     static void Poll(){
@@ -41,7 +43,7 @@ public static class ButtonPagesVerification
         if(!EditorApplication.isPlayingOrWillChangePlaymode&&(dashboardOnly||File.Exists("Temp/verify-button-pages.request"))){
             SessionState.SetBool(Flag+".dashboardOnly",dashboardOnly);
             if(dashboardOnly)File.Delete("Temp/verify-button-pages-dashboard.request");
-            File.Delete("Temp/verify-button-pages.request");Directory.CreateDirectory(Folder);SessionState.SetBool(Flag,true);
+            File.Delete("Temp/verify-button-pages.request");Directory.CreateDirectory(Folder);RememberCustomSizes(Flag);SessionState.SetBool(Flag,true);
             File.WriteAllText(Folder+"/result.txt","RUNNING "+DateTime.UtcNow.ToString("O"));
             SessionState.SetString(Flag+".deadline",DateTime.UtcNow.AddMinutes(6).ToString("O"));
             SessionState.SetInt(Flag+".size",(int)Size.GetValue(View));SessionState.SetInt(Flag+".custom",Count("GetCustomCount"));
@@ -64,7 +66,7 @@ public static class ButtonPagesVerification
         try{if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);else Finish();}
         catch(Exception e){failures.Add(e.ToString());Finish();}
     }
-    static void Finish(){File.WriteAllText(Folder+"/result.txt",DateTime.UtcNow.ToString("O")+$"\nButtons: {checkedButtons}; graphic state checks: {checkedGraphics}\n"+(failures.Count==0?"PASS":string.Join("\n",failures)));run=null;EditorApplication.isPlaying=false;}
+    static void Finish(){File.WriteAllText(Folder+"/result.txt",DateTime.UtcNow.ToString("O")+$"\nButtons: {checkedButtons}; graphic state checks: {checkedGraphics}\n"+(failures.Count==0?"PASS":string.Join("\n",failures)));(run as IDisposable)?.Dispose();run=null;EditorApplication.isPlaying=false;}
     class Sample{public Graphic graphic;public Vector3[] vertices;}
     static Vector3[] Vertices(Graphic g){
         if(g is TMP_SubMeshUI sub){var info=sub.GetComponentInParent<TMP_Text>().textInfo;var part=info.meshInfo.FirstOrDefault(m=>m.mesh==sub.mesh);return part.vertices==null?Array.Empty<Vector3>():part.vertices.Take(part.vertexCount).ToArray();}
@@ -88,8 +90,9 @@ public static class ButtonPagesVerification
     static IEnumerator Run(){
         failures.Clear();checkedGraphics=checkedButtons=0;
         UnityEngine.SceneManagement.SceneManager.LoadScene("CharacterHome");yield return 2;
+        foreach(var delay in TaskCalendarPlayVerification.Await(GameDataManager.EnsureInstance().Ready))yield return delay;
         typeof(DashboardRewardPlayVerification).GetMethod("Resolution",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic).Invoke(null,new object[]{1280,720});yield return .5;
-        var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var service=GameDataManager.EnsureInstance().Tasks;
+        var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var service=GameDataManager.EnsureInstance().Service;
         if(!GameDataManager.Instance.SavePath.Contains("ButtonPagesVerification"))throw new Exception("Isolated save required");
         // A page can update navigation while its hierarchy is still inactive.
         var inactiveParent=new GameObject("Inactive navigation regression");inactiveParent.SetActive(false);
@@ -103,8 +106,8 @@ public static class ButtonPagesVerification
             button.SetPageSelected(true);button.SetPageSelected(false);
             if(button.targetGraphic.color!=original)throw new Exception("Navigation lost its authored background after Awake");
         } finally {UnityEngine.Object.DestroyImmediate(inactiveParent);}
-        service.Upsert(new QuestTask{title="Button alignment test",daily=true,scheduled=true,date=TaskService.DateKey(service.LocalNow)},null,out var id);
-        if(!service.SaveTag(null,"Study","#5879FF",out var tagId))throw new Exception(service.LastError);
+        var taskSave=service.UpsertAsync(new QuestTask{title="Button alignment test",daily=true,scheduled=true,date=TaskService.DateKey(service.LocalNow)},null);yield return Command(taskSave);var id=Value(taskSave);
+        var tagSave=service.SaveTagAsync(null,"Study","#5879FF");yield return Command(tagSave);var tagId=Value(tagSave);
         var contexts=new List<(string name,Action open)>();
         for(int i=0;i<nav.pages.Length;i++){int index=i;contexts.Add((((MainMenuPage)i).ToString(),()=>{if(!nav.ShowPage((MainMenuPage)index))throw new Exception("Page inaccessible: "+(MainMenuPage)index);}));}
         var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();

@@ -31,8 +31,11 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     public ScrollRect tagScroll;
     public TaskDatePicker datePicker;
     public TaskDialogKeyboard keyboard, pickerKeyboard;
+    public float iconPanelWidth=76, expandedActionWidth=220;
     Action<TaskContextAction> action;
     Func<TaskContextChange,string> apply;
+    Func<TaskContextChange,System.Threading.Tasks.Task<string>> applyAsync;
+    int openGeneration;
     QuestTask original;
     DateTime localToday;
     TaskContextAction field;
@@ -78,7 +81,7 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     public void Show(QuestTask task, List<QuestTag> catalog, DateTime now, bool canComplete, Vector2 point,
         Action<TaskContextAction> callback, Func<TaskContextChange,string> onApply)
     {
-        tutorialPreview=false;
+        tutorialPreview=false; applyAsync=null; openGeneration++;
         returnFocus=EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
         original=PlayerDataStore.Copy(task); localToday=now.Date;
         action=callback; apply=onApply; screenPoint=point; heading.text=task.title;
@@ -99,10 +102,17 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
         tagScroll.gameObject.SetActive(catalog.Count>0);
         gameObject.SetActive(true); transform.SetAsLastSibling(); ShowPanel(TaskContextAction.Edit);
     }
+    public void ShowAsync(QuestTask task, List<QuestTag> catalog, DateTime now, bool canComplete, Vector2 point,
+        Action<TaskContextAction> callback, Func<TaskContextChange,System.Threading.Tasks.Task<string>> onApply)
+    {
+        Show(task,catalog,now,canComplete,point,callback,null);
+        applyAsync=onApply;
+    }
     void ShowPanel(TaskContextAction choice)
     {
         field=choice;
-        panel.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,choice==TaskContextAction.ChooseDate ? Mathf.Max(defaultPanelWidth,380) : defaultPanelWidth);
+        panel.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,choice==TaskContextAction.Edit ? iconPanelWidth : choice==TaskContextAction.ChooseDate ? Mathf.Max(defaultPanelWidth,380) : defaultPanelWidth);
+        heading.gameObject.SetActive(choice!=TaskContextAction.Edit);
         save.GetComponentInChildren<TMP_Text>().text=choice==TaskContextAction.ChooseDate ? "Save schedule" : "Save";
         selectedDifficulty=original.difficulty;
         selectedTags.Clear();selectedTags.UnionWith(original.tagIds);
@@ -175,21 +185,25 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
         if (!gameObject.activeInHierarchy) return;
         keyboard.enabled=true; FocusControls(); chooseDate.Select();
     }
-    void Save()
+    async void Save()
     {
-        if (saving || apply==null || field==TaskContextAction.Edit) return;
-        saving=true;
+        if (saving || (apply==null && applyAsync==null) || field==TaskContextAction.Edit) return;
+        saving=true; int generation=openGeneration; save.interactable=false;
         try {
-            var error=apply(new TaskContextChange { field=field,difficulty=selectedDifficulty,tagIds=selectedTags.ToList(),scheduled=datePicker.HasDate,date=datePicker.SelectedDate });
+            var change=new TaskContextChange { field=field,difficulty=selectedDifficulty,tagIds=selectedTags.ToList(),scheduled=datePicker.HasDate,date=datePicker.SelectedDate };
+            var error=applyAsync!=null ? await applyAsync(change) : apply(change);
+            if (!this || !isActiveAndEnabled || generation!=openGeneration) return;
             if (error==null) Dismiss();
             else { status.text=error;status.color=new Color32(143,36,56,255);status.gameObject.SetActive(true); }
-        } finally { saving=false; }
+        } finally { saving=false; if(save)save.interactable=true; }
     }
     void Position()
     {
         RectTransformUtility.ScreenPointToLocalPointInRectangle(root,tutorialPreview ? new Vector2(Screen.width * .08f, Screen.height * .88f) : screenPoint,canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera,out var point);
         var bounds=root.rect;
-        panel.localPosition=new Vector3(Mathf.Clamp(point.x,bounds.xMin+12,bounds.xMax-panel.rect.width-12),Mathf.Clamp(point.y,bounds.yMin+panel.rect.height+12,bounds.yMax-12),0);
+        // Reserve the label's full reach before opening; hover never shifts the icon column.
+        float width=field==TaskContextAction.Edit ? Mathf.Max(panel.rect.width,expandedActionWidth) : panel.rect.width;
+        panel.localPosition=new Vector3(Mathf.Clamp(point.x,bounds.xMin+12,bounds.xMax-width-12),Mathf.Clamp(point.y,bounds.yMin+panel.rect.height+12,bounds.yMax-12),0);
     }
     void LateUpdate()
     {

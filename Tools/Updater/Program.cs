@@ -14,10 +14,20 @@ namespace CatQuestUpdater
     public sealed class Journal { public string state; public List<JournalEntry> entries = new List<JournalEntry>(); }
     public static class Installer
     {
+        // Use extended absolute paths only for managed filesystem work. Process
+        // identity checks and launching retain ordinary executable paths.
+        internal static string IoPath(string path)
+        {
+            string full = Path.GetFullPath(path);
+            if (full.StartsWith(@"\\?\", StringComparison.Ordinal)) return full;
+            if (full.StartsWith(@"\\", StringComparison.Ordinal)) return @"\\?\UNC\" + full.Substring(2);
+            return @"\\?\" + full;
+        }
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = 16 * 1024 * 1024 };
-        public static T Read<T>(string path) { return Json.Deserialize<T>(File.ReadAllText(path)); }
+        public static T Read<T>(string path) { return Json.Deserialize<T>(File.ReadAllText(IoPath(path))); }
         public static void Write(string path, object value)
         {
+            path = IoPath(path);
             string temp = path + ".tmp";
             File.WriteAllText(temp, Json.Serialize(value));
             if (!File.Exists(path)) { File.Move(temp, path); return; }
@@ -37,15 +47,17 @@ namespace CatQuestUpdater
         }
         public static PackageInventory LoadInventory(string directory)
         {
-            var inventory = Read<PackageInventory>(UpdateRules.SafePath(directory, UpdateRules.InventoryName));
+            var inventory = Read<PackageInventory>(UpdateRules.SafePath(IoPath(directory), UpdateRules.InventoryName));
             UpdateRules.ValidateInventory(inventory); return inventory;
         }
         public static void Extract(InstallRequest request, string stage)
         {
-            if (new FileInfo(request.package).Length != request.size || !string.Equals(UpdateRules.Hash(request.package), request.sha256, StringComparison.OrdinalIgnoreCase))
+            stage = IoPath(stage);
+            string package = IoPath(request.package);
+            if (new FileInfo(package).Length != request.size || !string.Equals(UpdateRules.Hash(package), request.sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("The update package checksum does not match.");
             Directory.CreateDirectory(stage);
-            using (var zip = ZipFile.OpenRead(request.package))
+            using (var zip = ZipFile.OpenRead(package))
             {
                 if (zip.Entries.Count > 50001) throw new InvalidDataException("Too many archive entries.");
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -67,12 +79,14 @@ namespace CatQuestUpdater
                     if (!seen.Contains(file.path) || new FileInfo(path).Length != file.size || !string.Equals(UpdateRules.Hash(path), file.sha256, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidDataException("Invalid file: " + file.path);
                 }
+                if(inventory.sqlite)UpdateRules.ValidateX64NativeLibrary(UpdateRules.SafePath(stage,UpdateRules.SqliteNativePath));
             }
         }
         // Each original is backed up before its journal entry is committed, and each entry is
         // committed before touching the destination. Recovery is repeatable after process/power loss.
         public static void Apply(string target, string stage, string transaction, Action<int> afterFile = null)
         {
+            target = IoPath(target); stage = IoPath(stage); transaction = IoPath(transaction);
             var old = LoadInventory(target); var next = LoadInventory(stage);
             if (!UpdateRules.IsNewer(next.version, old.version)) throw new InvalidDataException("Update is not newer than the installed package.");
             Directory.CreateDirectory(transaction);
@@ -109,12 +123,14 @@ namespace CatQuestUpdater
         }
         public static void Recover(string target, string transaction)
         {
+            target = IoPath(target); transaction = IoPath(transaction);
             string path = Path.Combine(transaction, "journal.json");
             if (!File.Exists(path)) return;
             var journal = Read<Journal>(path);
             if (journal.state != "installing") return;
             foreach (var entry in journal.entries.AsEnumerable().Reverse())
             {
+                if(UpdateRules.IsPlayerStoragePath(entry.path))throw new InvalidDataException("Recovery cannot replace player storage.");
                 string destination = UpdateRules.SafePath(target, entry.path);
                 if (entry.existed) File.Copy(UpdateRules.SafePath(Path.Combine(transaction, "backup"), entry.path), destination, true);
                 else if (File.Exists(destination)) File.Delete(destination);
@@ -138,7 +154,7 @@ namespace CatQuestUpdater
                             if (!running.HasExited && string.Equals(running.MainModule.FileName, Path.Combine(recoveryTarget,"CatQuest.exe"), StringComparison.OrdinalIgnoreCase))
                                 throw new IOException("Close Cat Quest and its Companion before recovery.");
                         string history = recoveryTarget.TrimEnd('\\') + ".update-history";
-                        foreach (string prior in Directory.GetDirectories(history)) Installer.Recover(recoveryTarget, prior);
+                        foreach (string prior in Directory.GetDirectories(Installer.IoPath(history))) Installer.Recover(recoveryTarget, prior);
                     }
                     System.Windows.Forms.MessageBox.Show("Interrupted installation recovered. You can reopen Cat Quest.", "Cat Quest Update");
                     return 0;
@@ -172,8 +188,8 @@ namespace CatQuestUpdater
                     }
                     // Transactions live beside the installation, never in the player's save directory.
                     string transactionRoot = target.TrimEnd('\\') + ".update-history";
-                    Directory.CreateDirectory(transactionRoot);
-                    foreach (string prior in Directory.GetDirectories(transactionRoot)) Installer.Recover(target, prior);
+                    Directory.CreateDirectory(Installer.IoPath(transactionRoot));
+                    foreach (string prior in Directory.GetDirectories(Installer.IoPath(transactionRoot))) Installer.Recover(target, prior);
                     string transaction = Path.Combine(transactionRoot, Guid.NewGuid().ToString("N"));
                     string stage = Path.Combine(work, "stage-" + Guid.NewGuid().ToString("N"));
                     Installer.Extract(request, stage);

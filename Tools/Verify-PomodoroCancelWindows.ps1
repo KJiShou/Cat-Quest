@@ -107,7 +107,7 @@ try {
  $resultPath=Join-Path $folder 'smoke-result.json'
  $r=WaitFor $resultPath {param($v)$v.controlsBound -and $v.phase -eq 'Ready'} 'startup' 45
  $r=Command @{action='configure';mode=0;focusMinutes=25;restMinutes=5};$r=Command @{action='start'};$r=Command @{action='advance';seconds=300}
- Check (!$r.endEarlyVisible) 'Pomodoro hides End Early'
+ Check ($r.endEarlyVisible) 'Pomodoro offers End Focus'
  $r=Command @{action='cancel'};Check ($r.cancelPrompt -and $r.phase -eq 'Focusing') 'main cancel waits for confirmation'
  Command @{action='screenshot';screenshot='main-confirmation.png'}|Out-Null
  $r=Command @{action='keep-focus'};Check (!$r.cancelPrompt -and $r.phase -eq 'Focusing') 'main keep continues'
@@ -127,13 +127,14 @@ try {
   Copy-Item -LiteralPath (Join-Path $r.companionDirectory 'companion-capture.png') -Destination (Join-Path $folder ('companion-confirm-'+$size[0]+'.png'))
   [IO.File]::WriteAllText($uiRequest,'keep-focus',$utf8);$view=WaitFor $viewPath {param($v)!$v.cancelPrompt} 'keep focus'
  }
- HostCommand $r end;Check ((ReadJson $resultPath).phase -eq 'Focusing') 'legacy Pomodoro end rejected by host'
  HostCommand $r cancel 'wrong-owner';HostCommand $r cancel $r.ownerId 'stale-session';Check ((ReadJson $resultPath).phase -eq 'Focusing') 'wrong-owner and stale cancel rejected'
  [IO.File]::WriteAllText($uiRequest,'cancel',$utf8);$view=WaitFor $viewPath {param($v)$v.cancelPrompt} 'confirm for cancellation'
- [IO.File]::WriteAllText($uiRequest,'confirm-cancel',$utf8);$r=WaitFor $resultPath {param($v)$v.phase -eq 'Interrupted'} 'confirmed companion cancellation'
- Check ($r.exp -eq 100 -and $r.coins -eq 0 -and $r.tickets -eq 0) 'confirmed cancel grants no rewards or Rest'
- HostCommand $r cancel;Check ((ReadJson $resultPath).exp -eq 100) 'duplicate cancellation no rewards'
- $r=Command @{action='start'};$r=Command @{action='cancel'};$r=Command @{action='confirm-cancel'};Check ($r.phase -eq 'Interrupted' -and $r.exp -eq 100) 'main confirmed cancel'
+ [IO.File]::WriteAllText($uiRequest,'confirm-cancel',$utf8);$r=WaitFor $resultPath {param($v)$v.phase -eq 'Resting'} 'confirmed companion End Early'
+ Check ($r.exp -eq 102 -and $r.coins -eq 1 -and $r.tickets -eq 0) 'confirmed End Early saves five minutes and starts Rest'
+ HostCommand $r end;Check ((ReadJson $resultPath).exp -eq 102) 'duplicate End Early adds no rewards'
+ $r=Command @{action='rest'}
+ $r=Command @{action='start'};$r=Command @{action='cancel'};$r=Command @{action='confirm-cancel'};Check ($r.phase -eq 'Resting' -and $r.exp -eq 102) 'main confirmed End Early'
+ $r=Command @{action='rest'}
  foreach($mode in @(1,2)){
   if($mode -eq 1){ResizeWindow $window 420 300}else{ResizeWindow $window 240 180}
   $r=Command @{action='configure';mode=$mode;focusMinutes=25;restMinutes=5}
@@ -152,7 +153,8 @@ try {
  $r=Command @{action='configure';mode=0;focusMinutes=1;restMinutes=1};$r=Command @{action='start'};$r=Command @{action='cancel'};$r=Command @{action='advance';seconds=60}
  Check ($r.phase -eq 'Resting' -and !$r.cancelPrompt) 'completion closes stale prompt and starts Rest'
  $r=Command @{action='rest'};$r=Command @{action='start'};$r=Command @{action='confirm-cancel'};Check ($r.phase -eq 'Focusing') 'old confirmation cannot cancel new session'
- $r=Command @{action='close-widget'};Check ($child.WaitForExit(6000)) 'companion closes cleanly without ending main session'
+ $r=Command @{action='close-widget'};Start-Sleep -Milliseconds 500;Check (!$child.HasExited -and !$r.widgetOpen -and ![FocusNative]::IsWindowVisible($window)) 'companion hides and stays warm without ending Focus'
+ $r=Command @{action='widget'};Start-Sleep -Milliseconds 500;Check (!$child.HasExited -and [FocusNative]::IsWindowVisible($window)) 'same companion process reopens'
  $r=Command @{action='cancel'};Command @{action='confirm-cancel'}|Out-Null
  WriteJson (Join-Path $folder 'final-state.json') (ReadJson $resultPath)
 } catch { $failure=$_.ToString(); Write-Output "FAIL: $failure" }

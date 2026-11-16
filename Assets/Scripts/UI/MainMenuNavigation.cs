@@ -18,19 +18,19 @@ public sealed class MainMenuNavigation : MonoBehaviour
     public event System.Action<string> AccessDenied;
     public bool CanOpen(MainMenuPage page)
     {
-        var tasks = service ?? GameDataManager.EnsureInstance().Tasks;
+        var tasks = service ?? GameDataManager.EnsureInstance().Service;
         if (page == MainMenuPage.Focus)
             return tasks.CanAccess(ProgressionFeature.Focus) || FocusRunner.EnsureInstance().Controller.Phase is FocusPhase.Focusing or FocusPhase.Saving or FocusPhase.Resting;
         if (page == MainMenuPage.Boss)
             return tasks.CanAccess(ProgressionFeature.Boss) || tasks.HasActiveBattle;
         return page != MainMenuPage.Leaderboard || tasks.CanAccess(ProgressionFeature.Leaderboard);
     }
-    private TaskService service;
+    private SqlitePlayerService service;
     private UnityAction[] listeners;
     private float nextClockCheck;
     private void Start()
     {
-        service=GameDataManager.EnsureInstance().Tasks;
+        service=GameDataManager.EnsureInstance().Service;
         service.Changed+=RefreshHeader;
         listeners=new UnityAction[buttons.Length];
         for(int i=0;i<buttons.Length;i++) {
@@ -54,9 +54,9 @@ public sealed class MainMenuNavigation : MonoBehaviour
         if(CurrentPage==MainMenuPage.Dashboard && page!=MainMenuPage.Dashboard && pages[0].activeInHierarchy)
         {
             var dashboard=pages[0].GetComponentInChildren<DashboardTasksUI>();
-            if(dashboard && !dashboard.PrepareToLeavePage()) return false;
+            if(dashboard && !dashboard.PrepareToLeavePage(()=>ShowPage(page))) return false;
         }
-        service?.RefreshDate();
+        if (service != null) _ = service.RefreshDateAsync();
         CurrentPage=page;
         for(int i=0;i<pages.Length;i++) {
             pages[i].SetActive(i==index);
@@ -67,14 +67,14 @@ public sealed class MainMenuNavigation : MonoBehaviour
     private void Update()
     {
         // Daily state still changes at midnight while a different page is visible.
-        if(service!=null && Time.unscaledTime>=nextClockCheck) { nextClockCheck=Time.unscaledTime+1; service.RefreshDate(); }
+        if(service!=null && Time.unscaledTime>=nextClockCheck) { nextClockCheck=Time.unscaledTime+1; _ = service.RefreshDateAsync(); }
     }
     private void RefreshHeader()
     {
         if(service==null) return;
         fishCoins.text=service.FishCoins.ToString(); tickets.text=service.Tickets.ToString();
     }
-    private void OnApplicationFocus(bool focus) { if(focus && service!=null) { service.RefreshDate(); RefreshHeader(); } }
+    private void OnApplicationFocus(bool focus) { if(focus && service!=null) { _ = service.RefreshDateAsync(); RefreshHeader(); } }
     private void OnDestroy()
     {
         if(service!=null) service.Changed-=RefreshHeader;

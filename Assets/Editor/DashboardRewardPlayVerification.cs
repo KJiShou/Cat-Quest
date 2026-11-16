@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Collections;
+using System.Threading.Tasks;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -20,7 +21,7 @@ public static class DashboardRewardPlayVerification
     private static PropertyInfo sizeProperty;
     private static string[] taskIds;
     private static string folder;
-    private static bool readyCaptured;
+    private static bool readyCaptured, busy;
     private static RewardScreenshotCapture capture;
     static DashboardRewardPlayVerification()
     {
@@ -154,20 +155,35 @@ public static class DashboardRewardPlayVerification
         else Check(Vector2.Distance(feedback.DrawScale, Vector2.one) < .005f &&
             Mathf.Abs(feedback.DrawOffset) < .1f && feedback.DrawShine < .01f, "Row feedback did not reset after pointer exit.");
     }
-    private static void Tick()
+    private static async Task<T> AwaitBounded<T>(Task<T> operation)
+    {
+        if(await Task.WhenAny(operation,Task.Delay(10000))!=operation)throw new TimeoutException("Dashboard SQLite operation timed out.");
+        return await operation;
+    }
+    private static async Task<T> Command<T>(Task<OperationResult<T>> operation)
+    { var result=await AwaitBounded(operation);Check(result.Succeeded,result.Message);return result.Value; }
+    private static async Task FocusIdle()
+    {
+        var deadline=DateTime.UtcNow.AddSeconds(10);
+        while(FocusRunner.EnsureInstance().Controller.OperationPending) { if(DateTime.UtcNow>deadline)throw new TimeoutException("Focus operation timed out.");await Task.Delay(20); }
+    }
+    private static async void Tick()
     {
         EditorApplication.QueuePlayerLoopUpdate();
         if (capture && capture.Pending) return;
-        if (EditorApplication.timeSinceStartup < next) return;
+        if (EditorApplication.timeSinceStartup < next || busy) return;
+        busy=true;
         try
         {
             var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
             Check(nav, "No MainMenu navigation in the open scene.");
-            var service = GameDataManager.EnsureInstance().Tasks;
+            var manager=GameDataManager.EnsureInstance();
+            await Command(manager.Ready);
+            var service = manager.Service;
             if (step == 0)
             {
-                Check(service.Snapshot.tasks.Count == 0, "Test did not use an isolated store.");
-                GameDataManager.Instance.SetUsername("Mochi");
+                Check(service.TaskSnapshot.tasks.Count == 0, "Test did not use an isolated store.");
+                await Command(SqlitePlayVerificationSupport.FixtureAsync(data=>data.username="Mochi"));
                 var header=UnityEngine.Object.FindFirstObjectByType<CatStatusUI>();header.enabled=false;header.enabled=true;
                 nav.pages[0].SetActive(false); nav.pages[0].SetActive(true);
                 Check(UnityEngine.Object.FindFirstObjectByType<CatStatusUI>().playerName.text == "Mochi", "Dashboard did not show the player's name.");
@@ -176,8 +192,8 @@ public static class DashboardRewardPlayVerification
                 var titles = new[] { "Read a chapter", "Finish project notes", "Review presentation" };
                 for (int i = 0; i < 3; i++)
                 {
-                    Check(service.Upsert(new QuestTask { title = titles[i], difficulty = (TaskDifficulty)i,
-                        daily = i == 0, scheduled = true, date = TaskService.DateKey(service.LocalNow) }, null, out taskIds[i]), service.LastError);
+                    taskIds[i]=await Command(service.UpsertAsync(new QuestTask { title = titles[i], difficulty = (TaskDifficulty)i,
+                        daily = i == 0, scheduled = true, date = TaskService.DateKey(service.LocalNow) }, null));
                 }
                 Resolution(1280, 720); next = EditorApplication.timeSinceStartup + 2; step++; return;
             }
@@ -205,15 +221,17 @@ public static class DashboardRewardPlayVerification
             { ValidateLayout(nav); Capture("dashboard-1920x1080.png"); next = EditorApplication.timeSinceStartup + 1; step++; return; }
             if (step == 4)
             {
-                foreach (var id in taskIds) Check(service.Complete(id, true), service.LastError);
+                foreach (var id in taskIds) await Command(service.CompleteAsync(id, true));
                 var goals = nav.pages[0].GetComponentsInChildren<DailyGoalUI>();
                 var quests = goals.Single(g => g.goal == DailyRewardGoal.ThreeQuests);
                 var focusGoal = goals.Single(g => g.goal == DailyRewardGoal.Focus25Minutes);
                 Check(quests.claim.interactable && !focusGoal.claim.interactable && quests.progress.text == "3 / 3", "Independent goal UI failed.");
                 if (!readyCaptured) { Capture("dashboard-ready-1920x1080.png"); readyCaptured = true; next = EditorApplication.timeSinceStartup + 1; return; }
                 Click(quests.claim);
-                Check(quests.claimLabel.text == "Claimed" && service.Snapshot.experience == 80 && service.Snapshot.fishCoins == 40, "Quest claim did not refresh UI/balance.");
+                await Command(service.FlushAsync()); await Task.Delay(20);
+                Check(quests.claimLabel.text == "Claimed" && service.Experience == 80 && service.FishCoins == 40, "Quest claim did not refresh UI/balance.");
                 Click(nav.pages[0].GetComponentInChildren<FocusPanelUI>().start);
+                await FocusIdle();
                 Check(nav.CurrentPage == MainMenuPage.Focus && FocusRunner.EnsureInstance().Controller.Phase == FocusPhase.Focusing, "Quick Start did not start real Focus.");
                 next = EditorApplication.timeSinceStartup + 2; step++; return;
             }
@@ -228,10 +246,12 @@ public static class DashboardRewardPlayVerification
                 Check(FocusRunner.EnsureInstance().Controller.Phase == FocusPhase.Focusing, "Page switch stopped Focus.");
                 var controller = FocusRunner.EnsureInstance().Controller;
                 for (int i = 0; i < 1500 && controller.Phase == FocusPhase.Focusing; i++) controller.Advance(1);
-                Check(controller.Phase == FocusPhase.Resting && service.Snapshot.tickets == 1, "Focus completion did not settle/start Rest.");
+                await FocusIdle();
+                Check(controller.Phase == FocusPhase.Resting && service.Tickets == 1, "Focus completion did not settle/start Rest.");
                 var goal = nav.pages[0].GetComponentsInChildren<DailyGoalUI>().Single(g => g.goal == DailyRewardGoal.Focus25Minutes);
                 Click(goal.claim);
-                Check(service.Snapshot.experience == 125 && service.Snapshot.fishCoins == 60 && nav.tickets.text == "1", "Focus claim or HUD wrong.");
+                await Command(service.FlushAsync()); await Task.Delay(20);
+                Check(service.Experience == 125 && service.FishCoins == 60 && nav.tickets.text == "1", "Focus claim or HUD wrong.");
                 var cat = UnityEngine.Object.FindFirstObjectByType<CatStatusUI>();
                 Check(cat.level.text == "LV 2" && cat.experience.text == "25 / 125", "Cat status did not level up from rewards.");
                 Click(nav.buttons[2]); next = EditorApplication.timeSinceStartup + 1; step++; return;
@@ -248,8 +268,9 @@ public static class DashboardRewardPlayVerification
                 var panel = nav.pages[2].GetComponent<FocusPanelUI>();
                 Click(panel.endRest);
                 Check(panel.start.gameObject.activeSelf && panel.start.GetComponentInChildren<TMP_Text>().text == "Start Focus", "Rest did not offer next actions.");
-                Click(panel.start); Click(panel.cancel); Click(panel.cancelConfirmation.confirm);
-                Check(FocusRunner.EnsureInstance().Controller.Phase == FocusPhase.Interrupted && service.Snapshot.experience == 125, "Cancelled session rewarded or entered Rest.");
+                Click(panel.start); await FocusIdle();
+                Click(panel.cancel); Click(panel.cancelConfirmation.confirm); await FocusIdle();
+                Check(FocusRunner.EnsureInstance().Controller.Phase == FocusPhase.Interrupted && service.Experience == 125, "Cancelled session rewarded or entered Rest.");
                 Click(nav.buttons[(int)MainMenuPage.Dashboard]);
                 Check(nav.CurrentPage == MainMenuPage.Dashboard, "Sidebar did not return to Dashboard.");
                 next = EditorApplication.timeSinceStartup + 1; step++; return;
@@ -257,8 +278,8 @@ public static class DashboardRewardPlayVerification
             if (step == 9)
             {
                 ValidateLayout(nav); Capture("dashboard-claimed-1920x1080.png");
-                var disk = new PlayerDataStore(GameDataManager.Instance.SavePath);
-                Check(disk.Data.rewardDays.Single().questsClaimed && disk.Data.rewardDays.Single().focusClaimed && disk.Data.tickets == 1, "Claims did not persist.");
+                var disk = await AwaitBounded(SqlitePlayVerificationSupport.ReloadAsync());
+                Check(disk.rewardDays.Single().questsClaimed && disk.rewardDays.Single().focusClaimed && disk.tickets == 1, "Claims did not persist.");
                 next = EditorApplication.timeSinceStartup + 1; step++; return;
             }
             File.WriteAllText("Temp/dashboard-reward-play.verification", "ALL PASS: real Dashboard UI, independent Claims, Focus quick start, navigation continuity, Rest/cancel, level/HUD refresh, persistence, 1280x720/1920x1080 layout. Screenshots: " + folder);
@@ -269,6 +290,7 @@ public static class DashboardRewardPlayVerification
             File.WriteAllText("Temp/dashboard-reward-play.verification", "FAIL step " + step + ": " + ex);
             Debug.LogException(ex); EditorApplication.update -= Tick; EditorApplication.isPlaying = false;
         }
+        finally { busy=false; }
     }
 }
 

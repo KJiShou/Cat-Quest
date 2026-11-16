@@ -1,4 +1,6 @@
 using System;
+using System.Threading.Tasks;
+using static SqlitePlayVerificationSupport;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -17,7 +19,7 @@ public static class BossSkipVerification
     static int step;
     static double next;
     static RewardScreenshotCapture capture;
-    static FileStream saveLock;
+    static IDisposable saveLock;
     static string FolderNow => SessionState.GetString(Flag + ".folder", Folder);
     static EditorWindow View => EditorWindow.GetWindow(typeof(Editor).Assembly.GetType("UnityEditor.GameView"));
     static PropertyInfo SizeProperty => View.GetType().GetProperty("selectedSizeIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -55,7 +57,10 @@ public static class BossSkipVerification
         if (!capture) capture = new GameObject("Boss Skip Capture").AddComponent<RewardScreenshotCapture>();
         capture.Begin(Path.GetFullPath(FolderNow + "/" + name + ".png"));
     }
-    static void Poll()
+    static bool polling;
+    static PlayerData saved;
+    static async void Poll() { if(polling)return;polling=true;try{await PollAsync();}finally{polling=false;} }
+    static async Task PollAsync()
     {
         if (EditorApplication.isCompiling || EditorApplication.isUpdating) return;
         if (EditorApplication.isPlaying && SessionState.GetBool(Flag, false)) {
@@ -64,7 +69,7 @@ public static class BossSkipVerification
                 File.WriteAllText(FolderNow+"/result.txt","FAIL: Boss Skip Play Mode verification exceeded 180 seconds.");saveLock?.Dispose();saveLock=null;EditorApplication.isPlaying=false;return;
             }
             if (EditorApplication.timeSinceStartup < next || (capture && capture.Pending)) return;
-            try { Tick(); } catch (Exception e) { File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\n"+e); EditorApplication.isPlaying = false; }
+            try { await Tick(); } catch (Exception e) { File.WriteAllText(FolderNow + "/result.txt", DateTime.UtcNow.ToString("O")+"\n"+e); EditorApplication.isPlaying = false; }
             return;
         }
         if (EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists("Temp/verify-boss-skip.request")) return;
@@ -90,60 +95,60 @@ public static class BossSkipVerification
         Check(Vector3.Distance(panel.actors.Cat.position,defeatedPosition)<.001f,"Defeated cat must not run out of the arena");
         if(completed)Check(state.normalizedTime>=1,"Cat death clip must finish while the result stays open");
     }
-    static void Begin(BossPageUI panel){panel.Action();panel.Confirm();Check(panel.IsBattling,"Cannot begin battle: "+panel.message.text);}
-    static void Tick(){
-        var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var panel=nav.pages[3].GetComponent<BossPageUI>();var manager=GameDataManager.Instance;var service=manager.Tasks;var ui=panel.skipUI;
+    static async Task Begin(BossPageUI panel){panel.Action();panel.Confirm();saved=await DrainAsync(GameDataManager.Instance.Service);Check(panel.IsBattling,"Cannot begin battle: "+panel.message.text);}
+    static async Task Tick(){
+        var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var panel=nav.pages[3].GetComponent<BossPageUI>();var manager=GameDataManager.Instance;var service=manager.Service;var ui=panel.skipUI;saved=await DrainAsync(service);
         Check(manager.SavePath.Contains("BossSkipVerification"),"Must isolate save");
-        if(step==0){UnityEngine.Object.FindFirstObjectByType<TutorialController>().Skip();manager.PlayerData.experience=3000;manager.PlayerData.tickets=12;manager.SaveData();nav.ShowPage(MainMenuPage.Boss);}
+        if(step==0){UnityEngine.Object.FindFirstObjectByType<TutorialController>().Skip();saved.experience=3000;saved.tickets=12;Check((await SetFixtureAsync(saved)).Succeeded,"SQLite fixture commit");saved=await DrainAsync(service);nav.ShowPage(MainMenuPage.Boss);}
         if(step==1){Check(!ui.skip.gameObject.activeSelf,"Idle skip visible");Capture("idle-1920");}
-        if(step==2){Begin(panel);spent=service.Snapshot.tickets;Capture("battle-1920");}
+        if(step==2){await Begin(panel);spent=saved.tickets;Capture("battle-1920");}
         if(step==3){
             var expected=new BattleSimulation(panel.Simulation.Cat,panel.Simulation.Boss);expected.Advance(120);
-            FocusLayoutVerification.Click(ui.skip);Check(!panel.IsBattling&&service.Snapshot.battles.Last().outcome==expected.Outcome,"Skip differs from full simulation");Check(expected.Outcome==BattleOutcome.Victory&&panel.resultPanels[0].activeSelf,"Win result missing");
-            wins=service.Snapshot.bossProgress[0].wins;ui.skip.onClick.Invoke();panel.SkipBattle();Check(service.Snapshot.bossProgress[0].wins==wins&&service.Snapshot.tickets==spent,"Duplicate skip settlement");Check(!ui.confirmation.activeSelf,"Skip opened a confirmation");Capture("victory-1920");
+            FocusLayoutVerification.Click(ui.skip);saved=await DrainAsync(service);Check(!panel.IsBattling&&saved.battles.Last().outcome==expected.Outcome,"Skip differs from full simulation");Check(expected.Outcome==BattleOutcome.Victory&&panel.resultPanels[0].activeSelf,"Win result missing");
+            wins=saved.bossProgress[0].wins;ui.skip.onClick.Invoke();saved=await DrainAsync(service);panel.SkipBattle();saved=await DrainAsync(service);Check(saved.bossProgress[0].wins==wins&&saved.tickets==spent,"Duplicate skip settlement");Check(!ui.confirmation.activeSelf,"Skip opened a confirmation");Capture("victory-1920");
         }
         if(panel.IsReturningFromResult)return;
         if(step==4){panel.CloseResult();Resolution(1280,720);}
         if(step==5){
-            if(panel.SelectedBoss!=2){manager.PlayerData.experience=1800;manager.SaveData();panel.SelectStage(2);next=EditorApplication.timeSinceStartup+.1;return;}
+            if(panel.SelectedBoss!=2){saved.experience=1800;Check((await SetFixtureAsync(saved)).Succeeded,"SQLite fixture commit");saved=await DrainAsync(service);panel.SelectStage(2);next=EditorApplication.timeSinceStartup+.1;return;}
             if(panel.arena.IsLoading){next=EditorApplication.timeSinceStartup+.1;return;}
-            Check(panel.arena.IsReady,"Orc arena failed to load");Begin(panel);
+            Check(panel.arena.IsReady,"Orc arena failed to load");await Begin(panel);
         }
-        if(step==6){FocusLayoutVerification.Click(ui.skip);Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&panel.resultPanels[1].activeSelf,"Skip fabricated a win");defeatedPosition=panel.actors.Cat.position;CheckDeath(panel,false);Capture("defeat-1280");}
+        if(step==6){FocusLayoutVerification.Click(ui.skip);saved=await DrainAsync(service);Check(saved.battles.Last().outcome==BattleOutcome.Defeat&&panel.resultPanels[1].activeSelf,"Skip fabricated a win");defeatedPosition=panel.actors.Cat.position;CheckDeath(panel,false);Capture("defeat-1280");}
         if(step==7){CheckDeath(panel,true);Capture("defeat-held-1280");panel.CloseResult();}
-        if(step==8){manager.PlayerData.experience=3000;manager.SaveData();panel.SelectStage(1);Begin(panel);saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);ui.skip.onClick.Invoke();Check(panel.actionLabel.text=="Retry Save"&&!ui.skip.gameObject.activeSelf,"Save failure not retryable");Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Running,"Failed save committed outcome");}
-        if(step==9){saveLock.Dispose();saveLock=null;panel.Action();Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Victory&&service.Snapshot.bossProgress[0].wins==wins+1,"Retry did not settle once");panel.CloseResult();}
+        if(step==8){saved.experience=3000;Check((await SetFixtureAsync(saved)).Succeeded,"SQLite fixture commit");saved=await DrainAsync(service);panel.SelectStage(1);await Begin(panel);saveLock=TaskCalendarPlayVerification.FailSqliteWrites();ui.skip.onClick.Invoke();saved=await DrainAsync(service);Check(panel.actionLabel.text=="Retry Save"&&!ui.skip.gameObject.activeSelf,"Save failure not retryable");Check(saved.battles.Last().outcome==BattleOutcome.Running,"Failed save committed outcome");}
+        if(step==9){saveLock.Dispose();saveLock=null;panel.Action();saved=await DrainAsync(service);Check(saved.battles.Last().outcome==BattleOutcome.Victory&&saved.bossProgress[0].wins==wins+1,"Retry did not settle once");panel.CloseResult();}
         if(step==10){
-            Begin(panel);spent=service.Tickets;
+            await Begin(panel);spent=service.Tickets;
             Check(!nav.ShowPage(MainMenuPage.Tasks)&&nav.CurrentPage==MainMenuPage.Boss&&panel.confirmation.activeSelf&&panel.IsBattling,"Leaving a live battle must ask before stopping");
             Check(EventSystem.current.currentSelectedGameObject==panel.cancel.gameObject,"Keep fighting must have initial focus");
-            panel.cancel.onClick.Invoke();panel.Confirm();
+            panel.cancel.onClick.Invoke();panel.Confirm();saved=await DrainAsync(service);
             Check(panel.IsBattling&&nav.CurrentPage==MainMenuPage.Boss&&service.Tickets==spent,"Cancel/stale confirmation must keep the battle and ticket unchanged");
             nav.ShowPage(MainMenuPage.Tasks);nav.ShowPage(MainMenuPage.Dashboard);
-            saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
-            panel.Confirm();panel.Confirm();
-            Check(nav.CurrentPage==MainMenuPage.Boss&&panel.actionLabel.text=="Retry Save"&&service.Snapshot.battles.Last().outcome==BattleOutcome.Running,"Failed stop must remain on Boss with retry");
+            saveLock=TaskCalendarPlayVerification.FailSqliteWrites();
+            panel.Confirm();saved=await DrainAsync(service);panel.Confirm();saved=await DrainAsync(service);
+            Check(nav.CurrentPage==MainMenuPage.Boss&&panel.actionLabel.text=="Retry Save"&&saved.battles.Last().outcome==BattleOutcome.Running,"Failed stop must remain on Boss with retry");
             Check(!nav.ShowPage(MainMenuPage.Dashboard)&&nav.CurrentPage==MainMenuPage.Boss,"An unsaved result must block another destination");
         }
         if(step==11){
-            saveLock.Dispose();saveLock=null;panel.Action();
-            Check(nav.CurrentPage==MainMenuPage.Tasks&&service.Snapshot.battles.Last().outcome==BattleOutcome.Stopped&&service.Tickets==spent,"Successful retry must stop once and use the original destination");
-            var reloaded=new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock());
-            Check(reloaded.Snapshot.battles.Last().outcome==BattleOutcome.Stopped&&reloaded.Tickets==spent,"Stopped entry and spent ticket must survive reload");
-            panel.Confirm();nav.ShowPage(MainMenuPage.Boss);Check(!ui.skip.gameObject.activeSelf&&!panel.confirmation.activeSelf,"Stale stop/skip after reopen");
+            saveLock.Dispose();saveLock=null;panel.Action();saved=await DrainAsync(service);
+            Check(nav.CurrentPage==MainMenuPage.Tasks&&saved.battles.Last().outcome==BattleOutcome.Stopped&&service.Tickets==spent,"Successful retry must stop once and use the original destination");
+            var reloaded=await Bounded(ReloadAsync());
+            Check(reloaded.battles.Last().outcome==BattleOutcome.Stopped&&reloaded.tickets==spent,"Stopped entry and spent ticket must survive reload");
+            panel.Confirm();saved=await DrainAsync(service);nav.ShowPage(MainMenuPage.Boss);Check(!ui.skip.gameObject.activeSelf&&!panel.confirmation.activeSelf,"Stale stop/skip after reopen");
             panel.SelectStage(1);
         }
         if(step==12){
             if(panel.arena.IsLoading){next=EditorApplication.timeSinceStartup+.1;return;}
-            Begin(panel);nav.ShowPage(MainMenuPage.Tasks);panel.SkipBattle();
-            Check(nav.CurrentPage==MainMenuPage.Boss&&!panel.confirmation.activeSelf&&service.Snapshot.battles.Last().outcome==BattleOutcome.Victory,"A completed battle must invalidate unconfirmed navigation");
-            panel.Confirm();Check(nav.CurrentPage==MainMenuPage.Boss&&panel.resultPanels[0].activeSelf,"Stale leave confirmation must not hide the result");
+            await Begin(panel);nav.ShowPage(MainMenuPage.Tasks);panel.SkipBattle();saved=await DrainAsync(service);
+            Check(nav.CurrentPage==MainMenuPage.Boss&&!panel.confirmation.activeSelf&&saved.battles.Last().outcome==BattleOutcome.Victory,"A completed battle must invalidate unconfirmed navigation");
+            panel.Confirm();saved=await DrainAsync(service);Check(nav.CurrentPage==MainMenuPage.Boss&&panel.resultPanels[0].activeSelf,"Stale leave confirmation must not hide the result");
         }
         if(step==13){panel.CloseResult();Resolution(1920,1080);}
-        if(step==14){manager.PlayerData.experience=550;manager.SaveData();Begin(panel);}
+        if(step==14){saved.experience=550;Check((await SetFixtureAsync(saved)).Succeeded,"SQLite fixture commit");saved=await DrainAsync(service);await Begin(panel);}
         if(step==15){
             if(panel.IsBattling){next=EditorApplication.timeSinceStartup+.05;return;}
-            Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&panel.resultPanels[1].activeSelf,"Natural defeat result missing");
+            Check(saved.battles.Last().outcome==BattleOutcome.Defeat&&panel.resultPanels[1].activeSelf,"Natural defeat result missing");
             defeatedPosition=panel.actors.Cat.position;CheckDeath(panel,false);Capture("natural-defeat-1920");
         }
         if(step==16){CheckDeath(panel,true);Capture("natural-defeat-held-1920");panel.CloseResult();}

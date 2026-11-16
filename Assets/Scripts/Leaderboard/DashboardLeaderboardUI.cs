@@ -17,7 +17,7 @@ public sealed class DashboardLeaderboardUI : MonoBehaviour
     Coroutine running;
     string context;
     int generation;
-    TaskService service;
+    SqlitePlayerService service;
     bool wasUnlocked;
     public LeaderboardKind CurrentKind { get; private set; }
 
@@ -28,7 +28,7 @@ public sealed class DashboardLeaderboardUI : MonoBehaviour
         source = source ?? new LeaderboardReader(account);
         context = account.RankingContext;
         account.Changed += AccountChanged;
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         CurrentKind = service.Settings.DashboardRanking;
         service.Changed += SettingsChanged;
         Reload();

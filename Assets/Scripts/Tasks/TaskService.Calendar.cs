@@ -24,6 +24,8 @@ public sealed class TaskCalendarResult
 {
     public Dictionary<DateTime, CalendarTaskDay> days = new Dictionary<DateTime, CalendarTaskDay>();
     public List<CalendarTaskItem> noDate = new List<CalendarTaskItem>();
+    public string noDateNextCursor;
+    public long noDateTotalCount;
 }
 
 public sealed partial class TaskService

@@ -7,8 +7,8 @@ public sealed class EquipmentStatsUI : MonoBehaviour
     public TMP_Text totalPower;
     public TMP_Text[] values;
     public TMP_Text[] bonuses;
-    TaskService service;
-    void OnEnable(){service=GameDataManager.EnsureInstance().Tasks;service.Changed+=Refresh;Refresh();}
+    SqlitePlayerService service;
+    void OnEnable(){service=GameDataManager.EnsureInstance().Service;service.Changed+=Refresh;Refresh();}
     void OnDisable(){if(service!=null)service.Changed-=Refresh;}
     public void Refresh()
     {

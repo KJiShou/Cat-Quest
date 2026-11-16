@@ -2,25 +2,14 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-这些 PNG 是 **2026-11-01（Asia/Kuala_Lumpur）** 在 Unity Game View 中重新拍摄的当前 UI 原始画面，尺寸统一为 **1920×1080**，没有修图。它们替换 10 月 31 日的图片，展示 Tasks 日历、Todo 日期分组、默认任务分类设置，以及更新后的按钮颜色和边框。
+八张 PNG 均为 **2026-11-16（Asia/Kuala_Lumpur）** 为 **v1.4.0** 重新拍摄的 **1920×1080** Unity Game View 实际画面，未修图。它们替换 11 月 1 日的旧图，保留当前手工 UI，包括五列装备栏和已保存的 Boss 按钮字号。
 
-截图使用名为 **Mochi** 的隔离虚构存档，包含学习／个人演示任务及示例成长／装备。日历中未来的 Daily 为预览。没有使用个人任务、真实玩家存档或已连接账号；Chat 刻意展示未连接状态。
+使用演示 JSON 迁移的独立 SQLite 存档：猫咪名为 **Mochi**，包含学习／个人示例任务、Lv.10 进度和演示装备。Chat 未连接，没有真实存档、账号凭据或私人任务；日历未来 Daily 条目只是预览。
 
-来源为 main 的 `23f6d343` 加截图时的工作区。同期本地 Companion 改动不属于本次截图更新，截图也不包含原生 Companion 窗口。
+图片：`dashboard.png`、`tasks.png`、`calendar.png`、`focus.png`、`boss.png`、`equipment.png`、`chat.png`、`settings.png`（显示 v1.4.0）。
 
-| 发布图片 | `Library/ReadmeCapture-20261101/` 中的原始截图 |
-| --- | --- |
-| `dashboard.png` | `Dashboard.png` |
-| `tasks.png` | `Tasks.png` |
-| `calendar.png` | `Calendar.png` |
-| `focus.png` | `Focus.png` |
-| `boss.png` | `Boss.png` |
-| `equipment.png` | `CatHome.png` |
-| `chat.png` | `Chat.png` |
-| `settings.png` | `Settings.png` |
+已经打开的 Unity **6000.3.10f1** 渲染 `Assets/Scenes/CharacterHome.unity`，通过现有组件切换页面，八张均已实际检查。没有重新生成 UI、保存场景／prefab 改动或修改图片像素。结束后恢复原存档／AI 环境、Play Mode 启动场景、Game View 选择／自定义尺寸和暂停状态。
 
-截图使用已经打开的 Unity **6000.3.10f1** Editor 和 `Assets/Scenes/CharacterHome.unity`，通过程序切换页面和打开 Settings。这些是文档图片，不代表指针／键盘交互、动画、持久化或 Windows Companion 行为已全部通过测试。
+原图、演示存档、截图脚本及 PASS／恢复结果留在本机忽略目录 `Temp/ReadmeReleaseCapture/20261116-093203/`。已移除 Assets 中的临时脚本及 `.meta`，只发布精选图片与说明。
 
-原始截图、一次性演示存档及截图／恢复结果保留在忽略目录 `Library/ReadmeCapture-20261101/`。临时截图脚本使用后删除。运行器恢复原存档／AI 环境、Play Mode 起始场景、Game View 选择／自定义尺寸和暂停状态，不保存 authored 场景或 prefab。
-
-仅发布精选的八张 PNG。此前验证报告仍是历史记录，本次截图不会改变它们的结果。截图保留项目和第三方美术原有权利，见[第三方声明](../../THIRD_PARTY_NOTICES.zh-CN.md)。
+截图展示外观，不代表完整交互或原生窗口验证；参见[验证报告](../../SQLITE_VERIFICATION_REPORT.md)。图片中的素材保留原[第三方权利](../../THIRD_PARTY_NOTICES.md)。

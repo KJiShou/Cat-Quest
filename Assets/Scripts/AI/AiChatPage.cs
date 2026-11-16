@@ -44,10 +44,15 @@ public sealed class AiChatPage : MonoBehaviour
         settings.onClick.AddListener(() => {
             FindFirstObjectByType<SettingsLauncher>().OpenAIFromChat(settings.gameObject);
         });
-        saveDraft.onClick.AddListener(() => {
-            if (editing == null) return;
+        saveDraft.onClick.AddListener(async () => {
+            if (editing == null || !saveDraft.interactable) return;
             var draft = editor.ReadDraft(out _);
-            if (session.Confirm(editing, draft)) CloseDraft();
+            var currentSession = session; var currentDraft = editing;
+            saveDraft.interactable = false;
+            bool saved = await currentSession.ConfirmAsync(currentDraft, draft);
+            if (!this || !isActiveAndEnabled || session != currentSession || editing != currentDraft) return;
+            saveDraft.interactable = true;
+            if (saved) CloseDraft();
             else { reviewStatus.text = session.Status; reviewStatus.gameObject.SetActive(true); }
         });
         cancelDraft.onClick.AddListener(CloseDraft);
@@ -153,8 +158,9 @@ public sealed class AiChatPage : MonoBehaviour
     public void OpenDraft(AiTaskDraft draft)
     {
         if (draft.state != "pending") return;
+        saveDraft.interactable=true;
         editing = draft; editorOverlay.transform.SetAsLastSibling(); editorOverlay.SetActive(true); editor.gameObject.SetActive(true);
-        editor.LoadDraft(PlayerDataStore.Copy(draft.task), GameDataManager.EnsureInstance().Tasks.TagCatalog, draft.completed);
+        editor.LoadDraft(PlayerDataStore.Copy(draft.task), GameDataManager.EnsureInstance().Service.TagCatalog, draft.completed);
         editor.transform.Find("Header/Heading").GetComponent<TMP_Text>().text = string.IsNullOrEmpty(draft.targetId) ? "Review New Task" : "Review Task Changes";
         saveDraft.GetComponentInChildren<TMP_Text>().text = "Confirm & Save";
         if(reviewStatus) { reviewStatus.text=""; reviewStatus.gameObject.SetActive(false); }

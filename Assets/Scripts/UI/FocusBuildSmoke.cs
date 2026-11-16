@@ -77,18 +77,22 @@ public sealed class FocusBuildSmoke : MonoBehaviour
         return states.ToArray();
     }
     void Start() { directory=CompanionProtocol.Argument("--smoke-dir");Directory.CreateDirectory(directory); }
-    void Update()
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    bool polling;
+    async void Update()
     {
         // Opt-in measurement only: silence probe polling/writes for a bounded
         // interval. FocusRunner, rendering and the real companion pipe keep running.
+        if(polling || !GameDataManager.Instance || !GameDataManager.Instance.IsReady)return;
         if(Time.realtimeSinceStartupAsDouble<verificationQuietUntil)return;
         if(Time.unscaledTime<next) return;next=Time.unscaledTime+.2f;
+        polling=true;
         try {
             if(!navigation) {
                 navigation=FindFirstObjectByType<MainMenuNavigation>();if(!navigation || !GameDataManager.Instance) return;
                 panel=navigation.pages[(int)MainMenuPage.Focus].GetComponent<FocusPanelUI>();
-                var service=GameDataManager.Instance.Tasks;
-                if(service.Snapshot.tasks.Count==0)service.Upsert(new QuestTask{title="Read UX Research",date=TaskService.DateKey(service.LocalNow)},null,out _);
+                var service=GameDataManager.Instance.Service;
+                if(service.TaskSnapshot.tasks.Count==0){var created=await service.UpsertAsync(new QuestTask{title="Read UX Research",date=TaskService.DateKey(service.LocalNow)},null);if(!created.Succeeded)throw new IOException(created.Message);}
                 navigation.ShowPage(MainMenuPage.Focus);focus=FocusRunner.EnsureInstance().Controller;
             }
             string commandPath=Path.Combine(directory,"smoke-command.json");
@@ -99,8 +103,8 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                 switch(command.action) {
                     case "performance-quiet":verificationQuietUntil=Time.realtimeSinceStartupAsDouble+Mathf.Clamp(command.seconds,1,45);break;
                     case "reduce-motion":
-                        var motionSettings=GameDataManager.Instance.Tasks.Settings;motionSettings.reduceMotion=command.enabled;
-                        if(!GameDataManager.Instance.Tasks.SaveSettings(motionSettings))throw new IOException(GameDataManager.Instance.Tasks.LastError);
+                        var motionSettings=GameDataManager.Instance.Service.Settings;motionSettings.reduceMotion=command.enabled;
+                        if(!(await GameDataManager.Instance.Service.SaveSettingsAsync(motionSettings)).Succeeded)throw new IOException(GameDataManager.Instance.Service.LastError);
                         break;
                     case "configure": focus.Configure(new FocusSessionOptions { mode=command.mode, focusMinutes=command.focusMinutes, restMinutes=command.restMinutes });break;
                     case "updates-prepare":AppUpdateController.Ensure().PrepareSmokeUpdate(directory);break;
@@ -116,13 +120,15 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                     case "confirm-cancel":panel.cancelConfirmation.Confirm();break;
                     case "keep-focus":panel.cancelConfirmation.Dismiss();break;
                     case "rest":panel.endRest.onClick.Invoke();break;
-                    case "retry":focus.RetrySettlement();break;
+                    case "retry":await focus.RetrySettlementAsync();break;
                     case "advance":for(int i=0;i<command.seconds;i++)focus.Advance(1);break;
                     case "notifications":
-                        var settings=GameDataManager.Instance.Tasks.Settings;settings.notificationsEnabled=command.enabled;
-                        if(!GameDataManager.Instance.Tasks.SaveSettings(settings))throw new IOException(GameDataManager.Instance.Tasks.LastError);
+                        var settings=GameDataManager.Instance.Service.Settings;settings.notificationsEnabled=command.enabled;
+                        if(!(await GameDataManager.Instance.Service.SaveSettingsAsync(settings)).Succeeded)throw new IOException(GameDataManager.Instance.Service.LastError);
                         break;
                     case "widget":CompanionHost.Ensure().SetEnabled(true);break;
+                    case "shutdown-widget":CompanionHost.Ensure().BeginUpdateShutdown();break;
+                    case "resume-widget":CompanionHost.Ensure().CancelUpdateShutdown();break;
                     case "close-widget":CompanionHost.Ensure().SetEnabled(false);break;
                     case "dashboard":navigation.ShowPage(MainMenuPage.Dashboard);break;
                     case "focus":navigation.ShowPage(MainMenuPage.Focus);break;
@@ -133,7 +139,10 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                     case "boss-start":
                         var bossPage=navigation.pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>();
                         bossPage.action.onClick.Invoke();bossPage.confirm.onClick.Invoke();
-                        var latest=GameDataManager.Instance.PlayerData.battles.LastOrDefault();
+                        await GameDataManager.Instance.FlushAsync();
+                        var battleSnapshot=await GameDataManager.Instance.Service.ReadVerificationSnapshotAsync();
+                        if(!battleSnapshot.Succeeded)throw new IOException(battleSnapshot.Message);
+                        var latest=battleSnapshot.Value.battles.LastOrDefault();
                         if(latest!=null){var expected=new BattleSimulation(latest);expected.Advance(120);expectedBattleOutcome=expected.Outcome.ToString();}
                         break;
                     case "boss-confirm-again":navigation.pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>().confirm.onClick.Invoke();break;
@@ -144,7 +153,10 @@ public sealed class FocusBuildSmoke : MonoBehaviour
             }
             var host=CompanionHost.Ensure();var preview=FindFirstObjectByType<CharacterHomePreview>(FindObjectsInactive.Include);
             var runner=FocusRunner.EnsureInstance();
-            var data=GameDataManager.Instance.PlayerData;
+            var snapshot=await GameDataManager.Instance.Service.ReadVerificationSnapshotAsync();
+            if(!snapshot.Succeeded)throw new IOException(snapshot.Message);
+            if(!this)return;
+            var data=snapshot.Value;
             var stage=panel.GetComponentInChildren<FocusScenePreview>(true)?.Stage;
             var battle=stage?stage.GetComponentInChildren<FocusTrainingBattle>(true):null;
             var animation=battle?battle.animator.GetCurrentAnimatorStateInfo(0):default;
@@ -167,11 +179,13 @@ public sealed class FocusBuildSmoke : MonoBehaviour
                 mode=focus.Options.mode,elapsed=focus.ElapsedSeconds,timer=panel.timer.text,cancelPrompt=panel.cancelConfirmation&&panel.cancelConfirmation.IsOpen,endEarlyVisible=panel.endEarly.gameObject.activeSelf,
                 fish=focus.SpectatorFishCount,exp=data.experience,coins=data.fishCoins,tickets=data.tickets,
                 ownerId=host.OwnerId,sessionId=focus.SessionId ?? "",companionDirectory=host.DirectoryPath,widgetOpen=host.IsOpen,error=host.Error,
-                notificationsEnabled=GameDataManager.Instance.Tasks.Settings.notificationsEnabled,notificationsRegistered=runner.NotificationsRegistered,
+                notificationsEnabled=GameDataManager.Instance.Service.Settings.notificationsEnabled,notificationsRegistered=runner.NotificationsRegistered,
                 notificationAttempts=runner.NotificationAttempts,notificationsAccepted=runner.NotificationsAccepted,notificationsShown=runner.NotificationsShown,notificationActivations=runner.NotificationActivations,
                 notificationSessionId=runner.LastNotificationSessionId,notificationKind=runner.LastNotificationKind,notificationError=runner.NotificationError,
                 questTitle=focus.Options.questTitle,controlsBound=panel.questList && panel.focusDuration && panel.restDuration && panel.focusDuration.wholeNumbers && panel.restDuration.wholeNumbers,
                 forest=preview && preview.showSceneBackground && preview.previewCamera && preview.character });
         }catch(Exception e){File.WriteAllText(Path.Combine(directory,"smoke-error.txt"),e.ToString());}
+        finally {polling=false;}
     }
+#endif
 }

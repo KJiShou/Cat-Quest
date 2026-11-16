@@ -30,7 +30,7 @@ public sealed class RewardFlightUI : MonoBehaviour
     readonly long[] stacked = new long[3];
     readonly JuicyButtonMesh[] targetFeedback = new JuicyButtonMesh[2];
     readonly TMP_Text[] gains = new TMP_Text[3];
-    TaskService service;
+    SqlitePlayerService service;
     RectTransform surface;
     Canvas canvas;
     Vector2 pointerOrigin;
@@ -92,7 +92,7 @@ public sealed class RewardFlightUI : MonoBehaviour
     }
     void Subscribe()
     {
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         Sync(); service.Changed += Changed;
     }
     void OnDisable()

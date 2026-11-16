@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Globalization;
+using System.Threading.Tasks;
 using UnityEngine;
 
 // One optional publication client. It never restores or settles gameplay from the network.
@@ -16,7 +18,7 @@ public sealed class AccountController : MonoBehaviour
         {
             var prefs = service?.AccountSettings ?? new AccountPreferences();
             return new AccountViewState {
-                configured = Configured, busy = busy, signedIn = SignedIn, uploadEnabled = prefs.uploadEnabled,
+                configured = Configured, busy = busy || saving, signedIn = SignedIn, uploadEnabled = prefs.uploadEnabled,
                 pendingRemoval = prefs.pendingRemoval, conflict = conflict, wrongAccount = WrongAccount(prefs),
                 playerName = DisplayName(prefs), accountLabel = SignedIn ? (string.IsNullOrEmpty(email) ? "Google account" : email) : "Not signed in",
                 status = !AppPlatform.WindowsDesktop ? AppPlatform.DesktopMessage : Configured ? status : configuration ? configuration.ConfigurationError : "Google sign-in is not available yet. Local tasks and progress remain available.",
@@ -24,14 +26,17 @@ public sealed class AccountController : MonoBehaviour
             };
         }
     }
-    TaskService service;
+    SqlitePlayerService service;
     IAccountHttp http = new AccountHttp();
     Coroutine operation;
     DesktopGoogleSignIn browser;
     string uid, idToken, refreshToken, email, credentialTarget;
     string status = "Sign in with Google to optionally share ranking statistics.", comparison = "";
     DateTimeOffset expiresAt;
-    bool busy, signingIn, saving, dirty, conflict, memoryOnly, initializing, restoreAttempted;
+    bool busy, signingIn, dirty, conflict, memoryOnly, initializing, restoreAttempted;
+    int pendingLocalSaves;
+    bool saving => pendingLocalSaves > 0;
+    bool? requestedUploadConsent;
     int generation, retryCount;
     float nextSync;
     AccountRemoteSnapshot conflictingRemote;
@@ -45,8 +50,8 @@ public sealed class AccountController : MonoBehaviour
     {
         int owner = generation;
         float deadline = Time.realtimeSinceStartup + 25;
-        while (busy && owner == generation && Time.realtimeSinceStartup < deadline) yield return null;
-        if (busy || owner != generation || !Configured || !SignedIn) { complete(null, null, null); yield break; }
+        while ((busy || saving) && owner == generation && Time.realtimeSinceStartup < deadline) yield return null;
+        if (busy || saving || owner != generation || !Configured || !SignedIn) { complete(null, null, null); yield break; }
         bool done = false, valid = false;
         StartOperation(PrepareRankingToken(ok => { valid = ok; done = true; }));
         while (!done && owner == generation && Time.realtimeSinceStartup < deadline) yield return null;
@@ -74,10 +79,12 @@ public sealed class AccountController : MonoBehaviour
         initializing = true;
         try
         {
-            service = GameDataManager.EnsureInstance().Tasks;
+            service = GameDataManager.EnsureInstance().Service;
+            if (service == null) return; // Companion is a control client, not an account/storage owner.
             if (!configuration) configuration = Resources.Load<AccountConnectionConfig>("AccountConnectionConfig");
-            service.Changed += OnLocalChanged;
-            if (Configured) credentialTarget = AccountCredentials.Target(configuration.firebaseProjectId, GameDataManager.Instance.SavePath);
+            service.RecordsChanged += OnLocalChanged;
+            if(service.IsReady) OnLocalChanged(null);
+            if (Configured) credentialTarget = AccountCredentials.Target(configuration.firebaseProjectId, GameDataManager.Instance.CredentialStoreIdentity);
         }
         finally { initializing = false; }
     }
@@ -90,6 +97,7 @@ public sealed class AccountController : MonoBehaviour
     void RestoreRememberedSession()
     {
         if (restoreAttempted) return;
+        if (service == null || !service.IsReady) return;
         restoreAttempted = true;
         // Verification stores must never read the real user's Windows credential.
         if (!Configured || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE")) ||
@@ -99,39 +107,70 @@ public sealed class AccountController : MonoBehaviour
     }
     void Update()
     {
-        if (!Configured || !SignedIn || busy || conflict || retryCount >= 3 || Time.unscaledTime < nextSync) return;
+        if (!restoreAttempted && service != null && service.IsReady) RestoreRememberedSession();
+        if (service == null || !service.IsReady || !Configured || !SignedIn || busy || saving || conflict || retryCount >= 3 || Time.unscaledTime < nextSync) return;
         var prefs = service.AccountSettings;
         if (WrongAccount(prefs)) return;
         if (prefs.pendingRemoval || (prefs.uploadEnabled && dirty)) StartOperation(Synchronize(false));
     }
     bool WrongAccount(AccountPreferences prefs) => SignedIn && !string.IsNullOrEmpty(prefs.boundUid) && prefs.boundUid != uid;
-    string DisplayName(AccountPreferences prefs) => string.IsNullOrEmpty(prefs.playerName) ? (service?.Snapshot.username ?? "") : prefs.playerName;
+    string DisplayName(AccountPreferences prefs) => string.IsNullOrEmpty(prefs.playerName) ? (service?.PlayerName ?? "") : prefs.playerName;
     void Notify() { Changed?.Invoke(); }
     void SetStatus(string value) { status = value; Notify(); }
-    void OnLocalChanged()
+    AccountAggregate observedLocalAggregate;
+    int aggregateObservation;
+    async void OnLocalChanged(IReadOnlyCollection<PlayerRecordKind> kinds)
     {
-        if (!saving) { dirty = true; nextSync = Time.unscaledTime + 2; }
+        // Preference persistence (including server acknowledgement metadata) must
+        // not itself schedule another upload. Explicit consent actions own that.
+        bool aggregateChanged = kinds == null || kinds.Contains(PlayerRecordKind.Profile) || kinds.Contains(PlayerRecordKind.History)
+            || kinds.Contains(PlayerRecordKind.FocusSessions) || kinds.Contains(PlayerRecordKind.Equipment) || kinds.Contains(PlayerRecordKind.BossProgress);
+        if (!aggregateChanged) { if(kinds.Contains(PlayerRecordKind.Account)) Notify(); return; }
+        int request=++aggregateObservation; var source=service;
+        if(source==null||!source.IsReady)return;
+        string name=DisplayName(source.AccountSettings);
+        if(!AccountAggregate.ValidName(name))name="Local";
+        var result=await source.QueryAccountAggregateAsync("local-observation",name);
+        if(!this||source!=service||request!=aggregateObservation||!result.Succeeded)return;
+        bool differs=observedLocalAggregate==null||!observedLocalAggregate.SameAs(result.Value);
+        observedLocalAggregate=result.Value;
+        if(differs){dirty=true;nextSync=Time.unscaledTime+2;}
         Notify();
     }
-    bool Save(AccountPreferences prefs)
+    async Task<bool> SaveAsync(Action<AccountPreferences> patch)
     {
-        saving = true;
+        int owner = generation;
+        var currentService = service;
+        if (currentService == null || !currentService.IsReady) return false;
+        pendingLocalSaves++;
         try
         {
-            if (service.SaveAccountSettings(prefs)) { Notify(); return true; }
+            var result = await currentService.PatchAccountSettingsAsync(patch);
+            if (!this || owner != generation) return false;
+            if (result.Succeeded) { Notify(); return true; }
             retryCount = 3; nextSync = Time.unscaledTime + 30;
-            SetStatus(service.LastError); return false;
+            SetStatus(result.Message); return false;
         }
-        finally { saving = false; }
+        catch (Exception) {
+            if (this && owner == generation) SetStatus("The account settings could not be saved. Please retry.");
+            return false;
+        }
+        finally { pendingLocalSaves--; if (this && owner == generation) Notify(); }
+    }
+    IEnumerator Save(Action<AccountPreferences> patch, Action<bool> complete)
+    {
+        var task = SaveAsync(patch);
+        while (!task.IsCompleted) yield return null;
+        complete(task.Status == TaskStatus.RanToCompletion && task.Result);
     }
     bool RequireReady()
     {
-        if (Configured) return true;
+        if (Configured && service != null && service.IsReady) return true;
         Notify(); return false;
     }
     void StartOperation(IEnumerator action, bool login = false)
     {
-        if (busy) return;
+        if (busy || saving) return;
         busy = true; signingIn = login; Notify();
         operation = StartCoroutine(Run(action, generation));
     }
@@ -166,7 +205,7 @@ public sealed class AccountController : MonoBehaviour
 
     public void SignIn()
     {
-        if (!RequireReady() || busy) return;
+        if (!RequireReady() || busy || saving) return;
         StartOperation(Login(), true);
     }
     public void CancelSignIn()
@@ -184,15 +223,23 @@ public sealed class AccountController : MonoBehaviour
             prefs.pendingRemoval ? "Signed out. Sign in to the linked account to finish removing shared statistics." :
             "Signed out. Your tasks and progress remain on this device.");
     }
-    public void SetPlayerName(string value)
+    public async void SetPlayerName(string value)
     {
         value = (value ?? "").Trim();
         if (!AccountAggregate.ValidName(value)) { SetStatus("Enter a display name of 1–20 characters without markup or control characters."); return; }
-        if (service.RenamePlayer(value)) { dirty = true; nextSync = Time.unscaledTime + 2; SetStatus("Display name saved."); }
-        else SetStatus(service.LastError);
+        if (service == null || !service.IsReady || saving) return;
+        int owner = generation; pendingLocalSaves++;
+        try {
+            var result = await service.RenamePlayerAsync(value);
+            if (!this || owner != generation) return;
+            if (result.Succeeded) { dirty = true; nextSync = Time.unscaledTime + 2; SetStatus("Display name saved."); }
+            else SetStatus(result.Message);
+        } catch (Exception) { if (this && owner == generation) SetStatus("The display name could not be saved. Please retry."); }
+        finally { pendingLocalSaves--; if (this && owner == generation) Notify(); }
     }
-    public void SetUploadEnabled(bool enabled)
+    public async void SetUploadEnabled(bool enabled)
     {
+        if (service == null || !service.IsReady) return;
         var prefs = service.AccountSettings;
         if (enabled)
         {
@@ -201,7 +248,7 @@ public sealed class AccountController : MonoBehaviour
             if (WrongAccount(prefs)) { SetStatus("This local save belongs to another Google account. Sign in to that account to share its statistics."); return; }
             string name = DisplayName(prefs).Trim();
             if (!AccountAggregate.ValidName(name)) { SetStatus("Choose a display name before sharing statistics."); return; }
-            if (busy) return;
+            if (busy || saving) return;
             prefs.boundUid = uid; prefs.playerName = name; prefs.uploadEnabled = true; prefs.pendingRemoval = false;
         }
         else
@@ -210,21 +257,30 @@ public sealed class AccountController : MonoBehaviour
             if (signingIn) CancelOperations();
             prefs.uploadEnabled = false; prefs.pendingRemoval = !string.IsNullOrEmpty(prefs.boundUid);
         }
-        if (!Save(prefs)) return;
+        requestedUploadConsent = enabled;
+        string ownerUid = uid, playerName = prefs.playerName;
+        if (!await SaveAsync(latest => {
+            if (enabled) {
+                if (!string.IsNullOrEmpty(latest.boundUid) && latest.boundUid != ownerUid) throw new PlayerCommandException("This local save belongs to another Google account.");
+                latest.boundUid = ownerUid; latest.playerName = playerName; latest.uploadEnabled = true; latest.pendingRemoval = false;
+            } else { latest.uploadEnabled = false; latest.pendingRemoval = !string.IsNullOrEmpty(latest.boundUid); }
+        })) { if (this && requestedUploadConsent == enabled) requestedUploadConsent = null; return; }
+        if (!this) return;
+        prefs = service.AccountSettings;
         dirty = true; conflict = false; conflictingRemote = null; comparison = ""; retryCount = 0; nextSync = Time.unscaledTime;
         SetStatus(enabled ? "Sharing only your name and approved ranking statistics." :
             prefs.pendingRemoval ? "Sharing stopped. Removing the uploaded statistics when the linked account is online." : "Statistics sharing is off.");
     }
     public void Retry()
     {
-        if (!RequireReady() || busy) return;
+        if (!RequireReady() || busy || saving) return;
         if (!SignedIn) { SignIn(); return; }
         retryCount = 0; dirty = true;
         StartOperation(Synchronize(false));
     }
     public void UseThisDeviceStatistics()
     {
-        if (!Configured || !SignedIn || busy || !conflict || conflictingRemote == null || WrongAccount(service.AccountSettings)) return;
+        if (!Configured || !SignedIn || busy || saving || !conflict || conflictingRemote == null || WrongAccount(service.AccountSettings)) return;
         StartOperation(Synchronize(true));
     }
 
@@ -324,13 +380,26 @@ public sealed class AccountController : MonoBehaviour
         comparison = "This device: " + local.Summary + "\nUploaded: " + (remote.exists ? remote.aggregate.Summary : "No shared statistics");
         SetStatus("Shared statistics changed elsewhere. Keep them, or explicitly use this device's statistics. Local progress is unchanged.");
     }
-    bool Acknowledge(string updateTime)
+    IEnumerator Acknowledge(string updateTime, Action<bool> complete)
     {
-        if (string.IsNullOrEmpty(updateTime)) return false;
+        if (string.IsNullOrEmpty(updateTime)) { complete(false); yield break; }
         var prefs = service.AccountSettings;
-        if (prefs.boundUid != uid) return false;
-        prefs.lastServerUpdateTime = updateTime; prefs.pendingSnapshotJson = ""; prefs.pendingWriteMayCreate = false;
-        return Save(prefs);
+        if (prefs.boundUid != uid) { complete(false); yield break; }
+        string expectedUid = uid;
+        yield return Save(latest => {
+            if (latest.boundUid != expectedUid) throw new PlayerCommandException("The linked account changed before the upload could be acknowledged.");
+            latest.lastServerUpdateTime = updateTime; latest.pendingSnapshotJson = ""; latest.pendingWriteMayCreate = false;
+        }, complete);
+    }
+    IEnumerator ReadLocalAggregate(string ownerUid, string playerName, Action<AccountAggregate> complete)
+    {
+        var task = service.QueryAccountAggregateAsync(ownerUid, playerName);
+        while (!task.IsCompleted) yield return null;
+        if (task.Status != TaskStatus.RanToCompletion || !task.Result.Succeeded) {
+            SetStatus(task.Status == TaskStatus.RanToCompletion ? task.Result.Message : "Local ranking statistics could not be read. Please retry.");
+            complete(null); yield break;
+        }
+        complete(task.Result.Value);
     }
     IEnumerator Synchronize(bool replace)
     {
@@ -342,7 +411,11 @@ public sealed class AccountController : MonoBehaviour
         prefs = service.AccountSettings;
         if (prefs.pendingRemoval) { yield return RemoveRemote(remote); yield break; }
         if (!prefs.uploadEnabled || prefs.boundUid != uid) yield break;
-        var local = AccountAggregate.From(service.Snapshot, uid, prefs.playerName);
+        AccountAggregate local = null;
+        yield return ReadLocalAggregate(uid, prefs.playerName, value => local = value);
+        if (local == null) yield break;
+        prefs = service.AccountSettings;
+        if (!prefs.uploadEnabled || prefs.pendingRemoval || prefs.boundUid != uid || requestedUploadConsent == false) yield break;
         var uncertainPending = AccountAggregate.ReadPending(prefs.pendingSnapshotJson);
         if (prefs.pendingWriteMayCreate && uncertainPending != null && (!remote.exists || !uncertainPending.SameAs(remote.aggregate)))
         {
@@ -356,24 +429,32 @@ public sealed class AccountController : MonoBehaviour
         var decision = AccountPublishPolicy.Decide(prefs, remote);
         if (decision == AccountPublishDecision.AcknowledgePending)
         {
-            if (!Acknowledge(remote.updateTime)) yield break;
+            bool acknowledged = false; yield return Acknowledge(remote.updateTime, ok => acknowledged = ok); if (!acknowledged) yield break;
             prefs = service.AccountSettings; decision = AccountPublishDecision.Update;
         }
         if (!replace && decision == AccountPublishDecision.Conflict) { ShowConflict(remote, local); yield break; }
         if (remote.exists && local.SameAs(remote.aggregate))
         {
-            if (!Acknowledge(remote.updateTime)) yield break;
+            bool acknowledged = false; yield return Acknowledge(remote.updateTime, ok => acknowledged = ok); if (!acknowledged) yield break;
             conflict = false; comparison = ""; conflictingRemote = null; dirty = false; retryCount = 0;
             SetStatus("Shared statistics are up to date."); yield break;
         }
         bool previouslyUncertainCreate = prefs.pendingWriteMayCreate && !string.IsNullOrEmpty(prefs.pendingSnapshotJson);
-        prefs.pendingSnapshotJson = JsonUtility.ToJson(local); prefs.pendingWriteMayCreate = !remote.exists || previouslyUncertainCreate;
-        if (!Save(prefs)) yield break;
-        if (!service.AccountSettings.uploadEnabled)
+        string pendingJson = JsonUtility.ToJson(local), expectedUid = uid;
+        bool mayCreate = !remote.exists || previouslyUncertainCreate, pendingSaved = false;
+        yield return Save(latest => {
+            if (latest.boundUid != expectedUid || !latest.uploadEnabled || latest.pendingRemoval) throw new PlayerCommandException("Statistics sharing is off.");
+            latest.pendingSnapshotJson = pendingJson; latest.pendingWriteMayCreate = mayCreate;
+        }, ok => pendingSaved = ok);
+        if (!pendingSaved) yield break;
+        if (!service.AccountSettings.uploadEnabled || requestedUploadConsent == false)
         {
             // No request was sent yet. Only a previous uncertain create still needs reconciliation.
-            var stopped = service.AccountSettings;
-            if (!previouslyUncertainCreate) { stopped.pendingSnapshotJson = ""; stopped.pendingWriteMayCreate = false; if (!Save(stopped)) yield break; }
+            if (!previouslyUncertainCreate) {
+                bool cleared = false;
+                yield return Save(latest => { latest.pendingSnapshotJson = ""; latest.pendingWriteMayCreate = false; }, ok => cleared = ok);
+                if (!cleared) yield break;
+            }
             yield break;
         }
         string expectedVersion = remote.exists ? remote.updateTime : null;
@@ -385,15 +466,17 @@ public sealed class AccountController : MonoBehaviour
             // A terminal server rejection proves this request did not write; transport failures do not.
             if (!result.transportError && result.code >= 400 && result.code < 500 && !previouslyUncertainCreate)
             {
-                var rejected = service.AccountSettings; rejected.pendingSnapshotJson = ""; rejected.pendingWriteMayCreate = false;
-                if (!Save(rejected)) yield break;
+                bool cleared = false;
+                yield return Save(latest => { latest.pendingSnapshotJson = ""; latest.pendingWriteMayCreate = false; }, ok => cleared = ok);
+                if (!cleared) yield break;
             }
             if (result.code == 409 || result.code == 400)
             {
                 AccountRemoteSnapshot latest = null; yield return ReadRemote(value => latest = value);
                 if (latest != null && latest.exists && local.SameAs(latest.aggregate))
                 {
-                    if (Acknowledge(latest.updateTime)) FinishPublication(local);
+                    bool acknowledged = false; yield return Acknowledge(latest.updateTime, ok => acknowledged = ok);
+                    if (acknowledged) yield return FinishPublication(local);
                 }
                 else if (latest != null) ShowConflict(latest, local);
             }
@@ -402,13 +485,18 @@ public sealed class AccountController : MonoBehaviour
         }
         string version = AccountRest.CommitUpdateTime(result.body);
         if (string.IsNullOrEmpty(version)) { SetStatus("Upload response was incomplete. Retry to confirm the saved statistics."); retryCount = 3; yield break; }
-        if (Acknowledge(version)) FinishPublication(local);
+        bool finalAcknowledged = false; yield return Acknowledge(version, ok => finalAcknowledged = ok);
+        if (finalAcknowledged) yield return FinishPublication(local);
     }
-    void FinishPublication(AccountAggregate uploaded)
+    IEnumerator FinishPublication(AccountAggregate uploaded)
     {
         conflict = false; comparison = ""; conflictingRemote = null; retryCount = 0;
         var prefs = service.AccountSettings;
-        dirty = !uploaded.SameAs(AccountAggregate.From(service.Snapshot, uid, prefs.playerName)); nextSync = Time.unscaledTime + 2;
+        AccountAggregate latest = null;
+        yield return ReadLocalAggregate(uid, prefs.playerName, value => latest = value);
+        if (latest == null) { dirty = true; yield break; }
+        dirty = !uploaded.SameAs(latest); nextSync = Time.unscaledTime + 2;
+        prefs = service.AccountSettings;
         if (prefs.pendingRemoval) { nextSync = Time.unscaledTime; SetStatus("Sharing is off. Removing the earlier uploaded statistics."); }
         else SetStatus("Ranking statistics shared. Tasks, tags and history stay on this device.");
     }
@@ -437,22 +525,23 @@ public sealed class AccountController : MonoBehaviour
             SetStatus("Shared statistics were removed, but an earlier upload still needs confirmation. Removal remains pending.");
             yield break;
         }
-        var prefs = service.AccountSettings; prefs.pendingRemoval = false; prefs.lastServerUpdateTime = ""; prefs.pendingSnapshotJson = ""; prefs.pendingWriteMayCreate = false;
-        if (!Save(prefs)) yield break;
+        bool saved = false;
+        yield return Save(latest => { latest.pendingRemoval = false; latest.lastServerUpdateTime = ""; latest.pendingSnapshotJson = ""; latest.pendingWriteMayCreate = false; }, ok => saved = ok);
+        if (!saved) yield break;
         dirty = false; conflict = false; comparison = ""; conflictingRemote = null; retryCount = 0;
         SetStatus("Shared statistics removed. Your local progress is unchanged.");
     }
     void OnDestroy()
     {
         if (Instance != this) return;
-        CancelOperations(); if (service != null) service.Changed -= OnLocalChanged;
+        CancelOperations(); if (service != null) service.RecordsChanged -= OnLocalChanged;
         uid = idToken = refreshToken = email = null; Instance = null;
     }
     void OnDisable()
     {
         if (Instance != this) return;
         CancelOperations();
-        if (service != null) service.Changed -= OnLocalChanged;
+        if (service != null) service.RecordsChanged -= OnLocalChanged;
         service = null; restoreAttempted = false;
         uid = idToken = refreshToken = email = null;
     }

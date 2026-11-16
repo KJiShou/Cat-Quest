@@ -14,12 +14,13 @@ public sealed class DailyGoalUI : MonoBehaviour
     public Image rowBackground, progressFill;
     public Sprite inProgressSprite, completedSprite;
     public Sprite inProgressFillSprite, completedFillSprite;
-    private TaskService service;
+    private SqlitePlayerService service;
     private TMP_Text taskHeading;
+    private bool saving;
     private DailyRewardGoal DisplayGoal => goal == DailyRewardGoal.ThreeQuests ? service.CurrentTaskGoal : goal;
     private void OnEnable()
     {
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         if (goal == DailyRewardGoal.ThreeQuests) taskHeading = transform.Find("Text_Info")?.GetComponent<TMP_Text>();
         service.Changed += Refresh;
         claim.onClick.AddListener(Claim);
@@ -30,9 +31,13 @@ public sealed class DailyGoalUI : MonoBehaviour
         if (service != null) service.Changed -= Refresh;
         claim.onClick.RemoveListener(Claim);
     }
-    private void Claim()
+    private async void Claim()
     {
-        bool saved = service.ClaimDailyGoal(DisplayGoal);
+        if(saving || !service.IsReady)return;
+        saving=true;claim.interactable=false;
+        bool saved;
+        try {saved=(await service.ClaimDailyGoalAsync(DisplayGoal)).Succeeded;}finally{saving=false;}
+        if (!this || !isActiveAndEnabled) return;
         feedback.text = saved ? "Reward claimed!" : "Save failed. Retry.";
         if (!saved) Debug.LogWarning(service.LastError);
         Refresh();
@@ -51,7 +56,7 @@ public sealed class DailyGoalUI : MonoBehaviour
         progressBar.maxValue = target;
         progressBar.SetValueWithoutNotify(claimed ? target : value);
         claimLabel.text = claimed ? "Claimed" : value >= target ? "Claim" : "In Progress";
-        claim.interactable = !claimed && value >= target;
+        claim.interactable = !saving && service.IsReady && !claimed && value >= target;
         bool ready = value >= target;
         if (inProgress)
         {

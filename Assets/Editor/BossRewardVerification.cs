@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using static SqlitePlayVerificationSupport;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -12,12 +14,16 @@ using UnityEngine.EventSystems;
 [InitializeOnLoad]
 public static class BossRewardVerification
 {
+    static PlayerData saved, persisted;
+    static IEnumerator Drain(SqlitePlayerService service) { var task=DrainAsync(service);foreach(var delay in Wait(task))yield return delay;saved=task.Result; }
+    static IEnumerator Reload() { var task=ReloadAsync();foreach(var delay in Wait(task))yield return delay;persisted=task.Result; }
+
     const string Flag = "CatQuest.BossRewardVerification";
     const string Folder = "Library/BossRewardVerification";
     static System.Collections.IEnumerator run;
     static double next;
     static RewardScreenshotCapture capture;
-    static FileStream saveLock;
+    static IDisposable saveLock;
     static string FolderNow => SessionState.GetString(Flag + ".folder", Folder);
     static EditorWindow View => EditorWindow.GetWindow(typeof(Editor).Assembly.GetType("UnityEditor.GameView"));
     static PropertyInfo SizeProperty => View.GetType().GetProperty("selectedSizeIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -33,9 +39,9 @@ public static class BossRewardVerification
         EditorApplication.update += Poll;
         EditorApplication.playModeStateChanged += state => {
             if (!SessionState.GetBool(Flag, false)) return;
-            if (state == PlayModeStateChange.EnteredPlayMode) { run = SessionState.GetBool(Flag+".deathOnly",false)?RunDeath():Run(); next = EditorApplication.timeSinceStartup + 3; }
+            if (state == PlayModeStateChange.EnteredPlayMode) { run = Flatten(SessionState.GetBool(Flag+".deathOnly",false)?RunDeath():Run()); next = EditorApplication.timeSinceStartup + 3; }
             if (state == PlayModeStateChange.EnteredEditMode) {
-                saveLock?.Dispose(); saveLock=null;
+                (run as IDisposable)?.Dispose();run=null;saveLock?.Dispose(); saveLock=null;
                 SessionState.SetBool(Flag, false);
                 Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", SessionState.GetBool(Flag+".hadStore",false)?SessionState.GetString(Flag+".store",""):null);
                 var scene=SessionState.GetString(Flag+".scene","");
@@ -85,29 +91,29 @@ public static class BossRewardVerification
     }
     static System.Collections.IEnumerator RunDeath(){
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
-        var manager=GameDataManager.Instance;var service=manager.Tasks;
+        var manager=GameDataManager.Instance;var service=manager.Service;yield return Drain(service);
         Check(manager.SavePath.Contains("BossRewardVerification"),"Save isolation");
-        manager.PlayerData.experience=100000;manager.PlayerData.tickets=30;
-        foreach(var progress in manager.PlayerData.bossProgress)progress.wins=1;
-        manager.SaveData();
+        saved.experience=100000;saved.tickets=30;
+        foreach(var progress in saved.bossProgress)progress.wins=1;
+        yield return Command(SetFixtureAsync(saved));yield return Drain(service);
         nav.ShowPage(MainMenuPage.Boss);yield return .3;
         var panel=nav.pages[3].GetComponent<BossPageUI>();
         var actors=panel.actors;var flights=panel.rewardFlights;
         flights.SendMessage("OnApplicationFocus",false); // Discard setup-only balance changes.
         foreach(int width in new[]{1920,1280})foreach(int boss in new[]{1,2,3}){
             Resolution(width,width==1920?1080:720);panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;panel.SelectStage(boss);yield return .3;
-            panel.Action();panel.Confirm();yield return 1.3;
+            panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);yield return 1.3;
             var camera=panel.arena.StageCamera;float size=camera.orthographicSize,fov=camera.fieldOfView;
-            float timeScale=Time.timeScale;int xp=service.Snapshot.experience,tickets=service.Snapshot.tickets;
+            float timeScale=Time.timeScale;int xp=saved.experience,tickets=saved.tickets;
             Capture("death-before-"+width+"-"+boss);yield return .1;
             var victoryPosition=actors.Cat.position;
-            panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);
-            Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Victory,"Prepared victory");
-            int awarded=service.Snapshot.experience;
+            panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);yield return Drain(service);
+            Check(saved.battles.Last().outcome==BattleOutcome.Victory,"Prepared victory");
+            int awarded=saved.experience;
             Check(awarded>xp&&actors.IsFinishingVictory&&!panel.resultPanels[0].activeSelf,"Commit precedes death; banner waits");
             Check(actors.Boss.GetComponentInChildren<Animator>().speed==0,"Final pose freezes");
-            panel.Settle(BattleOutcome.Victory);panel.Confirm();panel.Action();panel.ShowStages();panel.SelectStage(boss%3+1);
-            Check(service.Snapshot.experience==awarded&&service.Snapshot.tickets==tickets&&panel.SelectedBoss==boss&&!panel.confirmation.activeSelf&&!panel.stagePicker.activeSelf,"Repeated input cannot restart or settle during death");
+            panel.Settle(BattleOutcome.Victory);yield return Drain(service);panel.Confirm();yield return Drain(service);panel.Action();yield return Drain(service);panel.ShowStages();panel.SelectStage(boss%3+1);
+            Check(saved.experience==awarded&&saved.tickets==tickets&&panel.SelectedBoss==boss&&!panel.confirmation.activeSelf&&!panel.stagePicker.activeSelf,"Repeated input cannot restart or settle during death");
             Check(!flights.GetComponentsInChildren<Image>().Any(i=>i.name=="Reward Icon"&&i.gameObject.activeSelf),"Rewards wait for banner");
             // A short sequence of actual rendered frames, rather than a single pose.
             for(int frame=0;frame<10;frame++){
@@ -132,22 +138,23 @@ public static class BossRewardVerification
             Check(actors.Boss.GetComponentsInChildren<SpriteRenderer>().All(r=>r.color==Color.white),"Dismiss restores actor tint");
         }
         // Interrupted presentation must never reopen a stale modal or pay twice.
-        panel.SelectStage(1);panel.Action();panel.Confirm();yield return .2;
-        panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);int committed=service.Snapshot.experience;
+        panel.SelectStage(1);panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);yield return .2;
+        panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);yield return Drain(service);int committed=saved.experience;
         yield return .2;actors.SendMessage("OnApplicationFocus",false);
         Check(!actors.IsFinishingVictory&&actors.Boss.GetComponentInChildren<Animator>().speed==1,"Focus loss releases visual freeze");
         nav.ShowPage(MainMenuPage.Tasks);yield return 2.0;nav.ShowPage(MainMenuPage.Boss);yield return .2;
-        Check(!panel.resultPanels[0].activeSelf&&!actors.IsFinishingVictory&&service.Snapshot.experience==committed,"Page closure cancels presentation only");
-        Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.experience==committed,"Committed victory survives reload");
-        panel.Action();panel.Confirm();yield return .2;panel.Simulation.Advance(120);
-        saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
-        panel.Settle(panel.Simulation.Outcome);
-        Check(!actors.IsFinishingVictory&&!panel.resultPanels[0].activeSelf&&service.Snapshot.experience==committed,"Failed save has no victory presentation");
-        saveLock.Dispose();saveLock=null;panel.Action();
-        Check(actors.IsFinishingVictory&&service.Snapshot.experience>committed,"Retry starts committed presentation");
-        committed=service.Snapshot.experience;panel.Settle(BattleOutcome.Victory);yield return 3.6;
-        Check(service.Snapshot.experience==committed&&flights.ActiveCount==0,"Retry settles exactly once");
-        panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;yield return .1;panel.Action();panel.Confirm();panel.SkipBattle();
+        Check(!panel.resultPanels[0].activeSelf&&!actors.IsFinishingVictory&&saved.experience==committed,"Page closure cancels presentation only");
+        yield return Reload();
+        Check(persisted.experience==committed,"Committed victory survives reload");
+        panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);yield return .2;panel.Simulation.Advance(120);
+        saveLock=TaskCalendarPlayVerification.FailSqliteWrites();
+        panel.Settle(panel.Simulation.Outcome);yield return Drain(service);
+        Check(!actors.IsFinishingVictory&&!panel.resultPanels[0].activeSelf&&saved.experience==committed,"Failed save has no victory presentation");
+        saveLock.Dispose();saveLock=null;panel.Action();yield return Drain(service);
+        Check(actors.IsFinishingVictory&&saved.experience>committed,"Retry starts committed presentation");
+        committed=saved.experience;panel.Settle(BattleOutcome.Victory);yield return Drain(service);yield return 3.6;
+        Check(saved.experience==committed&&flights.ActiveCount==0,"Retry settles exactly once");
+        panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;yield return .1;panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);panel.SkipBattle();yield return Drain(service);
         Check(panel.resultPanels[0].activeSelf&&!actors.IsFinishingVictory,"Explicit Skip remains immediate");
         panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;yield return .1;
         actors.Finish(BattleOutcome.Defeat);Check(!actors.IsFinishingVictory,"Defeat never plays victory effects");actors.ResetPose();
@@ -155,12 +162,12 @@ public static class BossRewardVerification
     }
     static System.Collections.IEnumerator Run(){
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
-        var manager=GameDataManager.Instance;var service=manager.Tasks;
+        var manager=GameDataManager.Instance;var service=manager.Service;yield return Drain(service);
         Check(manager.SavePath.Contains("BossRewardVerification"),"Save isolation");
         var panel=nav.pages[3].GetComponent<BossPageUI>();
         var flights=panel.rewardFlights;Check(flights,"Reward binding");
-        manager.PlayerData.experience=3245;manager.PlayerData.tickets=12;
-        manager.PlayerData.bossProgress[0].wins=1;manager.SaveData();
+        saved.experience=3245;saved.tickets=12;
+        saved.bossProgress[0].wins=1;yield return Command(SetFixtureAsync(saved));yield return Drain(service);
         nav.ShowPage(MainMenuPage.Boss);flights.SendMessage("OnApplicationFocus",false);yield return .5;
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);yield return .6;
@@ -170,17 +177,17 @@ public static class BossRewardVerification
             panel.SelectStage(1);
             for(int frame=0;panel.arena.IsLoading&&frame<200;frame++)yield return .05;
             Check(panel.SelectedBoss==1&&panel.arena.IsReady,"Repeat-reward Cyclope arena ready: "+panel.arena.LoadError);
-            panel.Action();panel.Confirm();Check(panel.IsBattling,"Entry");
-            var entry=service.Snapshot.battles.Last();
+            panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);Check(panel.IsBattling,"Entry");
+            var entry=saved.battles.Last();
             Check(entry.bossId==1&&entry.masterStage==0&&entry.outcome==BattleOutcome.Running
-                &&service.Snapshot.bossProgress.Single(p=>p.bossId==1).wins>0,"Repeat EXP fixture entered normal Cyclope after an existing win");
+                &&saved.bossProgress.Single(p=>p.bossId==1).wins>0,"Repeat EXP fixture entered normal Cyclope after an existing win");
             yield return .2;
-            int xp=service.Snapshot.experience;
+            int xp=saved.experience;
             // The first run exercises skip, the second the ordinary simulation finish.
-            if(width==1920)panel.skipUI.skip.onClick.Invoke();
-            else {panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);}
-            var receipt=service.Snapshot.battles.Last();
-            Check(service.Snapshot.experience==xp+10,$"Repeat EXP: boss={receipt.bossId}, master={receipt.masterStage}, outcome={receipt.outcome}, receipt EXP={receipt.experience}, total={service.Snapshot.experience}, expected={xp+10}, error={service.LastError}");
+            if(width==1920){panel.skipUI.skip.onClick.Invoke();yield return Drain(service);}
+            else {panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);yield return Drain(service);}
+            var receipt=saved.battles.Last();
+            Check(saved.experience==xp+10,$"Repeat EXP: boss={receipt.bossId}, master={receipt.masterStage}, outcome={receipt.outcome}, receipt EXP={receipt.experience}, total={saved.experience}, expected={xp+10}, error={service.LastError}");
             if(width==1280){
                 Check(!panel.resultPanels[0].activeSelf&&panel.actors.IsFinishingVictory,"Ordinary victory leaves room for the death sequence");
                 yield return BossBattleActors.VictoryDuration+.05;
@@ -189,7 +196,7 @@ public static class BossRewardVerification
             Check(panel.resultValues[0].transform.parent.GetComponentsInChildren<Image>().Any(i=>i.sprite==flights.experienceIcon),"EXP icon");
             Check(flights.ActiveCount>0,"Missing committed reward flight");
             Check(!panel.resultFishValue.transform.parent.gameObject.activeSelf,"Zero Fish reward must be hidden");
-            panel.SkipBattle();panel.Settle(BattleOutcome.Victory);Check(service.Snapshot.experience==xp+10,"Duplicate UI settlement");
+            panel.SkipBattle();yield return Drain(service);panel.Settle(BattleOutcome.Victory);yield return Drain(service);Check(saved.experience==xp+10,"Duplicate UI settlement");
             Vector3? previous=null;bool moved=false;
             for(int frame=0;frame<14;frame++){
                 var icon=flights.GetComponentsInChildren<Image>().FirstOrDefault(i=>i.name=="Reward Icon"&&i.gameObject.activeSelf);
@@ -197,31 +204,32 @@ public static class BossRewardVerification
                 Capture("flight-"+width+"-"+frame.ToString("00"));yield return .08;
             }
             yield return 1.0;Check(moved&&flights.ActiveCount==0,"Flight must move and settle");
-            TaskService.CatLevel(service.Snapshot.experience,out int level,out int current,out int required);
+            TaskService.CatLevel(saved.experience,out int level,out int current,out int required);
             Check(flights.catStatus.level.text=="LV "+level&&flights.catStatus.experience.text==$"{current} / {required}","Header totals after flight");
             Capture("victory-"+width);yield return .2;
         }
-        panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;manager.PlayerData.experience=100000;
-        manager.PlayerData.bossProgress[0].wins=16;manager.PlayerData.equipmentUnlocked=true;
-        manager.PlayerData.bossProgress[2].wins=1;manager.SaveData();
-        foreach(var id in new[]{"boss1-weapon","boss1-body","boss1-head"})Check(service.ClaimEquipment(id),"Prepare owned boss set");
+        panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;saved.experience=100000;
+        saved.bossProgress[0].wins=16;saved.bossProgress[0].pendingClaims=3;saved.equipmentUnlocked=true;
+        saved.bossProgress[2].wins=1;yield return Command(SetFixtureAsync(saved));yield return Drain(service);
+        foreach(var id in new[]{"boss1-weapon","boss1-body","boss1-head"})yield return Command(service.ClaimEquipmentAsync(id));
+        yield return Drain(service);
         flights.SendMessage("OnApplicationFocus",false);
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);yield return .5;
-            panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;panel.SelectStage(1,width==1920?0:1);panel.Action();panel.Confirm();yield return .2;
-            int coins=service.Snapshot.fishCoins;panel.SkipBattle();
+            panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;panel.SelectStage(1,width==1920?0:1);panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);yield return .2;
+            int coins=saved.fishCoins;panel.SkipBattle();yield return Drain(service);
             int reward=width==1920?10:30;
-            Check(service.Snapshot.fishCoins==coins+reward&&panel.resultFishValue.text=="+"+reward,"Fish receipt and count");
+            Check(saved.fishCoins==coins+reward&&panel.resultFishValue.text=="+"+reward,"Fish receipt and count");
             Check(panel.resultFishValue.transform.parent.gameObject.activeInHierarchy,"Fish reward visible");
             Check(panel.resultFishValue.transform.parent.GetComponentsInChildren<Image>().Any(i=>i.sprite==flights.fishTarget.sprite),"Fish icon");
-            panel.SkipBattle();panel.Settle(BattleOutcome.Victory);Check(service.Snapshot.fishCoins==coins+reward,"Duplicate Fish settlement");
+            panel.SkipBattle();yield return Drain(service);panel.Settle(BattleOutcome.Victory);yield return Drain(service);Check(saved.fishCoins==coins+reward,"Duplicate Fish settlement");
             Vector3? previous=null;bool moved=false;
             for(int frame=0;frame<16;frame++){
                 var icon=flights.GetComponentsInChildren<Image>().FirstOrDefault(i=>i.name=="Reward Icon"&&i.gameObject.activeSelf&&i.sprite==flights.fishTarget.sprite);
                 if(icon){if(previous.HasValue&&Vector3.Distance(previous.Value,icon.transform.position)>1)moved=true;previous=icon.transform.position;}
                 Capture("fish-flight-"+width+"-"+frame.ToString("00"));yield return .08;
             }
-            yield return 1.0;Check(moved&&flights.ActiveCount==0&&flights.fishValue.text==service.Snapshot.fishCoins.ToString(),"Fish flies and header settles");
+            yield return 1.0;Check(moved&&flights.ActiveCount==0&&flights.fishValue.text==saved.fishCoins.ToString(),"Fish flies and header settles");
             Check(!panel.resultFishValue.isTextOverflowing,"Fish number overflow");Capture("fish-victory-"+width);yield return .2;
         }
         // Master result dismissal selects the next stage but never starts/spends an entry.
@@ -233,19 +241,19 @@ public static class BossRewardVerification
         foreach(int stage in new[]{2,3,4}){
             panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;int boss=1+(stage-1)%3;
             Check(panel.SelectedBoss==boss&&panel.bossTitle.text.StartsWith("Master "+stage+" "),"Master selection after dismissal");
-            int tickets=service.Snapshot.tickets;
-            panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;Check(service.Snapshot.tickets==tickets&&!panel.IsBattling,"Repeated close cannot enter/spend");
-            panel.Action();Check(panel.confirmation.activeSelf&&service.Snapshot.tickets==tickets&&!panel.IsBattling,"Next Master requires confirmation");
-            panel.cancel.onClick.Invoke();Check(service.Snapshot.tickets==tickets&&!panel.IsBattling,"Cancel next entry");
-            panel.Action();panel.Confirm();Check(panel.IsBattling&&service.Snapshot.tickets==tickets-1,"Confirmed Master spends once");yield return .2;
+            int tickets=saved.tickets;
+            panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;Check(saved.tickets==tickets&&!panel.IsBattling,"Repeated close cannot enter/spend");
+            panel.Action();yield return Drain(service);Check(panel.confirmation.activeSelf&&saved.tickets==tickets&&!panel.IsBattling,"Next Master requires confirmation");
+            panel.cancel.onClick.Invoke();Check(saved.tickets==tickets&&!panel.IsBattling,"Cancel next entry");
+            panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);Check(panel.IsBattling&&saved.tickets==tickets-1,"Confirmed Master spends once");yield return .2;
             if(stage==3){
-                saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
-                panel.SkipBattle();panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;
-                Check(service.Snapshot.masterStage==stage&&panel.SelectedBoss==boss,"Failed Master save cannot advance selection");
-                saveLock.Dispose();saveLock=null;panel.Action();
-            }else panel.SkipBattle();
-            Check(service.Snapshot.masterStage==stage+1&&panel.SelectedBoss==boss,"Victory persists next stage but keeps result stage");
-            panel.Settle(BattleOutcome.Victory);Check(service.Snapshot.masterStage==stage+1&&service.Snapshot.tickets==tickets-1,"Duplicate Master result");
+                saveLock=TaskCalendarPlayVerification.FailSqliteWrites();
+                panel.SkipBattle();yield return Drain(service);panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;
+                Check(saved.masterStage==stage&&panel.SelectedBoss==boss,"Failed Master save cannot advance selection");
+                saveLock.Dispose();saveLock=null;panel.Action();yield return Drain(service);
+            }else panel.SkipBattle();yield return Drain(service);
+            Check(saved.masterStage==stage+1&&panel.SelectedBoss==boss,"Victory persists next stage but keeps result stage");
+            panel.Settle(BattleOutcome.Victory);yield return Drain(service);Check(saved.masterStage==stage+1&&saved.tickets==tickets-1,"Duplicate Master result");
             if(stage==4){nav.ShowPage(MainMenuPage.Tasks);yield return .2;nav.ShowPage(MainMenuPage.Boss);}
             else {
                 var position=panel.actors.Cat.position;
@@ -258,8 +266,8 @@ public static class BossRewardVerification
                 panel.resultContinue[0].onClick.Invoke();
                 Check(panel.IsReturningFromResult&&panel.endTransition.gameObject.activeSelf&&panel.SelectedBoss==boss,"Confirmation immediately starts closing wipe");
                 Check(panel.endTransition.transform.parent==panel.arena.transform.parent&&panel.endTransition.GetComponentInParent<Mask>(),"Transition clipped by existing arena mask");
-                panel.CloseResult();panel.Action();panel.Confirm();panel.SelectStage(1);
-                Check(panel.IsReturningFromResult&&!panel.confirmation.activeSelf&&panel.SelectedBoss==boss&&service.Snapshot.tickets==tickets-1,"Repeated input blocked during transition");
+                panel.CloseResult();panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);panel.SelectStage(1);
+                Check(panel.IsReturningFromResult&&!panel.confirmation.activeSelf&&panel.SelectedBoss==boss&&saved.tickets==tickets-1,"Repeated input blocked during transition");
                 yield return .25;Capture("exit-close-"+stage);yield return .5;
                 Capture("exit-covered-"+stage);yield return .7;
                 Capture("exit-open-"+stage);
@@ -269,24 +277,26 @@ public static class BossRewardVerification
             Check(panel.SelectedBoss==1+stage%3&&panel.bossTitle.text.StartsWith("Master "+(stage+1)+" ")&&!panel.IsBattling,"Dismiss/reopen selects authoritative next stage");
             Resolution(stage==2?1920:1280,stage==2?1080:720);yield return .3;Capture("master-next-"+stage);yield return .2;
         }
-        Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.masterStage==5,"Master progression reload");
+        yield return Reload();
+        Check(persisted.masterStage==5,"Master progression reload");
         yield return 2.0;Check(flights.ActiveCount==0,"Master reward flights settle before subsequent failure checks");
-        panel.Action();panel.Confirm();yield return .2;panel.Settle(BattleOutcome.Stopped);panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;
-        Check(service.Snapshot.masterStage==5&&panel.bossTitle.text.StartsWith("Master 5 "),"Stopped Master stays selected");
-        manager.PlayerData.experience=550;manager.SaveData();panel.Action();panel.Confirm();panel.SkipBattle();panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;
-        Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&service.Snapshot.masterStage==5&&panel.bossTitle.text.StartsWith("Master 5 "),"Defeated Master stays selected");
-        manager.PlayerData.experience=100000;manager.SaveData();
+        panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);yield return .2;panel.Settle(BattleOutcome.Stopped);yield return Drain(service);panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;
+        Check(saved.masterStage==5&&panel.bossTitle.text.StartsWith("Master 5 "),"Stopped Master stays selected");
+        saved.experience=550;yield return Command(SetFixtureAsync(saved));yield return Drain(service);panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);panel.SkipBattle();yield return Drain(service);panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;
+        Check(saved.battles.Last().outcome==BattleOutcome.Defeat&&saved.masterStage==5&&panel.bossTitle.text.StartsWith("Master 5 "),"Defeated Master stays selected");
+        saved.experience=100000;yield return Command(SetFixtureAsync(saved));yield return Drain(service);
         flights.SendMessage("OnApplicationFocus",false);
-        panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;panel.SelectStage(1);panel.Action();panel.Confirm();yield return .2;
-        int fishBefore=service.Snapshot.fishCoins;
-        int before=service.Snapshot.experience;
-        saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
-        panel.SkipBattle();Check(service.Snapshot.experience==before&&service.Snapshot.fishCoins==fishBefore&&flights.ActiveCount==0,"Failed write cannot animate or award");
-        saveLock.Dispose();saveLock=null;panel.Action();Check(service.Snapshot.experience==before+10&&service.Snapshot.fishCoins==fishBefore+10&&flights.ActiveCount>0,"Retry reward flight");
+        panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;panel.SelectStage(1);panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);yield return .2;
+        int fishBefore=saved.fishCoins;
+        int before=saved.experience;
+        saveLock=TaskCalendarPlayVerification.FailSqliteWrites();
+        panel.SkipBattle();yield return Drain(service);Check(saved.experience==before&&saved.fishCoins==fishBefore&&flights.ActiveCount==0,"Failed write cannot animate or award");
+        saveLock.Dispose();saveLock=null;panel.Action();yield return Drain(service);Check(saved.experience==before+10&&saved.fishCoins==fishBefore+10&&flights.ActiveCount>0,"Retry reward flight");
         nav.ShowPage(MainMenuPage.Tasks);yield return 2.0;Check(flights.ActiveCount==0,"Page close flight settles");
-        Check(new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock()).Snapshot.experience==before+10,"Persisted EXP");
-        nav.ShowPage(MainMenuPage.Boss);panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;manager.PlayerData.experience=550;manager.SaveData();panel.SelectStage(2,5);flights.SendMessage("OnApplicationFocus",false);yield return .3;
-        panel.Action();panel.Confirm();panel.SkipBattle();Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&service.Snapshot.experience==550&&flights.ActiveCount==0,"Defeat grants no EXP");yield return .2;
+        yield return Reload();
+        Check(persisted.experience==before+10,"Persisted EXP");
+        nav.ShowPage(MainMenuPage.Boss);panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;saved.experience=550;yield return Command(SetFixtureAsync(saved));yield return Drain(service);panel.SelectStage(2,5);flights.SendMessage("OnApplicationFocus",false);yield return .3;
+        panel.Action();yield return Drain(service);panel.Confirm();yield return Drain(service);panel.SkipBattle();yield return Drain(service);Check(saved.battles.Last().outcome==BattleOutcome.Defeat&&saved.experience==550&&flights.ActiveCount==0,"Defeat grants no EXP");yield return .2;
         panel.CloseResult();yield return .3;
         Check(panel.IsReturningFromResult,"Defeat uses return sequence");
         nav.ShowPage(MainMenuPage.Tasks);yield return .2;

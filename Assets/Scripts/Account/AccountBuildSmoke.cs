@@ -48,7 +48,7 @@ public sealed class AccountBuildSmoke : MonoBehaviour
     }
     void Update()
     {
-        if (!Enabled || Time.unscaledTime < next) return;
+        if (!Enabled || !GameDataManager.Instance || !GameDataManager.Instance.IsReady || Time.unscaledTime < next) return;
         next = Time.unscaledTime + .25f;
         try
         {
@@ -79,7 +79,7 @@ public sealed class AccountBuildSmoke : MonoBehaviour
                 }
             }
             var state = account.State;
-            var prefs = GameDataManager.Instance.Tasks.AccountSettings;
+            var prefs = GameDataManager.Instance.Service.AccountSettings;
             result.ready = true; result.configured = state.configured; result.busy = state.busy;
             result.signedIn = state.signedIn; result.uploadEnabled = state.uploadEnabled;
             result.pendingRemoval = state.pendingRemoval; result.conflict = state.conflict;
@@ -156,8 +156,10 @@ public sealed class AccountBuildSmoke : MonoBehaviour
                         check.ordered &= LeaderboardQuery.Compare(snapshot.leaders[j - 1], snapshot.leaders[j], snapshot.kind) < 0;
                     if (snapshot.own != null)
                     {
-                        var expected = AccountAggregate.From(GameDataManager.Instance.PlayerData, snapshot.own.playerId, GameDataManager.Instance.Tasks.AccountSettings.playerName);
-                        check.ownMatches = snapshot.own.SameAs(expected);
+                        var expected = GameDataManager.Instance.Service.QueryAccountAggregateAsync(snapshot.own.playerId, GameDataManager.Instance.Service.AccountSettings.playerName);
+                        float localDeadline=Time.realtimeSinceStartup+15;
+                        while(!expected.IsCompleted && Time.realtimeSinceStartup<localDeadline)yield return null;
+                        check.ownMatches = expected.IsCompleted && !expected.IsFaulted && expected.Result.Succeeded && snapshot.own.SameAs(expected.Result.Value);
                         check.metric = LeaderboardQuery.Metric(snapshot.own, snapshot.kind);
                         check.ownVisible = ui.ownRow.gameObject.activeInHierarchy && snapshot.ownRank > 0;
                         int topIndex = snapshot.leaders.FindIndex(row => row.playerId == snapshot.own.playerId);
@@ -194,9 +196,11 @@ public sealed class AccountBuildSmoke : MonoBehaviour
         result.remoteMatches = result.remoteFieldsValid = false;
         if (response.Success && AccountRest.TryRemote(response.body, uid, out var remote))
         {
-            var prefs = GameDataManager.Instance.Tasks.AccountSettings;
-            result.remoteMatches = AccountAggregate.ValidName(prefs.playerName) &&
-                remote.aggregate.SameAs(AccountAggregate.From(GameDataManager.Instance.PlayerData, uid, prefs.playerName));
+            var prefs = GameDataManager.Instance.Service.AccountSettings;
+            var expected=GameDataManager.Instance.Service.QueryAccountAggregateAsync(uid,prefs.playerName);
+            float localDeadline=Time.realtimeSinceStartup+15;
+            while(!expected.IsCompleted && Time.realtimeSinceStartup<localDeadline)yield return null;
+            result.remoteMatches = AccountAggregate.ValidName(prefs.playerName) && expected.IsCompleted && !expected.IsFaulted && expected.Result.Succeeded && remote.aggregate.SameAs(expected.Result.Value);
             // Firestore Value fields are JSON objects. Include the enclosing fields
             // object and reject unexpected values; do not export the response body.
             var names = Regex.Matches(response.body, "\"([^\"]+)\"\\s*:\\s*\\{")

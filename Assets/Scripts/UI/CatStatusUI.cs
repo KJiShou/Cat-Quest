@@ -6,10 +6,10 @@ public sealed class CatStatusUI : MonoBehaviour
 {
     public TMP_Text level, experience, playerName;
     public Slider experienceBar;
-    private TaskService service;
+    private SqlitePlayerService service;
     private void OnEnable()
     {
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         service.Changed += Refresh; Refresh();
     }
     private void OnDisable() { if (service != null) service.Changed -= Refresh; }

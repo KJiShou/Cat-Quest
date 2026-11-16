@@ -34,14 +34,15 @@ public sealed class TaskCalendarUI : MonoBehaviour
     public bool Active => Mode == TaskDisplayMode.Calendar;
     public DateTime SelectedDate { get; private set; }
     public DateTime Month { get; private set; }
-    public TaskService Service => owner.Service;
+    public SqlitePlayerService Service => owner.Service;
     public bool DrawerOpen => drawer.gameObject.activeSelf;
     TaskSystemUI owner;
     TaskDetailsPresenter details;
     TaskCalendarResult result;
     TaskListViewport drawerRows;
     DateTime boundMonth, boundToday;
-    int boundVersion = -1, boundCellHeight = -1;
+    long boundVersion = -1;
+    int boundCellHeight = -1;
     TaskDifficulty? boundDifficulty;
     string boundSearch;
     bool boundCompleted;
@@ -49,7 +50,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
     TaskDifficulty? difficulty;
     readonly HashSet<string> tags = new HashSet<string>();
     CalendarTaskItem selected;
-    bool noDate, initialized, refreshing;
+    bool noDate, initialized, refreshing, loadingNoDate;
     int cellHeight = -1;
     Vector2 lastSize;
     float savedScroll = 1;
@@ -60,6 +61,9 @@ public sealed class TaskCalendarUI : MonoBehaviour
     GameObject returnFocus;
     bool returningFromModal;
     string editDay;
+    int queryGeneration;
+    bool refreshAgain;
+    string pendingFollowId;
 
     public void Initialize(TaskSystemUI system)
     {
@@ -85,7 +89,8 @@ public sealed class TaskCalendarUI : MonoBehaviour
     }
     public void SetMode(TaskDisplayMode mode)
     {
-        if (!initialized || owner.IsEditing || owner.HasTaskModal || !owner.CommitQuickAdd()) return;
+        if (!initialized || owner.IsEditing || owner.HasTaskModal || !owner.CommitQuickAdd(false, () => SetMode(mode))) return;
+        ++queryGeneration;
         owner.CancelDraft(); owner.detailsRoot.gameObject.SetActive(false);
         Mode = mode;
         listHeader.SetActive(!Active); listBody.SetActive(!Active); gameObject.SetActive(Active);
@@ -101,9 +106,13 @@ public sealed class TaskCalendarUI : MonoBehaviour
         if (icon) icon.color = selectedView ? Color.white : TaskUIBuilder.Ink;
         button.transform.Find("TabFocus").gameObject.SetActive(false);
     }
-    public void Refresh()
+    public async void Refresh()
     {
-        if (!initialized || !Active || refreshing) return;
+        if (!initialized || !Active || !isActiveAndEnabled || Service == null || !Service.IsReady) return;
+        if (refreshing) { ++queryGeneration; refreshAgain = true; return; }
+        int generation = ++queryGeneration;
+        var ownerService = Service;
+        refreshAgain = false;
         refreshing = true;
         try
         {
@@ -117,10 +126,17 @@ public sealed class TaskCalendarUI : MonoBehaviour
                 boundMonth != Month || boundDifficulty != difficulty || boundSearch != search.text ||
                 boundCompleted != showCompleted.isOn || !boundTags.SetEquals(tags);
             if (changed) {
-                result = Service.QueryCalendar(first, last, search.text, difficulty, tags, showCompleted.isOn);
-                boundVersion = Service.ReadVersion; boundToday = localDay; boundMonth = Month;
-                boundDifficulty = difficulty; boundSearch = search.text; boundCompleted = showCompleted.isOn;
-                boundTags.Clear(); boundTags.UnionWith(tags);
+                var requestedMonth = Month; var requestedDifficulty = difficulty;
+                string requestedSearch = search.text; bool requestedCompleted = showCompleted.isOn;
+                string[] requestedTags = tags.ToArray();
+                var response = await ownerService.QueryCalendarAsync(first, last, requestedSearch, requestedDifficulty, requestedTags, requestedCompleted);
+                if (!this || !isActiveAndEnabled || !Active || generation != queryGeneration || Service != ownerService) return;
+                if (!response.Succeeded) { owner.Notify(response.Message, true); return; }
+                if (response.Version != ownerService.ReadVersion) { refreshAgain = true; return; }
+                result = response.Value;
+                boundVersion = response.Version; boundToday = localDay; boundMonth = requestedMonth;
+                boundDifficulty = requestedDifficulty; boundSearch = requestedSearch; boundCompleted = requestedCompleted;
+                boundTags.Clear(); boundTags.UnionWith(requestedTags);
             }
             jumpPicker.LoadValue(SelectedDate);
             monthLabel.text = Month.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
@@ -129,7 +145,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
             today.image.color = isToday ? Color.white : new Color32(220,239,255,255);
             previous.interactable = Month.Year > 1 || Month.Month > 1;
             next.interactable = Month.Year < 9999 || Month.Month < 12;
-            noDateCount.text = result.noDate.Count.ToString();
+            noDateCount.text = result.noDateTotalCount.ToString();
             float badgeWidth = Mathf.Max(26, noDateCount.GetPreferredValues(noDateCount.text).x + 12);
             var badge = (RectTransform)noDateCount.transform.parent;
             badge.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, badgeWidth);
@@ -149,10 +165,18 @@ public sealed class TaskCalendarUI : MonoBehaviour
                 foreach (var cell in days)
                     if (cell.gameObject.activeSelf) cell.selection.gameObject.SetActive(cell.Date == SelectedDate);
             }
-            if (DrawerOpen && !owner.IsEditing) RenderDrawer();
+            bool followingSaved = pendingFollowId != null;
+            if (followingSaved) { selected = CurrentItems.FirstOrDefault(i => i.view.task.id == pendingFollowId); pendingFollowId = null; }
+            if (DrawerOpen && !owner.IsEditing) {
+                RenderDrawer();
+                if (followingSaved && selected == null) emptyLabel.text = "Task saved, but hidden by the current filters.";
+            }
             if (owner.IsEditing) owner.editor.RefreshCatalog(Service.TagCatalog);
         }
-        finally { refreshing = false; }
+        finally {
+            refreshing = false;
+            if (this && isActiveAndEnabled && Active && refreshAgain) Refresh();
+        }
     }
     bool HasFilters => !string.IsNullOrWhiteSpace(search.text) || difficulty.HasValue || tags.Count > 0;
     public void ClearFilters() { difficulty = null; tags.Clear(); search.SetTextWithoutNotify(""); Refresh(); }
@@ -161,12 +185,12 @@ public sealed class TaskCalendarUI : MonoBehaviour
         if (owner.IsEditing || owner.HasTaskModal) return;
         if ((offset < 0 && Month.Year == 1 && Month.Month == 1) || (offset > 0 && Month.Year == 9999 && Month.Month == 12)) return;
         Month = Month.AddMonths(offset); SelectedDate = new DateTime(Month.Year, Month.Month, Math.Min(SelectedDate.Day, DateTime.DaysInMonth(Month.Year, Month.Month)));
-        selected = null; noDate = false; Refresh();
+        selected = null; noDate = false; pendingFollowId = null; Refresh();
     }
     public void SelectDate(DateTime date, bool daily = false, bool open = true)
     {
         if (owner.IsEditing || owner.HasTaskModal) return;
-        SelectedDate = date.Date; Month = new DateTime(date.Year, date.Month, 1); noDate = false; selected = null; savedScroll = 1;
+        SelectedDate = date.Date; Month = new DateTime(date.Year, date.Month, 1); noDate = false; selected = null; pendingFollowId = null; savedScroll = 1;
         if (open) OpenDrawer();
         Refresh();
         if (daily) { Canvas.ForceUpdateCanvases(); rowScroll.verticalNormalizedPosition = 0; }
@@ -184,7 +208,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
         if (item.date.HasValue) { SelectedDate = item.date.Value; Month = new DateTime(SelectedDate.Year, SelectedDate.Month, 1); }
         noDate = !item.date.HasValue; selected = item; OpenDrawer(); Refresh();
     }
-    List<CalendarTaskItem> CurrentItems => noDate ? result.noDate : result.days.TryGetValue(SelectedDate, out var day) ? day.items : new List<CalendarTaskItem>();
+    List<CalendarTaskItem> CurrentItems => result == null ? new List<CalendarTaskItem>() : noDate ? result.noDate : result.days.TryGetValue(SelectedDate, out var day) ? day.items : new List<CalendarTaskItem>();
     void RenderDrawer()
     {
         var items = CurrentItems;
@@ -300,9 +324,7 @@ public sealed class TaskCalendarUI : MonoBehaviour
         if (task.daily) SelectedDate = TaskRepeat.Next(task, Service.LocalNow) ?? Date(task.date);
         else if (task.scheduled) SelectedDate = Date(task.date);
         noDate = !task.daily && !task.scheduled;
-        Month = new DateTime(SelectedDate.Year, SelectedDate.Month, 1); Refresh();
-        selected = CurrentItems.FirstOrDefault(i => i.view.task.id == id); RenderDrawer();
-        if (selected == null) emptyLabel.text = "Task saved, but hidden by the current filters.";
+        Month = new DateTime(SelectedDate.Year, SelectedDate.Month, 1); pendingFollowId = id; Refresh();
     }
     static DateTime Date(string value) => TaskService.TryDate(value, out var date) ? date : DateTime.Today;
     public void Back() {
@@ -322,6 +344,24 @@ public sealed class TaskCalendarUI : MonoBehaviour
         if (!initialized || !Active) return;
         Layout(); details.RefreshLayout();
         if (DrawerOpen && rowScroll.gameObject.activeInHierarchy) drawerRows?.Update();
+        if (DrawerOpen && noDate && selected == null && !refreshing && !loadingNoDate && result?.noDateNextCursor != null && rowScroll.verticalNormalizedPosition < .15f) LoadMoreNoDate();
+    }
+    async void LoadMoreNoDate()
+    {
+        if (loadingNoDate || result == null || Service == null) return;
+        loadingNoDate = true;
+        int generation = queryGeneration; var ownerService = Service; var target = result;
+        try {
+            var response = await ownerService.QueryNoDatePageAsync(target.noDateNextCursor, boundSearch, boundDifficulty, boundTags, boundCompleted, appendVisible:true);
+            if (!this || !isActiveAndEnabled || !Active || !DrawerOpen || !noDate || generation != queryGeneration || result != target || Service != ownerService) return;
+            if (!response.Succeeded) { target.noDateNextCursor = null; owner.Notify(response.Message, true); return; }
+            if (response.Version != boundVersion) { Refresh(); return; }
+            Vector2 position = rowScroll.content.anchoredPosition;
+            target.noDate.AddRange(response.Value.Rows); target.noDateNextCursor = response.Value.NextCursor;
+            RenderDrawer();
+            rowScroll.content.anchoredPosition = position; drawerRows?.Update(true);
+        }
+        finally { loadingNoDate = false; }
     }
     void Layout()
     {
@@ -380,5 +420,5 @@ public sealed class TaskCalendarUI : MonoBehaviour
         var target = days.FirstOrDefault(d => d.Date == SelectedDate);
         if (target) EventSystem.current.SetSelectedGameObject(target.dateButton.gameObject);
     }
-    void OnDisable() { if (jumpPicker && jumpPicker.overlay) jumpPicker.overlay.SetActive(false); }
+    void OnDisable() { ++queryGeneration; refreshAgain = false; pendingFollowId = null; if (jumpPicker && jumpPicker.overlay) jumpPicker.overlay.SetActive(false); }
 }

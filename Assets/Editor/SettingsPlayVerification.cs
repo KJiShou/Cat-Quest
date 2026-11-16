@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -17,6 +18,47 @@ using UnityEngine.UI;
 [InitializeOnLoad]
 public static class SettingsPlayVerification
 {
+    static IEnumerator Flatten(IEnumerator source)
+    {
+        using var cleanup = source as IDisposable;
+        while (source.MoveNext()) {
+            if (source.Current is IEnumerator child) {
+                var nested = Flatten(child);
+                using var disposeNested = nested as IDisposable;
+                while (nested.MoveNext()) yield return nested.Current;
+            } else yield return source.Current;
+        }
+    }
+    static IEnumerator ReadyFlow(IEnumerator source)
+    {
+        using var cleanup=source as IDisposable;
+        yield return Wait(GameDataManager.EnsureInstance().Ready);
+        while(source.MoveNext())yield return source.Current;
+    }
+    static IEnumerator Wait<T>(Task<OperationResult<T>> task)
+    {
+        double deadline = EditorApplication.timeSinceStartup + 10;
+        while (!task.IsCompleted && EditorApplication.timeSinceStartup < deadline) yield return .02;
+        Check(task.IsCompleted, "SQLite fixture operation timed out.");
+        Check(task.Result.Succeeded, task.Result.Message);
+    }
+    static IEnumerator WaitSettings(SettingsPanelUI panel)
+    {
+        var task = panel.FlushPendingSettingsAsync(); double deadline = EditorApplication.timeSinceStartup + 10;
+        while (!task.IsCompleted && EditorApplication.timeSinceStartup < deadline) yield return .02;
+        Check(task.IsCompleted && task.Result, "Settings did not finish saving.");
+    }
+    static async Task<OperationResult<bool>> SetFixtureExperience(GameDataManager manager, int experience)
+    {
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.sqlite3"), "Experience fixture requires this run's isolated database.");
+        return await SqlitePlayVerificationSupport.FixtureAsync(profile=>profile.experience=experience);
+
+    }
+    static AppSettings ReadSettingsOnDisk(string path)
+    {
+        using var db = new SQLite.SQLiteConnection(path, SQLite.SQLiteOpenFlags.ReadOnly);
+        return JsonUtility.FromJson<AppSettings>(db.ExecuteScalar<string>("SELECT payload FROM cq_Settings WHERE id=?", "settings"));
+    }
     const string Flag = "CatQuest.SettingsPlayVerification";
     const string Request = "Temp/verify-settings-play.request";
     const string StoreVariable = "CATQUEST_TASK_TEST_STORE";
@@ -68,7 +110,7 @@ public static class SettingsPlayVerification
         {
             SessionState.SetBool(Flag + ".enteredPlay", true);
             evidence.Clear(); checks.Clear(); loggedError = null;
-            run = SessionState.GetBool(Flag + ".backupRepeat", false) ? RunBackupRepeat() : SessionState.GetBool(Flag + ".mute", false) ? RunMute() : SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); next = EditorApplication.timeSinceStartup + 2;
+            run = SessionState.GetBool(Flag + ".backupRepeat", false) ? RunBackupRepeat() : SessionState.GetBool(Flag + ".mute", false) ? RunMute() : SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); run = Flatten(ReadyFlow(Flatten(run))); next = EditorApplication.timeSinceStartup + 2;
         }
         if (state == PlayModeStateChange.EnteredEditMode)
         {
@@ -334,7 +376,7 @@ public static class SettingsPlayVerification
     {
         UnityEngine.Object.FindFirstObjectByType<TutorialController>().Skip();
         var manager = GameDataManager.EnsureInstance();
-        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.json"), "Expected isolated save");
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.sqlite3"), "Expected isolated save");
         var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
         foreach (var size in new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720) })
@@ -350,7 +392,7 @@ public static class SettingsPlayVerification
             ui.Close(); nav.ShowPage(MainMenuPage.Tasks); yield return .5;
             var editor = nav.taskSystem.editor;
             editor.gameObject.SetActive(true);
-            editor.LoadDraft(new QuestTask { title = "Review notes", daily = true, date = "2026-11-04" }, manager.Tasks.TagCatalog, Array.Empty<string>());
+            editor.LoadDraft(new QuestTask { title = "Review notes", daily = true, date = "2026-11-04" }, manager.Service.TagCatalog, Array.Empty<string>());
             yield return .3; Click(editor.repeatChoice); yield return .3;
             Check(editor.repeatChoice.IsExpanded, "Repeat menu did not open");
             Capture("repeat-options-" + suffix); yield return .3;
@@ -372,7 +414,7 @@ public static class SettingsPlayVerification
             var draft = editor.ReadDraft(out var done);
             Check(draft.repeatWeekdays == 5 && draft.repeatUntil == "2026-12-31", "Custom weekdays or end date lost");
             Check(draft.daily && draft.repeatUnit == RepeatUnit.Weeks && draft.repeatInterval == 2, "Custom rule draft mismatch");
-            Check(manager.Tasks.Upsert(draft, done, out _), "Custom rule save failed");
+            yield return Wait(manager.Service.UpsertAsync(draft, done));
             yield return .2;
             Check(Hit(Bounds((RectTransform)editor.repeatUntil.transform).center) == editor.repeatUntil.gameObject, "End date input is blocked or collapsed");
             Check(editor.repeatDays.captionText.text == "Mon, Wed", "Selected weekdays missing from caption");
@@ -393,16 +435,16 @@ public static class SettingsPlayVerification
     static IEnumerator RunQuickUX()
     {
         bool before = SessionState.GetBool(Flag + ".quickBefore", false);
-        var manager = GameDataManager.EnsureInstance(); var service = manager.Tasks;
-        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.json"), "Expected isolated save");
+        var manager = GameDataManager.EnsureInstance(); var service = manager.Service;
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.sqlite3"), "Expected isolated save");
         var tutorial = UnityEngine.Object.FindFirstObjectByType<TutorialController>(); tutorial.Skip();
-        manager.PlayerData.experience = 100; manager.SaveData();
+        yield return Wait(SetFixtureExperience(manager,100));
         var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
         var canvas = launcher.GetComponentInParent<Canvas>().rootCanvas;
-        Check(service.SaveTag(service.Snapshot.tags.FirstOrDefault(t => t.name == "Study")?.id, "Study", "#3D5FC3", out var blue), "Seed blue tag");
-        service.SaveTag(null, "Creative", "#FF9E3A", out _);
-        service.SaveTag(service.Snapshot.tags.FirstOrDefault(t => t.name == "Personal")?.id, "Personal", "#2A3957", out _);
+        var blueSave = service.SaveTagAsync(service.TagCatalog.FirstOrDefault(t => t.name == "Study")?.id, "Study", "#3D5FC3"); yield return Wait(blueSave); var blue = blueSave.Result.Value;
+        yield return Wait(service.SaveTagAsync(null, "Creative", "#FF9E3A"));
+        yield return Wait(service.SaveTagAsync(service.TagCatalog.FirstOrDefault(t => t.name == "Personal")?.id, "Personal", "#2A3957"));
         foreach (var size in new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720) })
         {
             string suffix = size.x + "x" + size.y;
@@ -450,7 +492,7 @@ public static class SettingsPlayVerification
             var editor = nav.taskSystem.editor;
             editor.gameObject.SetActive(true);
             editor.LoadDraft(new QuestTask { title = "Plan the project", subtasks = new System.Collections.Generic.List<QuestSubtask> {
-                new QuestSubtask { id = "one", title = "Read the brief" }, new QuestSubtask { id = "two", title = "Write an outline" } } }, service.Snapshot.tags, Array.Empty<string>());
+                new QuestSubtask { id = "one", title = "Read the brief" }, new QuestSubtask { id = "two", title = "Write an outline" } } }, service.TagCatalog, Array.Empty<string>());
             yield return .3; Capture("subtasks-" + suffix); yield return .2;
             if (!before) {
                 var inputs = editor.subtaskContent.GetComponentsInChildren<TMP_InputField>();
@@ -497,18 +539,18 @@ public static class SettingsPlayVerification
     {
         var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
-        var service = GameDataManager.EnsureInstance().Tasks;
-        Check(Path.GetFullPath(GameDataManager.EnsureInstance().SavePath) == Path.GetFullPath(Folder + "/save.json"), "Expected isolated save");
+        var service = GameDataManager.EnsureInstance().Service;
+        Check(Path.GetFullPath(GameDataManager.EnsureInstance().SavePath) == Path.GetFullPath(Folder + "/save.sqlite3"), "Expected isolated save");
         UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
         yield return .3;
         var now = service.LocalNow.Date;
         foreach (var offset in new[] { -1, 0, 1, 3, 8, 18, 40, 90 })
         {
             var draft = new QuestTask { title = "Plan for " + now.AddDays(offset).ToString("MMM d",CultureInfo.InvariantCulture), scheduled = true, date = TaskService.DateKey(now.AddDays(offset)) };
-            Check(service.Upsert(draft, Array.Empty<string>(), out _), "Seed scheduled task");
+            yield return Wait(service.UpsertAsync(draft, Array.Empty<string>()));
         }
-        Check(service.Upsert(new QuestTask { title = "Read every day", daily = true, scheduled = true, date = TaskService.DateKey(now) }, Array.Empty<string>(), out _), "Seed daily task");
-        Check(service.Upsert(new QuestTask { title = "An idea for later" }, Array.Empty<string>(), out _), "Seed unscheduled task");
+        yield return Wait(service.UpsertAsync(new QuestTask { title = "Read every day", daily = true, scheduled = true, date = TaskService.DateKey(now) }, Array.Empty<string>()));
+        yield return Wait(service.UpsertAsync(new QuestTask { title = "An idea for later" }, Array.Empty<string>()));
         foreach (var size in new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720) })
         {
             var suffix = size.x + "x" + size.y;
@@ -566,7 +608,7 @@ public static class SettingsPlayVerification
                 {
                     var choice = panel.defaultTaskTabs[i];
                     Click(choice); yield return .2;
-                    Check(service.Settings.DefaultTaskTab == (TaskTab)i && new PlayerDataStore(GameDataManager.EnsureInstance().SavePath).Data.settings.DefaultTaskTab == (TaskTab)i, "Default tab selection/reload failed");
+                    Check(service.Settings.DefaultTaskTab == (TaskTab)i && ReadSettingsOnDisk(GameDataManager.EnsureInstance().SavePath).DefaultTaskTab == (TaskTab)i, "Default tab selection/reload failed");
                     Check(panel.defaultTaskTabs.Count(button => ((Image)button.targetGraphic).sprite == panel.rankingSelected) == 1,"Default tab selected visuals not exclusive");
                     var effect=choice.GetComponent<JuicyButton>(); var bounds=Bounds((RectTransform)choice.transform);
                     ExecuteEvents.Execute(choice.gameObject,Pointer(choice),ExecuteEvents.pointerEnterHandler);
@@ -602,7 +644,7 @@ public static class SettingsPlayVerification
         if (!SessionState.GetBool(Flag + ".beforeDates", false))
         {
             foreach(var task in service.Query(TaskTab.Todo).Concat(service.Query(TaskTab.Daily)).ToArray())
-                Check(service.Delete(task.task.id),"Delete isolated fixture task");
+                yield return Wait(service.DeleteAsync(task.task.id));
             Check(nav.ShowPage(MainMenuPage.Dashboard),"Show empty Dashboard"); yield return .2;
             var dashboard=UnityEngine.Object.FindFirstObjectByType<DashboardTasksUI>();
             var titles=dashboard.taskScroll.content.GetComponentsInChildren<TMP_Text>().Select(t=>t.text).ToArray();
@@ -638,7 +680,8 @@ public static class SettingsPlayVerification
             Stable(bounds, muteButton);
             Click(muteButton);
             Check(slider.value == 0 && source.volume == 0 && other.value == otherVolume, "Mute did not silence only the selected channel.");
-            var mutedReload = new PlayerDataStore(manager.SavePath).Data.settings;
+            yield return WaitSettings(ui);
+            var mutedReload = ReadSettingsOnDisk(manager.SavePath);
             Check((isSound ? mutedReload.soundVolume : mutedReload.musicVolume) == 0, "Mute was not saved immediately.");
             Capture((isSound ? "sound" : "music") + "-muted-" + suffix); yield return .15;
             ui.Close(); ui.Open(launcher.gameObject);
@@ -654,7 +697,7 @@ public static class SettingsPlayVerification
     static IEnumerator RunMute()
     {
         var manager = GameDataManager.EnsureInstance();
-        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.json"), "Mute checks require an isolated save.");
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.sqlite3"), "Mute checks require an isolated save.");
         UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
         yield return .2;
         var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
@@ -715,8 +758,12 @@ public static class SettingsPlayVerification
         var nav = UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
         Check(nav && nav.taskSystem && launcher && EventSystem.current, "CharacterHome Settings/navigation bindings missing.");
-        var manager = GameDataManager.EnsureInstance(); var service = manager.Tasks;
-        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.json") && service.Snapshot.tasks.Count == 0, "Run is not using its fresh isolated save.");
+        var manager = GameDataManager.EnsureInstance(); var service = manager.Service;
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.sqlite3") && service.TaskSnapshot.tasks.Count == 0, "Run is not using its fresh isolated save.");
+        // These settings cases exercise unlocked ranking and Focus controls.
+        // A fresh Lv.1 fixture correctly rejects both under the product rules.
+        yield return Wait(SetFixtureExperience(manager,550));
+        Check(service.CanAccess(ProgressionFeature.Leaderboard), "Ranking fixture must satisfy the existing Lv.5 gate.");
         var account = AccountController.EnsureInstance();
         var originalConfig = account.configuration;
         var blankConfig = ScriptableObject.CreateInstance<AccountConnectionConfig>();
@@ -755,7 +802,7 @@ public static class SettingsPlayVerification
                 {
                     var choice = ui.dashboardRankings[(int)kind];
                     Click(choice); yield return .2;
-                    Check(service.Settings.DashboardRanking == kind && new PlayerDataStore(manager.SavePath).Data.settings.DashboardRanking == kind, "Ranking preference was not committed/reloaded: " + kind);
+                    Check(service.Settings.DashboardRanking == kind && ReadSettingsOnDisk(manager.SavePath).DashboardRanking == kind, "Ranking preference was not committed/reloaded: " + kind);
                     Check(preview.CurrentKind == kind && rankingSource.last == kind && preview.rows.All(row => row.gameObject.activeSelf), "Dashboard did not load chosen ranking: " + kind);
                     Check(ui.dashboardRankings.Count(button => ((Image)button.targetGraphic).sprite == ui.rankingSelected) == 1, "Ranking choices are not mutually exclusive");
                     Check(preview.rows[0].score.text == LeaderboardQuery.Display(RankingFixture.Row, kind) && preview.rows[0].metricIcon.sprite == preview.rows[0].metricIcons[(int)kind], "Ranking score/icon uses wrong category");
@@ -815,10 +862,10 @@ public static class SettingsPlayVerification
                     service.Changed -= countCommit;
                 }
                 var focusController = FocusRunner.EnsureInstance().Controller;
-                Check(focusController.Start(), "Could not start isolated Focus for visibility check");
+                var focusStart = focusController.StartAsync(); foreach(var wait in SqlitePlayVerificationSupport.Wait(focusStart)) yield return wait; Check(focusStart.Result,"Could not start isolated Focus for visibility check");
                 Click(ui.showDashboardFocus);yield return .2;
                 Check(focusController.Phase == FocusPhase.Focusing && !display.focus.activeSelf, "Hiding Focus interrupted its session");
-                focusController.Cancel();Click(ui.showDashboardFocus);yield return .2;
+                var focusCancel = focusController.CancelAsync(); foreach(var wait in SqlitePlayVerificationSupport.Wait(focusCancel)) yield return wait; Check(focusCancel.Result,"Could not cancel isolated Focus"); Click(ui.showDashboardFocus);yield return .2;
                 Click(ui.showDashboardRanking);Click(ui.dashboardRankings[3]);yield return .2;
                 ui.Close();Click(launcher.GetComponent<Button>());yield return .2;
                 Check(!ui.showDashboardRanking.isOn && !display.ranking.activeSelf && service.Settings.DashboardRanking==LeaderboardKind.Power,"Closing/reopening lost hidden ranking/preference");
@@ -879,8 +926,10 @@ public static class SettingsPlayVerification
                 try
                 {
                     for (int i = 0; i < 4; i++) ExecuteEvents.Execute(ui.sound.gameObject, sliderPointer, ExecuteEvents.pointerUpHandler);
+                    yield return WaitSettings(ui);
                 }
                 finally { service.Changed -= countedCommit; }
+                yield return WaitSettings(ui);
                 Check(Mathf.Abs(service.Settings.soundVolume - .23f) < .001f, "Slider pointer release did not commit.");
                 Check(volumeCommits == 1, "Repeated slider release duplicated the settings commit.");
                 ui.sound.value = 0;
@@ -891,9 +940,10 @@ public static class SettingsPlayVerification
                 ExecuteEvents.Execute(ui.sound.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.deselectHandler);
                 ui.music.value = .41f;
                 ExecuteEvents.Execute(ui.music.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.deselectHandler);
+                yield return WaitSettings(ui);
                 Check(Mathf.Abs(service.Settings.musicVolume - .41f) < .001f && Mathf.Abs(audio.musicSource.volume - .41f) < .001f, "Keyboard/deselect volume commit failed.");
-                var reloaded = new PlayerDataStore(manager.SavePath);
-                Check(Mathf.Abs(reloaded.Data.settings.soundVolume - .23f) < .001f && Mathf.Abs(reloaded.Data.settings.musicVolume - .41f) < .001f, "Settings controls did not persist through disk reload.");
+                var reloaded = ReadSettingsOnDisk(manager.SavePath);
+                Check(Mathf.Abs(reloaded.soundVolume - .23f) < .001f && Mathf.Abs(reloaded.musicVolume - .41f) < .001f, "Settings controls did not persist through disk reload.");
 
                 var muteChecks = CheckMute(ui, manager, launcher, suffix);
                 while (muteChecks.MoveNext()) yield return muteChecks.Current;
@@ -902,13 +952,14 @@ public static class SettingsPlayVerification
                 ExecuteEvents.Execute(ui.tagsButton.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
                 yield return .3; Check(ui.CurrentView == "Tags" && EventSystem.current.currentSelectedGameObject == ui.addTag.gameObject, "Keyboard submit did not route/focus Tag Manage.");
                 Layout(ui, size); Capture("tags-" + suffix); yield return .15;
-                var firstTag = service.Snapshot.tags.First();
+                var firstTag = service.TagCatalog.First();
                 var firstRow = ui.tagList.GetComponentsInChildren<SettingsTagRow>().Single(row => row.name == "Tag_" + firstTag.id);
                 Click(firstRow.edit); yield return .2;
                 Layout(ui, size); Capture("tag-editor-" + suffix); yield return .15;
-                int oldCount = service.Snapshot.tags.Count;
+                int oldCount = service.TagCatalog.Count;
                 ui.tagName.text = " "; Click(ui.saveTag);
-                Check(ui.CurrentView == "TagEditor" && !string.IsNullOrEmpty(ui.tagError.text) && service.Snapshot.tags.Count == oldCount, "Invalid tag name did not preserve the editor/catalog.");
+                yield return SqlitePlayVerificationSupport.Ui(service);
+                Check(ui.CurrentView == "TagEditor" && !string.IsNullOrEmpty(ui.tagError.text) && service.TagCatalog.Count == oldCount, "Invalid tag name did not preserve the editor/catalog.");
                 Capture("tag-error-" + suffix); yield return .1;
                 Click(ui.tagCancel); yield return .1;
                 Backdrop(ui); yield return .1; Check(ui.CurrentView == "Settings", "Tag backdrop did not return to Settings.");
@@ -938,23 +989,24 @@ public static class SettingsPlayVerification
                 Click(ui.accountBack); yield return .1;
                 for (int i = 0; i < 3; i++) ExecuteEvents.Execute(ui.tagsButton.gameObject, Pointer(ui.tagsButton), ExecuteEvents.pointerClickHandler);
                 yield return .2;
-                Check(ui.tagList.GetComponentsInChildren<SettingsTagRow>().Length == service.Snapshot.tags.Count, "Rapid navigation duplicated tag rows.");
+                Check(ui.tagList.GetComponentsInChildren<SettingsTagRow>().Length == service.TagCatalog.Count, "Rapid navigation duplicated tag rows.");
                 Check(UnityEngine.Object.FindObjectsByType<SettingsPanelUI>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length == 1, "Opening Settings duplicated modal instances.");
                 Backdrop(ui); yield return .1; Backdrop(ui); yield return .1;
                 Check(!ui.gameObject.activeSelf && EventSystem.current.currentSelectedGameObject == launcher.gameObject, "Backdrop close failed to restore header focus.");
                 Reset(feedback, "Page closure retained button feedback.");
 
                 context = suffix + " stable tag IDs and unsaved draft";
-                Check(service.Upsert(new QuestTask { title = "Saved task " + suffix, tagIds = new List<string> { firstTag.id } }, null, out var taskId), service.LastError);
-                Check(service.Upsert(new QuestTask { title = "Unrelated task " + suffix }, null, out var unrelatedId), service.LastError);
+                var savedTask = service.UpsertAsync(new QuestTask { title = "Saved task " + suffix, tagIds = new List<string> { firstTag.id } }, null); yield return Wait(savedTask); var taskId = savedTask.Result.Value;
+                var unrelatedTask = service.UpsertAsync(new QuestTask { title = "Unrelated task " + suffix }, null); yield return Wait(unrelatedTask); var unrelatedId = unrelatedTask.Result.Value;
                 Check(nav.ShowPage(MainMenuPage.Tasks), "Cannot open Tasks."); yield return .5;
                 var tasks = nav.taskSystem; tasks.SelectTab(TaskTab.Todo); yield return .1;
                 Click(tasks.filterButton); yield return .1;
-                var taskModal = canvas.transform.Find("TaskDialog");
+                var taskModal = canvas.GetComponentInChildren<TaskFilterDialog>();
                 Check(taskModal && taskModal.gameObject.activeInHierarchy, "Task filter modal did not open.");
-                var tagFilter = taskModal.GetComponentsInChildren<Toggle>().Single(toggle => toggle.name == firstTag.name);
+                Click(taskModal.tagsTab); yield return .1;
+                var tagFilter = taskModal.tagContent.GetComponentsInChildren<Toggle>().Single(toggle => toggle.name == "Tag_" + firstTag.id);
                 Click(tagFilter);
-                Click(taskModal.GetComponentsInChildren<Button>().Single(button => button.name == "Apply")); yield return .1;
+                Click(taskModal.apply); yield return .1;
                 Check(tasks.listContent.GetComponentsInChildren<Button>().Any(button => button.name == "Task_" + taskId)
                     && !tasks.listContent.GetComponentsInChildren<Button>().Any(button => button.name == "Task_" + unrelatedId), "Selected ID filter did not isolate the tagged task.");
                 tasks.SelectTask(taskId); yield return .1;
@@ -976,7 +1028,7 @@ public static class SettingsPlayVerification
                 Check(service.Query(TaskTab.Todo, renamed, null, new[] { firstTag.id }).Any(view => view.task.id == taskId), "Rename broke lookup by the retained tag ID.");
                 Check(tasks.listContent.GetComponentsInChildren<Button>().Any(button => button.name == "Task_" + taskId)
                     && !tasks.listContent.GetComponentsInChildren<Button>().Any(button => button.name == "Task_" + unrelatedId), "Renaming lost the active ID filter.");
-                var chip = editor.tagContent.GetComponentsInChildren<TMP_Text>().Single(text => text.text == renamed + " ×");
+                var chip = editor.tagContent.GetComponentsInChildren<TMP_Text>().Single(text => text.text == renamed + " \u00d7");
                 Check(chip.GetComponentInParent<Image>().color == TagColors.Background(TagColors.Palette[1]), "Unsaved draft chip did not update its color.");
                 Click(ui.tagsBack); yield return .1; Click(ui.close); yield return .1;
                 editor.formScroll.verticalNormalizedPosition = 1; yield return .2;
@@ -986,38 +1038,39 @@ public static class SettingsPlayVerification
                 Click(firstRow.delete); yield return .1;
                 Check(ui.CurrentView == "Confirm", "Tag delete skipped confirmation.");
                 Click(ui.cancelDelete); yield return .1;
-                Check(service.Snapshot.tags.Any(tag => tag.id == firstTag.id), "Cancelling delete removed the tag.");
+                Check(service.TagCatalog.Any(tag => tag.id == firstTag.id), "Cancelling delete removed the tag.");
                 firstRow = ui.tagList.GetComponentsInChildren<SettingsTagRow>().Single(row => row.name == "Tag_" + firstTag.id);
                 Click(firstRow.delete); yield return .1; Click(ui.confirmDelete); yield return .2;
-                Check(service.Snapshot.tasks.Any(task => task.id == taskId) && !service.Snapshot.tasks.Single(task => task.id == taskId).tagIds.Contains(firstTag.id)
+                Check(service.TaskSnapshot.tasks.Any(task => task.id == taskId) && !service.TaskSnapshot.tasks.Single(task => task.id == taskId).tagIds.Contains(firstTag.id)
                     && editor.ReadDraft(out _).tagIds.Count == 0 && editor.taskTitle.text == "Unsaved draft " + suffix, "Tag deletion removed the task or damaged the unsaved draft.");
                 Click(ui.tagsBack); yield return .1; Click(ui.close); yield return .1;
-                tasks.CancelDraft(); Check(service.Delete(taskId) && service.Delete(unrelatedId), service.LastError);
+                tasks.CancelDraft(); yield return Wait(service.DeleteAsync(taskId)); yield return Wait(service.DeleteAsync(unrelatedId));
                 checks.Add("PASS " + suffix + ": raycasts, modal focus/close, real pointer/keyboard controls, motion/reset, slider preview/commit/reload, tag validation, stable-ID filter/draft rename/recolor/delete, account missing configuration.");
             }
             context = "empty tag state";
             Click(launcher.GetComponent<Button>()); yield return .1;
             var panel = UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>(); Click(panel.tagsButton); yield return .1;
-            foreach (var tag in service.Snapshot.tags) Check(service.DeleteTag(tag.id), service.LastError);
+            foreach (var tag in service.TagCatalog.ToArray()) yield return Wait(service.DeleteTagAsync(tag.id));
             yield return .2; Check(panel.emptyTags.gameObject.activeSelf && panel.tagList.GetComponentsInChildren<SettingsTagRow>().Length == 0, "Empty tag state missing.");
             Capture("tags-empty-1280x720"); yield return .15;
             Click(panel.addTag); yield return .1; panel.tagName.text = "New tag"; Click(panel.colorButtons[4]); Click(panel.saveTag); yield return .2;
-            Check(service.Snapshot.tags.Count == 1 && service.Snapshot.tags[0].colorHex == TagColors.Palette[4], "New colored tag could not be created from empty state.");
+            Check(service.TagCatalog.Count == 1 && service.TagCatalog[0].colorHex == TagColors.Palette[4], "New colored tag could not be created from empty state.");
             Click(panel.tagsBack); yield return .1; Click(panel.close); yield return .1;
             checks.Add("PASS: empty tag catalog and adding a new colored tag; all verification state stayed in the isolated save.");
             context = "long names and multiple tag colors at 1280x720";
             var multiIds = new List<string>();
             for (int i = 0; i < 3; i++)
             {
-                Check(service.SaveTag(null, new string('W', 29) + i, TagColors.Palette[i + 1], out var id), service.LastError);
+                var tagSave = service.SaveTagAsync(null, new string('W', 29) + i, TagColors.Palette[i + 1]); yield return Wait(tagSave); var id = tagSave.Result.Value;
                 multiIds.Add(id);
             }
-            Check(service.Upsert(new QuestTask { title = "Multiple long colored tags", tagIds = multiIds }, null, out var multiTask), service.LastError);
+            var multiSave = service.UpsertAsync(new QuestTask { title = "Multiple long colored tags", tagIds = multiIds }, null); yield return Wait(multiSave); var multiTask = multiSave.Result.Value;
             var taskUi = nav.taskSystem;
             taskUi.SelectTab(TaskTab.Todo); yield return .2;
             Click(taskUi.filterButton); yield return .2;
-            var filterModal = launcher.GetComponentInParent<Canvas>().rootCanvas.transform.Find("TaskDialog");
-            Click(filterModal.GetComponentsInChildren<Button>().Single(button => button.name == "Clear")); yield return .2;
+            var filterModal = launcher.GetComponentInParent<Canvas>().rootCanvas.GetComponentInChildren<TaskFilterDialog>();
+            Check(filterModal && filterModal.gameObject.activeInHierarchy,"Long-tag filter modal did not open.");
+            Click(filterModal.clear); yield return .2;
             taskUi.SelectTask(multiTask); yield return .2;
             Capture("task-multiple-tags-details-1280x720"); yield return .15;
             var taskRow = taskUi.listContent.Find("Task_" + multiTask);
@@ -1047,6 +1100,7 @@ public static class SettingsPlayVerification
             var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
             var expander=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
             bool oldExpanded=expander.isOn;
+            Task<OperationResult<bool>> restoreSettings = null;
             try
             {
                 foreach(var layoutSize in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)})
@@ -1062,7 +1116,7 @@ public static class SettingsPlayVerification
                             preference.hideDashboardTasks=(mask&1)!=0;preference.hideDashboardDailyRewards=(mask&2)!=0;
                             preference.hideDashboardFocus=(mask&4)!=0;preference.hideDashboardRanking=(mask&8)!=0;
                             preference.hideDashboardCharacter=(mask&16)!=0;
-                            Check(service.SaveSettings(preference),"Could not save visibility combination");yield return .07;
+                            yield return Wait(service.SaveSettingsAsync(preference));yield return .07;
                             Canvas.ForceUpdateCanvases();
                             Check(layoutDisplay.tasks.activeSelf==((mask&1)==0) && layoutDisplay.dailyRewards.activeSelf==((mask&2)==0) && layoutDisplay.focus.activeSelf==((mask&4)==0) && layoutDisplay.ranking.activeSelf==((mask&8)==0) && layoutDisplay.character.activeSelf==((mask&16)==0),"Visibility combination mismatch");
                             Check(layoutDisplay.bottomRow.activeSelf==((mask&12)!=12),"Empty bottom row did not collapse");
@@ -1082,8 +1136,9 @@ public static class SettingsPlayVerification
             finally
             {
                 var preference=service.Settings;preference.hideDashboardTasks=preference.hideDashboardDailyRewards=preference.hideDashboardFocus=preference.hideDashboardRanking=preference.hideDashboardCharacter=false;
-                service.SaveSettings(preference);expander.isOn=oldExpanded;
+                restoreSettings = service.SaveSettingsAsync(preference);expander.isOn=oldExpanded;
             }
+            yield return Wait(restoreSettings);
             checks.Add("PASS: all 32 Dashboard visibility combinations at 1920x1080, 1280x720, 1024x768 and 2560x1080 with expanded/collapsed sidebar; visible card containment, empty-row collapse and all-hidden prompt.");
         }
         finally

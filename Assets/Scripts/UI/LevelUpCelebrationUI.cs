@@ -16,7 +16,7 @@ public sealed class LevelUpCelebrationUI : MonoBehaviour
     public Button continueButton;
     public RewardFlightUI rewardFlight;
     readonly Queue<TaskService.LevelUpReward> pending = new Queue<TaskService.LevelUpReward>();
-    TaskService service;
+    SqlitePlayerService service;
     GameObject previousSelection;
     float elapsed;
     Vector3 badgeScale;
@@ -28,7 +28,7 @@ public sealed class LevelUpCelebrationUI : MonoBehaviour
     void OnEnable()
     {
         badgeScale=badge.localScale; rayRotation=rays.localRotation;
-        service=GameDataManager.EnsureInstance().Tasks;
+        service=GameDataManager.EnsureInstance().Service;
         service.LevelUp+=Enqueue;
         continueButton.onClick.AddListener(Dismiss);
         panel.SetActive(false); showing=false;

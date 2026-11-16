@@ -7,6 +7,7 @@ using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using TMPro;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
@@ -17,6 +18,64 @@ public static class TaskTabsVerification
     const string Folder="Library/TaskTabsVerification";
     const string StoreVariable="CATQUEST_TASK_TEST_STORE";
     static readonly Vector2Int[] Sizes={new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)};
+    static IEnumerator ScopedRefreshChecks(TaskSystemUI owner)
+    {
+        var service=owner.Service;
+        var settings=service.Settings;var account=service.AccountSettings;
+        string id=null;
+        foreach(var delay in TaskCalendarPlayVerification.Await(service.UpsertAsync(new QuestTask{title="Scoped refresh receipt",scheduled=true,date=TaskService.DateKey(service.LocalNow)},null),value=>id=value))yield return delay;
+        foreach(var delay in TaskCalendarPlayVerification.Await(service.CompleteAsync(id,true)))yield return delay;
+        var calendar=owner.GetComponentInChildren<TaskCalendarUI>(true);
+        foreach(bool calendarMode in new[]{false,true}) {
+            if(calendarMode){calendar.SetMode(TaskDisplayMode.Calendar);calendar.SelectDate(service.LocalNow.Date);}
+            else owner.SelectTab(TaskTab.History);
+            yield return .6;
+            RectTransform content=calendarMode?calendar.rows:owner.listContent;
+            var scroll=calendarMode?calendar.rowScroll:owner.listContent.GetComponentInParent<ScrollRect>();
+            Check(content.GetComponentsInChildren<TMP_Text>().Any(t=>t.text=="Scoped refresh receipt"),"Scoped test must display a real committed receipt");
+            var identities=content.GetComponentsInChildren<Transform>().Select(t=>t.GetInstanceID()).ToArray();
+            var selection=owner.SelectedKey;var date=calendar.SelectedDate;var offset=scroll.content.anchoredPosition;
+            var changed=service.Settings;changed.soundVolume=changed.soundVolume>.5f?.25f:.75f;
+            foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(changed)))yield return delay;
+            var changedAccount=service.AccountSettings;changedAccount.playerName="Scoped UI test";
+            foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveAccountSettingsAsync(changedAccount)))yield return delay;
+            yield return .4;
+            Check(identities.SequenceEqual(content.GetComponentsInChildren<Transform>().Select(t=>t.GetInstanceID())),"Unrelated settings/account write rebuilt visible "+(calendarMode?"calendar":"history")+" objects");
+            Check(owner.SelectedKey==selection&&calendar.SelectedDate==date&&Vector2.Distance(scroll.content.anchoredPosition,offset)<.1f,"Unrelated write lost selection or scroll");
+        }
+        calendar.SetMode(TaskDisplayMode.List);owner.SelectTab(TaskTab.History);yield return .4;
+        string receipt=service.CompletionId(id,"once");
+        if(string.IsNullOrEmpty(receipt)){var snapshot=service.ReadVerificationSnapshotAsync();foreach(var delay in TaskCalendarPlayVerification.Await(snapshot))yield return delay;receipt=SqlitePlayVerificationSupport.Value(snapshot).history.Single(h=>h.taskId==id).id;}
+        foreach(var delay in TaskCalendarPlayVerification.Await(service.UndoCompletionAsync(receipt)))yield return delay;
+        yield return .4;
+        Check(!owner.listContent.GetComponentsInChildren<TMP_Text>().Any(t=>t.text=="Scoped refresh receipt"),"Relevant undo did not refresh visible history");
+        calendar.SetMode(TaskDisplayMode.Calendar);calendar.SelectDate(service.LocalNow.Date);yield return .4;
+        var task=service.GetTaskAsync(id);foreach(var delay in TaskCalendarPlayVerification.Await(task))yield return delay;var draft=SqlitePlayVerificationSupport.Value(task);draft.title="Scoped calendar changed";
+        foreach(var delay in TaskCalendarPlayVerification.Await(service.UpsertAsync(draft,null)))yield return delay;
+        yield return .4;Check(calendar.rows.GetComponentsInChildren<TMP_Text>().Any(t=>t.text==draft.title),"Relevant task edit did not refresh calendar");
+        calendar.SetMode(TaskDisplayMode.List);
+        foreach(var delay in TaskCalendarPlayVerification.Await(service.DeleteAsync(id)))yield return delay;
+        foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(settings)))yield return delay;
+        foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveAccountSettingsAsync(account)))yield return delay;
+        owner.SelectTab(TaskTab.Today);
+    }
+    // Let Game View resize, Canvas layout and the sidebar LateUpdate finish before
+    // beginning the next independent toggle interaction. Never repair product widths.
+    static IEnumerable<double> WaitForResizedLayout(ResisesSideMenuInLayoutGroup sidebar, Vector2Int size)
+    {
+        var flags=BindingFlags.Instance|BindingFlags.NonPublic;
+        RectTransform Rect(string name)=>(RectTransform)typeof(ResisesSideMenuInLayoutGroup).GetField(name,flags).GetValue(sidebar);
+        var container=Rect("container");var menu=Rect("sideMenuContainer");var content=Rect("contentContainer");
+        var deadline=DateTime.UtcNow.AddSeconds(5);int stable=0;Vector3 prior=new Vector3(-1,-1,-1);
+        while(stable<8) {
+            yield return .05;
+            Canvas.ForceUpdateCanvases();
+            var current=new Vector3(container.rect.width,menu.rect.width,content.rect.width);
+            bool ready=Screen.width==size.x&&Screen.height==size.y&&current.x>0&&Mathf.Abs(current.x-current.y-current.z)<1f;
+            stable=ready&&Vector3.Distance(current,prior)<.1f?stable+1:0;prior=current;
+            Check(DateTime.UtcNow<=deadline,"Resized layout did not settle before sidebar input at "+size);
+        }
+    }
     static IEnumerator run;
     static double next;
     static string context;
@@ -27,7 +86,7 @@ public static class TaskTabsVerification
         EditorApplication.update+=Poll;
         EditorApplication.playModeStateChanged+=state=>{
             if(!SessionState.GetBool(Flag,false))return;
-            if(state==PlayModeStateChange.EnteredPlayMode){run=SessionState.GetBool(Flag+".roundTwo",false) ? UsabilityRoundTwoVerification.Run(SessionState.GetString(Flag+".output",""),SessionState.GetBool(Flag+".before",false)) : SessionState.GetBool(Flag+".priority",false) ? PriorityUsabilityVerification.Run(SessionState.GetString(Flag+".output","")) : SessionState.GetBool(Flag+".contextMenu",false) ? TaskContextMenuVerification.Run() : Run();next=EditorApplication.timeSinceStartup+2;}
+            if(state==PlayModeStateChange.EnteredPlayMode){run=SessionState.GetBool(Flag+".notices",false) ? NotificationAnimationVerification.Run(SessionState.GetBool(Flag+".before",false)) : SessionState.GetBool(Flag+".roundTwo",false) ? UsabilityRoundTwoVerification.Run(SessionState.GetString(Flag+".output",""),SessionState.GetBool(Flag+".before",false)) : SessionState.GetBool(Flag+".priority",false) ? PriorityUsabilityVerification.Run(SessionState.GetString(Flag+".output","")) : SessionState.GetBool(Flag+".contextMenu",false) ? TaskContextMenuVerification.Run() : Run();next=EditorApplication.timeSinceStartup+2;}
             if(state==PlayModeStateChange.EnteredEditMode)RestoreSettings();
         };
     }
@@ -43,18 +102,20 @@ public static class TaskTabsVerification
             try
             {
                 if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);
-                else Finish(SessionState.GetBool(Flag+".roundTwo",false) ? (SessionState.GetBool(Flag+".before",false)?"PASS: before captures; no repairs or authored asset writes.":"PASS: second usability fixes; see checks.txt and captures.") : SessionState.GetBool(Flag+".priority",false) ? "PASS: priority usability regressions; isolated save; four resolutions and both sidebar states. See checks.txt." : SessionState.GetBool(Flag+".contextMenu",false) ? "PASS: task context menu targeted Play flow; see Library/TaskContextMenuVerification." : "PASS: header/Pet Widget viewport containment with 0/9999 balances and long player name, tab/content separation, wrapped subtask heights/nonoverlap, task editor and compressed search containment, all tab corner/center raycasts and selection, hover/press/reset and stable hit areas, keyboard selection/submit, disabled/re-enabled controls, page-close reset, simulated focus-loss reset, rapid sidebar changes; four resolutions with both sidebar states.");
+                else Finish(SessionState.GetBool(Flag+".notices",false) ? "PASS: notification animation flow; see Library/NotificationAnimationVerification." : SessionState.GetBool(Flag+".roundTwo",false) ? (SessionState.GetBool(Flag+".before",false)?"PASS: before captures; no repairs or authored asset writes.":"PASS: second usability fixes; see checks.txt and captures.") : SessionState.GetBool(Flag+".priority",false) ? "PASS: priority usability regressions; isolated save; four resolutions and both sidebar states. See checks.txt." : SessionState.GetBool(Flag+".contextMenu",false) ? "PASS: task context menu targeted Play flow; see Library/TaskContextMenuVerification." : "PASS: header/Pet Widget viewport containment with 0/9999 balances and long player name, tab/content separation, wrapped subtask heights/nonoverlap, task editor and compressed search containment, all tab corner/center raycasts and selection, hover/press/reset and stable hit areas, keyboard selection/submit, disabled/re-enabled controls, page-close reset, simulated focus-loss reset, rapid sidebar changes; four resolutions with both sidebar states.");
             }
             catch(Exception e){Finish("FAIL at "+context+": "+e);}
             return;
         }
+        bool notices=File.Exists("Temp/verify-notice-animation.request");
         bool contextMenu=File.Exists("Temp/verify-task-context-menu.request");
         bool roundTwo=File.Exists("Temp/verify-usability-round2.request");
         bool priority=roundTwo||File.Exists("Temp/verify-priority-usability.request");
-        if(EditorApplication.isCompiling||EditorApplication.isUpdating||EditorApplication.isPlayingOrWillChangePlaymode||(!priority&&!contextMenu&&!File.Exists("Temp/verify-task-tabs.request")))return;
+        if(EditorApplication.isCompiling||EditorApplication.isUpdating||EditorApplication.isPlayingOrWillChangePlaymode||(!notices&&!priority&&!contextMenu&&!File.Exists("Temp/verify-task-tabs.request")))return;
         if(priority && Directory.GetFiles("Temp","verify-*.request").Any(p=>Path.GetFileName(p)!=(roundTwo?"verify-usability-round2.request":"verify-priority-usability.request")))return;
         SessionState.SetBool(Flag+".roundTwo",roundTwo);
-        SessionState.SetBool(Flag+".before",roundTwo&&File.ReadAllText("Temp/verify-usability-round2.request").Trim()=="before");
+        SessionState.SetBool(Flag+".before",notices ? File.ReadAllText("Temp/verify-notice-animation.request").Trim()=="before" : roundTwo&&File.ReadAllText("Temp/verify-usability-round2.request").Trim()=="before");
+        SessionState.SetBool(Flag+".notices",notices);if(notices)File.Delete("Temp/verify-notice-animation.request");
         if(roundTwo)File.Delete("Temp/verify-usability-round2.request");
         SessionState.SetBool(Flag+".priority",priority);
         if(priority)File.Delete("Temp/verify-priority-usability.request");
@@ -83,7 +144,7 @@ public static class TaskTabsVerification
                 File.WriteAllText(output+"/result.txt","RUNNING "+DateTime.UtcNow.ToString("O"));
             }
             string save=Path.GetFullPath(output+"/save-"+Guid.NewGuid().ToString("N")+".json");
-            if(priority)File.WriteAllText(save,"{\"version\":5,\"experience\":10000,\"tickets\":20,\"tagsInitialized\":true,"+(roundTwo?"\"settings\":{\"defaultTaskTab\":1},":"")+"\"tutorial\":{\"version\":1,\"dismissed\":true,\"taskStep\":4}}");
+            if(priority||notices)File.WriteAllText(save,"{\"version\":5,\"experience\":10000,\"tickets\":20,\"tagsInitialized\":true,"+(roundTwo?"\"settings\":{\"defaultTaskTab\":1},":"")+"\"tutorial\":{\"version\":1,\"dismissed\":true,\"taskStep\":4}}");
             Environment.SetEnvironmentVariable(StoreVariable,save);
             Environment.SetEnvironmentVariable("CATQUEST_AI_TEST_DIRECTORY",Path.GetFullPath(output+"/ai-"+Guid.NewGuid().ToString("N")));
             if(priority&&!roundTwo) {
@@ -132,6 +193,7 @@ public static class TaskTabsVerification
     {
         File.WriteAllText(Folder+"/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result);
         if(SessionState.GetBool(Flag+".priority",false))File.WriteAllText(SessionState.GetString(Flag+".output",Folder)+"/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result);
+        if(SessionState.GetBool(Flag+".notices",false)){var output="Library/NotificationAnimationVerification/"+(SessionState.GetBool(Flag+".before",false)?"before":"after");Directory.CreateDirectory(output);File.WriteAllText(output+"/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result);}
         if(SessionState.GetBool(Flag+".contextMenu",false)) { Directory.CreateDirectory("Library/TaskContextMenuVerification"); File.WriteAllText("Library/TaskContextMenuVerification/result.txt",DateTime.UtcNow.ToString("O")+"\n"+result); }
         (run as IDisposable)?.Dispose();run=null;
         if(EditorApplication.isPlayingOrWillChangePlaymode)EditorApplication.isPlaying=false;
@@ -322,43 +384,49 @@ public static class TaskTabsVerification
         var owner=nav.taskSystem;
         UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
         var manager=GameDataManager.Instance;
+        while(!manager.Ready.IsCompleted)yield return .01;Check(manager.Ready.Result.Succeeded,"SQLite fixture initialization");
+        System.Threading.Tasks.Task<OperationResult<bool>> level;
         var pet=nav.GetComponentInChildren<PetWidgetToggle>(true);
         Check(pet,"Pet Widget missing.");
         var host=CompanionHost.Ensure();
-        manager.PlayerData.experience=99;manager.SaveData();yield return .2;
+        level=SqlitePlayVerificationSupport.FixtureAsync(profile=>profile.experience=99);while(!level.IsCompleted)yield return .01;Check(level.Result.Succeeded,"Set isolated level fixture");yield return .2;
         var visibility=pet.transform.parent.GetComponent<CanvasGroup>();
         Check(!host.IsUnlocked && visibility && visibility.alpha==0 && !visibility.blocksRaycasts && !pet.GetComponent<Toggle>().IsInteractable(),"Level 1 widget must be hidden and unavailable.");
         host.SetEnabled(true);
         Check(!host.Enabled && !host.Open() && !host.IsOpen,"Level 1 widget launch was accepted.");
-        manager.PlayerData.experience=100;manager.SaveData();yield return .2;
+        level=SqlitePlayVerificationSupport.FixtureAsync(profile=>profile.experience=100);while(!level.IsCompleted)yield return .01;Check(level.Result.Succeeded,"Set isolated level fixture");yield return .2;
         Check(host.IsUnlocked && visibility.alpha==1 && visibility.blocksRaycasts && pet.GetComponent<Toggle>().IsInteractable(),"Widget did not unlock at Level 2 without reloading.");
         Check(nav.ShowPage(MainMenuPage.Tasks),"Cannot open Tasks.");yield return 1;
-        Check(owner.Service.Upsert(new QuestTask { title="Responsive task",
+        var layout=owner.Service.UpsertAsync(new QuestTask { title="Responsive task",
             subtasks=new List<QuestSubtask> {
                 new QuestSubtask { id="layout-short",title="Short" },
                 new QuestSubtask { id="layout-wrap",title="A long subtask should wrap into separate lines without covering the next row." },
                 new QuestSubtask { id="layout-word",title=new string('W',100) }
-            } },Array.Empty<string>(),out string layoutTask),owner.Service.LastError);
-        Check(owner.Service.SaveTag(null,"Details layout check",out string detailTag),owner.Service.LastError);
-        Check(owner.Service.Upsert(new QuestTask { title="Task details", scheduled=true,
+            } },Array.Empty<string>());
+        while(!layout.IsCompleted)yield return .01;Check(layout.Result.Succeeded,owner.Service.LastError);string layoutTask=layout.Result.Value;
+        var tag=owner.Service.SaveTagAsync(null,"Details layout check");while(!tag.IsCompleted)yield return .01;Check(tag.Result.Succeeded,owner.Service.LastError);string detailTag=tag.Result.Value;
+        var detail=owner.Service.UpsertAsync(new QuestTask { title="Task details", scheduled=true,
             date=TaskService.DateKey(owner.Service.LocalNow), minuteOfDay=12*60,
-            tagIds=new List<string>{detailTag} },Array.Empty<string>(),out string shortTask),owner.Service.LastError);
+            tagIds=new List<string>{detailTag} },Array.Empty<string>());
+        while(!detail.IsCompleted)yield return .01;Check(detail.Result.Succeeded,owner.Service.LastError);string shortTask=detail.Result.Value;
+        var scoped=ScopedRefreshChecks(owner);while(scoped.MoveNext())yield return scoped.Current;
         var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
         var toggle=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
         foreach(var size in Sizes)
         {
             requestedSize=size;
             typeof(DashboardRewardPlayVerification).GetMethod("Resolution",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{size.x,size.y});
+            foreach(var delay in WaitForResizedLayout(sidebar,size))yield return delay;
             foreach(bool expanded in new[]{false,true})
             {
                 context=size.x+"x"+size.y+(expanded?" expanded":" collapsed");
                 toggle.isOn=expanded;owner.SelectTab(TaskTab.History);yield return 1;
                 if(!capture)capture=new GameObject("Task Tab Capture").AddComponent<RewardScreenshotCapture>();
-                manager.PlayerData.experience=99;manager.SaveData();yield return .2;
+                level=SqlitePlayVerificationSupport.FixtureAsync(profile=>profile.experience=99);while(!level.IsCompleted)yield return .01;Check(level.Result.Succeeded,"Set isolated level fixture");yield return .2;
                 Check(visibility.alpha==0 && !pet.GetComponent<Toggle>().IsInteractable(),"Level 1 visibility regressed.");
                 capture.Begin(Path.GetFullPath(Folder+"/widget-level1-"+size.x+"x"+size.y+(expanded?"-expanded":"-collapsed")+".png"));
                 yield return .2;
-                manager.PlayerData.experience=100;manager.SaveData();yield return .2;
+                level=SqlitePlayVerificationSupport.FixtureAsync(profile=>profile.experience=100);while(!level.IsCompleted)yield return .01;Check(level.Result.Succeeded,"Set isolated level fixture");yield return .2;
                 Layout(owner);HeaderTextVariants(nav);ClickTabs(owner);
                 owner.SelectTab(TaskTab.Todo);owner.SelectTask(shortTask);yield return .5;
                 if(!capture)capture=new GameObject("Task Tab Capture").AddComponent<RewardScreenshotCapture>();
@@ -458,13 +526,14 @@ public static class TaskTabsVerification
             }
         }
         owner.CancelDraft();
-        Check(owner.Service.Delete(shortTask),"Could not remove isolated detail task.");
-        Check(owner.Service.Delete(layoutTask),"Could not remove isolated layout task.");
+        var removed=owner.Service.DeleteAsync(shortTask);while(!removed.IsCompleted)yield return .01;Check(removed.Result.Succeeded,"Could not remove isolated detail task.");
+        removed=owner.Service.DeleteAsync(layoutTask);while(!removed.IsCompleted)yield return .01;Check(removed.Result.Succeeded,"Could not remove isolated layout task.");
         context = "Long list scrolling and recycled input bindings";
         Check(manager.SavePath.Contains("TaskTabsVerification"),"Long-list fixture requires an isolated save.");
-        for (int i = 0; i < 100; i++)
-            manager.PlayerData.tasks.Add(new QuestTask { id="scroll-"+i.ToString("D3"),title="Viewport task "+i.ToString("D3") });
-        manager.SaveData();
+        for (int i = 0; i < 100; i++) {
+            var added=manager.Service.UpsertAsync(new QuestTask { id="scroll-"+i.ToString("D3"),title="Viewport task "+i.ToString("D3") },null);
+            while(!added.IsCompleted)yield return .01;Check(added.Result.Succeeded,"Add isolated scroll fixture");
+        }
         owner.SelectTab(TaskTab.Todo);
         var scroll = owner.listContent.GetComponentInParent<ScrollRect>();
         scroll.verticalNormalizedPosition = 1; yield return .5;

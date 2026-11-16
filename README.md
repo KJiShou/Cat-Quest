@@ -10,9 +10,18 @@ Tasks and progress are saved locally. You can create and complete tasks without 
 
 > **Release:** [Download the latest Cat Quest release for Windows x64](https://github.com/KJiShou/Cat-Quest/releases/latest). Extract the entire ZIP and run `CatQuest.exe`, keeping all accompanying files together. This student project remains under active development. This repository contains the Unity source project and is not distributed under an open-source license.
 
-> **Browser edition:** [Play on itch.io](https://kjishou.itch.io/cat-quest) in a desktop browser. It keeps tasks, Focus and local progression, with browser backup export. Pet Widget and other Windows integrations require the Windows app; see the [platform differences](docs/web-release.md).
+> **Browser demo:** [Try the existing itch.io demo](https://kjishou.itch.io/cat-quest). The current source uses session-only in-memory SQLite: refreshing starts a new session. Windows is the supported option for lasting progress and device transfer. This Windows release does not update the hosted Web build; see [platform differences](docs/web-release.md).
 
 ![Cat Quest Dashboard showing the cat, task overview and daily rewards](docs/images/dashboard.png)
+
+## New in v1.4.0
+
+- **Faster saves as history grows:** background SQLite transactions update affected records instead of rewriting the whole JSON save.
+- **Automatic upgrade:** existing JSON saves migrate on first launch; the original is retained. Later launches and saves use SQLite exclusively.
+- **Portable backups:** export/import `.catquestbackup` files through Settings; old JSON imports remain supported. Account credentials and sharing authorization do not travel with progress.
+- **Smoother interaction:** scoped page refreshes preserve selection and scrolling, with refined task feedback and equipment text layout.
+
+Before updating, close Focus/battles and keep a backup. The retained JSON represents **pre-migration progress only**; older applications cannot read new SQLite progress. See [release notes](docs/releases/v1.4.0.md) and [verification results and limits](SQLITE_VERIFICATION_REPORT.md).
 
 ## Contents
 
@@ -211,9 +220,9 @@ The main Unity process owns task state, timing, settlement and persistence. UI c
 
 ```mermaid
 flowchart TD
-    UI[Dashboard / Tasks / Focus / Boss / Equipment] --> Services[TaskService + FocusController]
-    Services --> Store[PlayerDataStore]
-    Store --> Save[Local JSON save + backup]
+    UI[Dashboard / Tasks / Focus / Boss / Equipment] --> Services[SqlitePlayerService + FocusController]
+    Services --> Store[IPlayerRepository / SQLite]
+    Store --> Save[SQLite WAL + consistent backups]
     Companion[Windows Companion] -->|validated control requests| Host[CompanionHost]
     Host --> Services
     Services -->|presentation snapshots| Host
@@ -225,7 +234,7 @@ flowchart TD
 
 | Path | Responsibility |
 | --- | --- |
-| [`Assets/Scripts/Tasks`](Assets/Scripts/Tasks) | TaskService partials, rewards, Focus controller/statistics and local storage |
+| [`Assets/Scripts/Tasks`](Assets/Scripts/Tasks) | SQLite commands/repository, legacy migration, rewards and Focus statistics |
 | [`Assets/Scripts/Battle`](Assets/Scripts/Battle) | Deterministic battle rules and battle presentation helpers |
 | [`Assets/Scripts/Equipment`](Assets/Scripts/Equipment) | Equipment definitions, stats and character aura presentation |
 | [`Assets/Scripts/UI`](Assets/Scripts/UI) | Page presenters, navigation, shared feedback, tutorial and Companion |
@@ -236,29 +245,34 @@ flowchart TD
 | [`Assets/Editor`](Assets/Editor) | Project verification and scoped Editor tools |
 | [`Firebase`](Firebase) / [`Tools`](Tools) | Cloud setup/rules and supporting verification/audio tools |
 
-`GameDataManager` owns the shared `TaskService` and `PlayerDataStore`. Mutations validate and persist before publishing successful state changes. UI animations, AI responses and Companion messages are not authoritative reward sources.
+`GameDataManager` owns the shared `SqlitePlayerService` and `IPlayerRepository`. `PlayerData` and the legacy JSON service remain for migration, compatibility and complete transfer models, not routine full-save writes. Mutations validate and persist before publishing successful state changes. UI animations, AI responses and Companion messages are not authoritative reward sources.
 
 ## Data and privacy
 
-The normal save is **`Application.persistentDataPath/catquest-data.json`**. With the current company/product settings, its Windows location is:
+The normal save is **`Application.persistentDataPath/catquest-data.sqlite3`**. With the current company/product settings, its Windows location is:
 
 ```text
-%USERPROFILE%\AppData\LocalLow\DefaultCompany\Cat Quest\catquest-data.json
+%USERPROFILE%\AppData\LocalLow\DefaultCompany\Cat Quest\catquest-data.sqlite3
 ```
 
-Saving uses a temporary file, atomic replacement and a `.bak` backup. The loader can recover from a valid backup when the main save is unreadable. Back up your data before manual recovery or migration. Do not edit it while the application is running. Task/progression JSON is local storage, not an encrypted vault.
+Windows uses SQLite WAL transactions with FULL synchronization and a background serial executor. Startup imports supported old JSON once, validates the result and preserves the source. A missing or damaged database after migration does not silently reload stale JSON. Recovery uses explicit backup selection.
+
+Use Settings to export a consistent `.catquestbackup` for another device running this version or newer. Do not copy only the main database while the app is running: pending committed data can be in its WAL. Imports preserve the target device’s account association and create a recovery backup first. Local progress is not an encrypted vault. See [storage and backup details](SQLITE_STORAGE.md).
 
 | Data | Handling |
 | --- | --- |
 | Tasks, schedules, subtasks, history, rewards and equipment | Saved locally. Not included in leaderboard uploads |
 | AI conversation | Stored separately in `ai/chat.dpapi`, protected with Windows current-user DPAPI. Sent messages and requested task facts are sent to the connected AI service |
-| AI connection | Protected local connection records. Separate from the player-save JSON |
+| AI connection | Protected local connection records. Separate from the player database |
 | Google/Firebase credentials | Windows Credential Manager for refresh credentials. Access tokens remain in memory |
 | Opt-in leaderboard record | Only `playerId`, `playerName`, `bossStage`, `totalTasksCompleted`, `totalFocusMinutes`, `power`, `catLevel` and server `updatedAt` |
 
 Turning sharing off stops new uploads and requests removal. Offline removal can remain pending until connectivity and the linked account are available. Signing out does not erase local progress. Publishing aggregates does not back up your tasks or support restoring a save on another computer.
 
 ## Verification
+
+The 2026-11-16 SQLite verification includes 636 storage/migration checks, business/UI regressions and 34,800 measured commands across 29 operations. At 1,000 active tasks and 100,000 history records, measured per-operation P95 was 33–37 ms for SQLite versus 866–1,226 ms for legacy JSON on the test machine. These are Development-build command measurements, not a hardware-independent latency guarantee. The actual old 1.2.1 executable update route remains unverified without an isolated Windows environment; the Web Development package also exceeds the upload-file size limit. [Full results](SQLITE_VERIFICATION_REPORT.md).
+
 
 The repository has custom Unity Editor verifiers and Windows smoke scripts. These are available checks, **not a claim that every flow passes on every revision**. Historical reports/screenshots are not current test results.
 
@@ -310,8 +324,6 @@ The open Editor consumes the request. Check the result's modification time and c
 | [Settings](SETTINGS.md) / [Sound](SOUND.md) | Preferences, tags, notifications and audio |
 | [Tutorial](TUTORIAL_SYSTEM.md) / [Cursor](CURSOR_SYSTEM.md) | Onboarding, feature gates and cursor configuration |
 | [Contributor instructions](AGENTS.md) | Asset safety, behavior contracts and required checks |
-| [Complete documentation index](docs/INDEX.md) | English/Chinese pairs, historical records and maintenance conventions |
-| [Complete documentation index](docs/INDEX.md) | English/Chinese pairs, historical records and maintenance conventions |
 | [Complete documentation index](docs/INDEX.md) | English/Chinese pairs, historical records and maintenance conventions |
 
 Historical verification records retain their original dates and do not establish a current pass. Current implementation and approved project rules define behavior, including earned End Early rewards and Chat replacing earlier automatic difficulty advice.

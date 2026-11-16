@@ -55,7 +55,9 @@ public static class CharacterHomeVerification
             var navigation = roots.SelectMany(r => r.GetComponentsInChildren<MainMenuNavigation>(true)).Single();
             // Preview scenes do not run Start. Inject an unlocked in-memory fixture
             // instead of letting CanOpen create a manager backed by the live save.
-            var service = new TaskService(new MemoryStore(), new Clock());
+            var fixture = new MemoryStore();
+            _ = new TaskService(fixture, new Clock());
+            var service = SqlitePlayerService.CreateReadOnlyPreviewForVerification(fixture.Data, new Clock());
             Require(Enum.GetValues(typeof(ProgressionFeature)).Cast<ProgressionFeature>().All(service.CanAccess), "Navigation fixture must unlock all pages.");
             typeof(MainMenuNavigation).GetField("service", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(navigation, service);
             Require(navigation.buttons.Length == 7 && navigation.pages.Length == 7 && navigation.pages[(int)MainMenuPage.Chat].GetComponent<AiChatPage>(), "Missing navigation pages.");

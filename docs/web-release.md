@@ -14,7 +14,7 @@ are available; the native Mac edition still needs real-device testing and has no
 | Pet Widget | Header control hidden; use the Focus page | Native separate window |
 | ChatGPT / Google desktop sign-in and online ranking | Unavailable; existing panels explain this | Existing implementation |
 | Windows notifications / self-updater | Unavailable | Existing implementation |
-| Backup export | JSON browser download | Native file picker |
+| Backup export | Unavailable in the session-only demo | SQLite backup through native file picker |
 | Backup import | Unavailable | Existing validated importer |
 
 The Mac browser can use the same Web build, subject to actual browser compatibility
@@ -24,13 +24,12 @@ and updater are not macOS implementations.
 
 ## Saves and Focus
 
-- Player JSON and its last valid backup are committed together to the browser's
-  local storage, under `catquest.player.v1`. Storage errors reject the operation
-  before task/reward state is acknowledged. The Windows save path and schema stay
-  unchanged. The Web save is separate from any installed Windows save.
-- Saves belong to the browser/profile/site storage partition. Clearing site data,
-  private browsing or changing the hosting origin can lose access to them. Export
-  a JSON backup before clearing data. Backup downloads can be imported on Windows.
+- Current source uses an in-memory SQLite database for a single session. Reloading
+  starts fresh. It does not migrate older browser JSON, promise cross-session
+  persistence or provide backup transfer. Use Windows for lasting progress.
+- The hosted itch.io build may be older: v1.4.0 is a Windows release and does not
+  publish a new Web package. The local session smoke passed, but the tested Web
+  Development `.data` file exceeded the existing 200 MiB upload-file limit.
 - The template requires Web Locks and HTTPS (localhost is valid for testing), and
   permits one active Cat Quest document per storage partition. A stale writer is
   also rejected. Closing the browser releases the lock.
@@ -38,9 +37,8 @@ and updater are not macOS implementations.
   gap longer than ten seconds invalidates the session without rewards. Keep the
   page active; sleeping, suspending or reloading the page is not rewarded Focus.
   End Early still settles earned time under existing rules. Rest grants no rewards.
-- Browser storage quota is finite. Failed writes leave the previous record intact;
-  the existing error/retry UI remains authoritative. Export a backup before any
-  storage cleanup. Do not clear site data as a way to retry an unsaved session.
+- Browser memory and lifecycle limits still apply. The demo is not a backup of a
+  Windows save and should not be used for progress that must survive closing it.
 
 ## Build
 

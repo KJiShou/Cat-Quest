@@ -74,9 +74,10 @@ public sealed partial class TaskService
     private string observedDay;
     public static readonly string[] DefaultTags = { "FYP", "UI", "Study", "Personal", "Assignment", "Research", "Development", "Design", "University", "Project", "Health", "Home" };
 
-    public TaskService(IPlayerDataStore store, ITaskClock clock)
+    public TaskService(IPlayerDataStore store, ITaskClock clock, bool initialize = true)
     {
         this.store = store; this.clock = clock;
+        if (!initialize) { observedDay = DateKey(clock.LocalNow); return; }
         PlayerDataStore.Normalize(store.Data);
         RecoverInterruptedBattles();
         if (store.Data.focusSessions.Any(s => s.status == FocusSessionStatus.Running))

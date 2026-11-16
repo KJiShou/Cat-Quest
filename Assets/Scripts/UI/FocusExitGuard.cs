@@ -3,7 +3,8 @@ using UnityEngine;
 
 public sealed class FocusExitGuard : MonoBehaviour
 {
-    bool confirmed;
+    bool exitPending;
+    int dialogGeneration;
     GameObject dialog;
     FocusController dialogFocus;
     TMP_Text dialogLabel, stayLabel, quitLabel;
@@ -12,7 +13,7 @@ public sealed class FocusExitGuard : MonoBehaviour
     bool WantsToQuit()
     {
         var focus=GetComponent<FocusRunner>().Controller;
-        if(confirmed || (focus.Phase!=FocusPhase.Focusing && focus.Phase!=FocusPhase.Saving)) return true;
+        if(focus.Phase!=FocusPhase.Focusing && focus.Phase!=FocusPhase.Saving) return true;
         if(dialog) return false;
         var panel=FindFirstObjectByType<FocusPanelUI>(FindObjectsInactive.Include);
         if(!panel) return false;
@@ -28,10 +29,16 @@ public sealed class FocusExitGuard : MonoBehaviour
         var quit=ui.Button(card,"Quit","Cancel and exit"); Place(quit.transform,.52f,.08f,.95f,.3f);
         dialogFocus=focus;dialogLabel=label;stayLabel=stay.GetComponentInChildren<TMP_Text>();quitLabel=quit.GetComponentInChildren<TMP_Text>();
         dialogFocus.Changed+=RefreshDialog;RefreshDialog();
-        quit.onClick.AddListener(()=> {
-            bool saved=focus.Phase==FocusPhase.Saving?focus.RetrySettlement():focus.Phase!=FocusPhase.Focusing||focus.Cancel(true);
+        int generation=++dialogGeneration;
+        quit.onClick.AddListener(async ()=> {
+            if(exitPending)return;exitPending=true;quit.interactable=false;
+            bool saved;
+            try { saved=focus.Phase==FocusPhase.Saving?await focus.RetrySettlementAsync():focus.Phase!=FocusPhase.Focusing||await focus.CancelAsync(true); }
+            finally {exitPending=false;if(quit)quit.interactable=true;}
+            if (!this || !isActiveAndEnabled || !dialog || generation!=dialogGeneration) return;
             if(!saved) { RefreshDialog(); return; }
-            confirmed=true; Application.Quit();
+            // Request quitting again; GameDataManager must still drain and close storage.
+            Application.Quit();
         });
         return false;
     }
@@ -46,6 +53,7 @@ public sealed class FocusExitGuard : MonoBehaviour
     }
     void Dismiss()
     {
+        dialogGeneration++;
         if(dialogFocus!=null)dialogFocus.Changed-=RefreshDialog;
         dialogFocus=null;
         if(dialog)Destroy(dialog);

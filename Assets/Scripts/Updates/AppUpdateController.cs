@@ -114,10 +114,11 @@ public sealed class AppUpdateController : MonoBehaviour
         var manager = GameDataManager.Instance;
         if (!manager) return "Wait for Cat Quest to finish starting.";
         if (manager.IsSaveReadOnly) return "Resolve the save warning before restarting to update.";
+        if (manager.IsShuttingDown && (!Instance || Instance.State != AppUpdateState.Installing)) return "Saving is still in progress. Please retry shortly.";
         var runner = manager.GetComponent<FocusRunner>();
         if (runner && (runner.Controller.Phase == FocusPhase.Focusing || runner.Controller.Phase == FocusPhase.Saving || runner.Controller.Phase == FocusPhase.Resting))
             return "Finish Focus, Rest and any pending settlement before restarting.";
-        if (manager.PlayerData.battles.Any(b => b.outcome == BattleOutcome.Running)) return "Finish your current battle before restarting.";
+        if (manager.Service.HasActiveBattle) return "Finish your current battle before restarting.";
         return null;
     }
     public async void Install()
@@ -127,24 +128,29 @@ public sealed class AppUpdateController : MonoBehaviour
         if (blocked != null) { Message = blocked; Changed?.Invoke(); return; }
         var host = CompanionHost.Instance;
         Process updater = null;
+        var manager = GameDataManager.Instance;
+        Task preparation = null;
+        long preparationMilliseconds = 0;
         Set(AppUpdateState.Installing, "Preparing to restart...");
         try
         {
-            // Flush pending slider edits while the main view is still available.
-            foreach (var slider in FindObjectsByType<SettingsSliderCommit>(FindObjectsInactive.Include, FindObjectsSortMode.None)) slider.Flush();
-            if (!GameDataManager.Instance.TrySaveData(out var error)) throw new IOException(error);
-            PlayerPrefs.Save();
+            var saveBudget = Stopwatch.StartNew();
+            preparation = manager.PrepareShutdownAsync();
+            if (await Task.WhenAny(preparation, Task.Delay(10000)) != preparation) throw new IOException("Saving is still in progress. Please retry the update shortly.");
+            await preparation;
+            preparationMilliseconds = saveBudget.ElapsedMilliseconds;
             if (host)
             {
                 host.BeginUpdateShutdown();
-                for (int i = 0; i < 100 && host.IsOpen; i++) await Task.Delay(100);
-                if (host.IsOpen) throw new IOException("Pet Widget did not close. Please close it and retry.");
+                for (int i = 0; i < 100 && host.IsRunning; i++) await Task.Delay(100);
+                if (host.IsRunning) throw new IOException("Pet Widget did not close. Please close it and retry.");
             }
             blocked = RestartBlockReason(); if (blocked != null) throw new IOException(blocked);
             string probe = Path.Combine(InstallDirectory, ".update-write-test-" + Guid.NewGuid().ToString("N"));
             using (File.Create(probe)) { } File.Delete(probe);
             string helper = Path.Combine(work, "CatQuestUpdater.exe");
             File.Copy(Path.Combine(InstallDirectory, "CatQuestUpdater.exe"), helper, true);
+            File.Copy(Path.Combine(InstallDirectory, "CatQuestUpdater.exe.config"), helper + ".config", true);
             string ready = Path.Combine(work, "ready"); if (File.Exists(ready)) File.Delete(ready);
             using (var parent = Process.GetCurrentProcess())
                 File.WriteAllText(Path.Combine(work, "request.json"), JsonUtility.ToJson(new InstallRequest {
@@ -152,8 +158,10 @@ public sealed class AppUpdateController : MonoBehaviour
                     sha256 = Release.sha256, size = Release.size, parentPid = parent.Id, parentStartedUtcTicks = parent.StartTime.ToUniversalTime().Ticks,
                     verificationDirectory = CompanionProtocol.HasArgument("--focus-smoke") ? CompanionProtocol.Argument("--smoke-dir") : null }));
             updater = Process.Start(new ProcessStartInfo(helper, "\"" + Path.Combine(work, "request.json") + "\"") { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = work });
+            if (updater == null) throw new IOException("Updater could not start. Your current version is unchanged.");
             for (int i = 0; i < 100 && !File.Exists(Path.Combine(work, "ready")) && !updater.HasExited; i++) await Task.Delay(100);
             if (!File.Exists(Path.Combine(work, "ready")) || updater.HasExited) throw new IOException("Updater could not start. Your current version is unchanged.");
+            await manager.CloseAndApproveQuitAsync(Math.Max(1, 10000 - (int)preparationMilliseconds));
             Application.Quit();
             await Task.Delay(2000);
             if (!disposed) throw new IOException("Cat Quest could not exit. Close any pending confirmation, then retry.");
@@ -163,9 +171,16 @@ public sealed class AppUpdateController : MonoBehaviour
             // Kill only the exact helper we launched, while this process still prevents installation.
             if (updater != null && !updater.HasExited) updater.Kill();
             if (host) host.CancelUpdateShutdown();
+            if (preparation != null && !preparation.IsCompleted) _ = ResumeAfterPreparationAsync(manager, preparation);
+            else if (manager) manager.ResumeAfterShutdownFailure();
             Set(AppUpdateState.Ready, "Could not restart: " + e.Message);
         }
         finally { updater?.Dispose(); }
+    }
+    static async Task ResumeAfterPreparationAsync(GameDataManager manager, Task preparation)
+    {
+        try { await preparation; } catch (Exception) { }
+        if (manager) manager.ResumeAfterShutdownFailure();
     }
     void OnDestroy() { disposed = true; request?.Abort(); if (Instance == this) Instance = null; }
     public void PrepareSmokeUpdate(string folder)

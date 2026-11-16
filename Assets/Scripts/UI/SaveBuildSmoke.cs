@@ -12,7 +12,7 @@ using UnityEngine.SceneManagement;
 // store; never registers or changes anything during ordinary startup.
 public sealed class SaveBuildSmoke : MonoBehaviour
 {
-    [Serializable] public sealed class Sample { public string operation; public double milliseconds, followingFrameGapMs; public bool focused; }
+    [Serializable] public sealed class Sample { public string operation; public double milliseconds, dispatchMilliseconds, commandMainMilliseconds, presentationMainMilliseconds, storageMilliseconds, followingFrameGapMs; public bool focused; }
     [Serializable] public sealed class Report {
         public string utc, unity, platform, graphics, phase, failure;
         public bool development, passed;
@@ -34,7 +34,6 @@ public sealed class SaveBuildSmoke : MonoBehaviour
         if (!CompanionProtocol.HasArgument("--save-smoke") || !CompanionProtocol.HasArgument("--focus-smoke")) return;
         string folder = CompanionProtocol.Argument("--smoke-dir");
         if (string.IsNullOrEmpty(folder) || !File.Exists(Path.Combine(folder, "save-probe-authorized.txt"))) return;
-        PlayerPrefs.SetInt("PetWidgetEnabled", 0); // Native driver restores the prior preferences.
         var root = new GameObject("Isolated save build verification");
         DontDestroyOnLoad(root);
         var probe = root.AddComponent<SaveBuildSmoke>(); probe.directory = Path.GetFullPath(folder);
@@ -80,100 +79,98 @@ public sealed class SaveBuildSmoke : MonoBehaviour
     }
     IEnumerator Run()
     {
-        while (!GameDataManager.Instance || !FindFirstObjectByType<MainMenuNavigation>()) yield return null;
-        var manager = GameDataManager.Instance; var service = manager.Tasks;
-        Check(Path.GetFullPath(manager.SavePath) == Path.Combine(directory, "test-save.json"), "Main Player uses the authorized isolated save");
-        report.unity = Application.unityVersion; report.platform = Application.platform.ToString(); report.graphics = SystemInfo.graphicsDeviceType.ToString();
-        report.development = UnityEngine.Debug.isDebugBuild; report.width = Screen.width; report.height = Screen.height;
-        report.tasks = manager.PlayerData.tasks.Count; report.history = manager.PlayerData.history.Count; report.saveBytes = new FileInfo(manager.SavePath).Length;
-        var nav = FindFirstObjectByType<MainMenuNavigation>(); Check(nav.ShowPage(MainMenuPage.Tasks), "Authored Tasks page opens");
-        var ui = nav.pages[(int)MainMenuPage.Tasks].GetComponent<TaskSystemUI>(); ui.SelectTab(TaskTab.Todo);
-        yield return null; // Let the page's Start restore its initial tab before selecting the test view.
-        ui.SelectTab(TaskTab.Todo);
-        if (CompanionProtocol.HasArgument("--save-recovery")) {
-            var startup = Wait(3); while (startup.MoveNext()) yield return null;
-            Check(!string.IsNullOrEmpty(manager.LoadNotice), "Restart reports recovery from backup");
-            Check(JsonUtility.ToJson(manager.PlayerData) == File.ReadAllText(Path.Combine(directory, "recovery-expected.json")), "Actual restarted process restores the complete expected backup");
-            string backup = File.ReadAllText(manager.SavePath + ".bak");
-            Check(manager.TrySaveData(out var recoveryError), "Recovered Player saves successfully: " + recoveryError);
-            Check(File.ReadAllText(manager.SavePath + ".bak") == backup && Directory.GetFiles(directory, "test-save.json.corrupt.*").Length > 0,
-                "Recovery preserves the valid backup and archives the corrupt primary");
-            Check(JsonUtility.ToJson(new PlayerDataStore(manager.SavePath).Data) == JsonUtility.ToJson(manager.PlayerData), "Recovered save reloads fully");
-            var shot = Capture("recovered-tasks"); while (shot.MoveNext()) yield return null;
-            var recoveryNotice = GameObject.Find("TaskConfirmDialog");
-            Check(recoveryNotice && recoveryNotice.transform.Find("Popup/Text_Info").GetComponent<TMPro.TMP_Text>().text.Contains("backup"), "Recovery notice is visible in the restarted Player");
-            recoveryNotice.transform.Find("Popup/Confirm").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
-            startup = Wait(1); while (startup.MoveNext()) yield return null;
-            shot = Capture("recovered-tasks-dismissed"); while (shot.MoveNext()) yield return null;
-            report.passed = true; Write("RECOVERY-PASS"); Application.Quit(); yield break;
+        while (!GameDataManager.Instance || !GameDataManager.Instance.IsReady || !FindFirstObjectByType<MainMenuNavigation>()) yield return null;
+        var manager=GameDataManager.Instance;
+        Check(Path.GetFullPath(manager.SavePath)==Path.Combine(directory,"test-save.sqlite3"),"Main Player uses the authorized isolated SQLite save");
+        report.unity=Application.unityVersion;report.platform=Application.platform.ToString();report.graphics=SystemInfo.graphicsDeviceType.ToString();
+        report.development=UnityEngine.Debug.isDebugBuild;report.width=Screen.width;report.height=Screen.height;
+        var nav=FindFirstObjectByType<MainMenuNavigation>();Check(nav.ShowPage(MainMenuPage.Tasks),"Authored Tasks page opens");
+        var ui=nav.pages[(int)MainMenuPage.Tasks].GetComponent<TaskSystemUI>();
+        yield return null;ui.SelectTab(TaskTab.Todo);
+        var initial=manager.Service.ReadVerificationSnapshotAsync();while(!initial.IsCompleted)yield return null;
+        Check(!initial.IsFaulted&&initial.Result.Succeeded,"SQLite diagnostic snapshot loads");
+        report.tasks=initial.Result.Value.tasks.Count;report.history=initial.Result.Value.history.Count;report.saveBytes=new FileInfo(manager.SavePath).Length;
+        if(CompanionProtocol.HasArgument("--save-restart")) {
+            Check(JsonUtility.ToJson(initial.Result.Value)==File.ReadAllText(Path.Combine(directory,"restart-expected.json")),"Actual restarted process restores every committed field despite changed legacy JSON");
+            var verify=VerifyRestartAsync(manager);while(!verify.IsCompleted)yield return null;
+            if(verify.IsFaulted)throw verify.Exception.GetBaseException();
+            var shot=Capture("restarted-tasks");while(shot.MoveNext())yield return null;
+            report.passed=true;Write("RESTART-PASS");Application.Quit();yield break;
         }
-        Write("READY"); while (!File.Exists(Path.Combine(directory, "go.request"))) yield return null;
-        var settle = Wait(2); while (settle.MoveNext()) yield return null;
-        idle = true; settle = Wait(3); while (settle.MoveNext()) yield return null; idle = false;
-        var capture = Capture("tasks-before"); while (capture.MoveNext()) yield return null;
-        Check(manager.TrySaveData(out var warmError), "Warm save succeeds: " + warmError);
-        for (int i = 0; i < 5; i++) {
-            var measure = Measure("SnapshotAndSave", () => Check(manager.TrySaveData(out var error), "Measured save succeeds: " + error));
-            while (measure.MoveNext()) yield return null;
+        Write("READY");while(!File.Exists(Path.Combine(directory,"go.request")))yield return null;
+        var settle=Wait(2);while(settle.MoveNext())yield return null;
+        idle=true;settle=Wait(3);while(settle.MoveNext())yield return null;idle=false;
+        var capture=Capture("tasks-before");while(capture.MoveNext())yield return null;
+        var checks=VerifySaveAsync(manager,ui);while(!checks.IsCompleted)yield return null;
+        if(checks.IsFaulted)throw checks.Exception.GetBaseException();
+        capture=Capture("save-retry-success");while(capture.MoveNext())yield return null;
+        report.passed=true;Write("RESTART-REQUIRED");Application.Quit();
+    }
+    async System.Threading.Tasks.Task VerifyRestartAsync(GameDataManager manager)
+    {
+        var task=await manager.Service.UpsertAsync(new QuestTask{title="Restart continued SQLite write"},null);
+        Check(task.Succeeded,"Restart accepts a new ordinary command");
+        var flush=await manager.FlushAsync();Check(flush.Succeeded,"Restart flushes new SQLite progress");
+    }
+    async System.Threading.Tasks.Task VerifySaveAsync(GameDataManager manager,TaskSystemUI ui)
+    {
+        var service=manager.Service;
+        var warm=await service.SaveTagAsync(null,"SQLite benchmark",TagColors.DefaultHex);Check(warm.Succeeded,"Warm transactional tag command succeeds");
+        string tagId=warm.Value;
+        for(int i=0;i<100;i++) {
+            var sample=new Sample{operation="IndexedTagCommitWithVisibleTasksRefresh",focused=Application.isFocused};
+            var timer=Stopwatch.StartNew();var pending=service.SaveTagAsync(tagId,"SQLite benchmark "+(i%2),TagColors.DefaultHex);
+            sample.dispatchMilliseconds=timer.Elapsed.TotalMilliseconds;
+            var saved=await pending;sample.milliseconds=timer.Elapsed.TotalMilliseconds;
+            sample.commandMainMilliseconds=service.LastCommandMainMilliseconds;sample.storageMilliseconds=service.LastCommandStorageMilliseconds;
+            Check(saved.Succeeded,"Measured SQLite commit succeeds #"+i);
+            var renderDeadline=DateTime.UtcNow.AddSeconds(10);
+            while(ui.RenderedVersion<saved.Version) {
+                if(DateTime.UtcNow>renderDeadline)throw new TimeoutException("Visible Tasks refresh did not finish after commit.");
+                await System.Threading.Tasks.Task.Yield();
+            }
+            sample.presentationMainMilliseconds=ui.LastRefreshMainMilliseconds;
+            sample.milliseconds=timer.Elapsed.TotalMilliseconds;
+            await System.Threading.Tasks.Task.Yield();sample.followingFrameGapMs=frameGap;report.samples.Add(sample);
         }
-        string tagId = manager.PlayerData.tags[0].id;
-        for (int i = 0; i < 5; i++) {
-            var measure = Measure("CommitWithVisibleTasksRefresh", () => Check(service.SaveTag(tagId, "Player save check", TagColors.DefaultHex, out _), "Measured commit succeeds: " + service.LastError));
-            while (measure.MoveNext()) yield return null;
+        double p95=report.samples.Select(s=>s.milliseconds).OrderBy(x=>x).ElementAt(94);
+        double mainP95=report.samples.Select(s=>s.commandMainMilliseconds+s.presentationMainMilliseconds).OrderBy(x=>x).ElementAt(94);
+        Check(mainP95<=5,"Native command main-thread P95 <= 5ms");
+        Check(p95<=200,"Native command end-to-end P95 <= 200ms");
+        var created=await service.UpsertAsync(new QuestTask{title="Windows SQLite failure and retry"},null);
+        Check(created.Succeeded,"Create an ordinary task through the real service");string taskId=created.Value;
+        ui.SelectTab(TaskTab.Todo);ui.SelectTask(taskId);
+        var before=await service.ReadVerificationSnapshotAsync();Check(before.Succeeded,"Capture committed state before fault");
+        string original=JsonUtility.ToJson(before.Value);
+        using(var locked=new SQLite.SQLiteConnection(manager.SavePath)) {
+            locked.Execute("BEGIN IMMEDIATE");
+            try {
+                int framesBeforeLock = Time.frameCount;
+                ui.CompleteSelected(taskId);
+                var barrier=await manager.FlushAsync();Check(barrier.Succeeded,"Failed command drains without blocking Unity input");
+                Check(Time.frameCount-framesBeforeLock>=10,"Unity keeps rendering during the real SQLite lock wait");
+                Check(!string.IsNullOrEmpty(service.LastError),"SQLite write lock reports failure");
+                var after=await service.ReadVerificationSnapshotAsync();Check(after.Succeeded&&JsonUtility.ToJson(after.Value)==original,"Failed UI completion leaves every committed field and reward unchanged");
+                var notice=GameObject.Find("TaskConfirmDialog");
+                Check(notice&&notice.transform.Find("Popup/Text_Info").GetComponent<TMPro.TMP_Text>().text.Length>0,"Actual UI presents a visible actionable save failure");
+                await System.Threading.Tasks.Task.Delay(400);
+                ScreenCapture.CaptureScreenshot(Path.Combine(directory,"save-failure.png"));
+                await System.Threading.Tasks.Task.Delay(100);
+                notice.transform.Find("Popup/Confirm").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+            } finally {locked.Execute("ROLLBACK");}
         }
-        // Profile stages after the end-to-end samples so instrumentation does not
-        // warm their caches or introduce extra allocations into the comparison.
-        var candidate = PlayerDataStore.Copy(manager.PlayerData);
-        string json = JsonUtility.ToJson(candidate);
-        byte[] encoded = System.Text.Encoding.UTF8.GetBytes(json);
-        object sink = null;
-        var hidden = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var store = typeof(GameDataManager).GetField("store", hidden).GetValue(manager);
-        var validate = typeof(PlayerDataStore).GetMethod("ValidateFiles", hidden);
-        var compress = typeof(PlayerDataStore).GetMethod("Compress", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
-        for (int i = 0; i < 3; i++) {
-            var stages = new Dictionary<string, Action> {
-                { "Stage.Copy", () => sink = PlayerDataStore.Copy(manager.PlayerData) },
-                { "Stage.Normalize", () => PlayerDataStore.Normalize(candidate) },
-                { "Stage.Serialize", () => sink = JsonUtility.ToJson(candidate) },
-                { "Stage.Encode", () => sink = System.Text.Encoding.UTF8.GetBytes(json) },
-                { "Stage.Validate", () => validate.Invoke(store, new object[] { false, 0, 0 }) },
-                { "Stage.Write", () => File.WriteAllBytes(Path.Combine(directory, "stage-write.tmp"), encoded) }
-            };
-            if (compress != null) stages.Add("Stage.Compress", () => sink = compress.Invoke(null, new object[] { encoded }));
-            foreach (var stage in stages) { var measure = Measure(stage.Key, stage.Value); while (measure.MoveNext()) yield return null; }
-        }
-        GC.KeepAlive(sink);
-        Check(service.Upsert(new QuestTask { title = "Windows save / retry check" }, null, out var taskId), "Create an ordinary task through the real service");
-        ui.SelectTab(TaskTab.Todo); ui.SelectTask(taskId);
-        string original = JsonUtility.ToJson(manager.PlayerData), disk = File.ReadAllText(manager.SavePath), oldBackup = File.ReadAllText(manager.SavePath + ".bak");
-        using (var locked = new FileStream(manager.SavePath + ".tmp", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {
-            ui.CompleteSelected(taskId);
-            Check(!string.IsNullOrEmpty(service.LastError) && JsonUtility.ToJson(manager.PlayerData) == original, "Failed UI completion leaves all in-memory state and rewards unchanged");
-            Check(File.ReadAllText(manager.SavePath) == disk && File.ReadAllText(manager.SavePath + ".bak") == oldBackup, "Temporary-write failure preserves both committed files");
-            yield return null;
-            var notice = GameObject.Find("TaskConfirmDialog");
-            Check(notice && notice.transform.Find("Popup/Text_Info").GetComponent<TMPro.TMP_Text>().text.Contains("Could not save"), "Actual UI presents a visible save failure");
-            Check(notice.transform.Find("Popup/Text_Info").GetComponent<TMPro.TMP_Text>().text == "Could not save your changes. Please try again.", "Visible failure message offers retry without a technical path");
-            capture = Capture("save-failure"); while (capture.MoveNext()) yield return null;
-            notice.transform.Find("Popup/Confirm").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
-        }
-        using (var locked = new FileStream(manager.SavePath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
-            Check(!service.Complete(taskId, true) && JsonUtility.ToJson(manager.PlayerData) == original, "Persistent replacement lock returns failure without reward settlement");
-            Check(File.ReadAllText(manager.SavePath) == disk && File.ReadAllText(manager.SavePath + ".bak") == oldBackup, "Replacement failure preserves primary and backup");
-        }
-        var completion = Measure("RetryUICompletion", () => ui.CompleteSelected(taskId)); while (completion.MoveNext()) yield return null;
-        Check(string.IsNullOrEmpty(service.LastError) && manager.PlayerData.history.Count(h => h.taskId == taskId && !h.revoked) == 1, "UI retry settles exactly one completion");
-        capture = Capture("save-retry-success"); while (capture.MoveNext()) yield return null;
-        original = JsonUtility.ToJson(manager.PlayerData); ui.CompleteSelected(taskId);
-        Check(JsonUtility.ToJson(manager.PlayerData) == original, "Duplicate UI completion cannot pay again");
-        Check(JsonUtility.ToJson(new PlayerDataStore(manager.SavePath).Data) == original, "All successful progress reloads from disk");
-        capture = Capture("duplicate-completion"); while (capture.MoveNext()) yield return null;
-        Check(manager.TrySaveData(out var finalError), "Establish recovery backup after completion: " + finalError);
-        var expected = new PlayerDataStore(manager.SavePath + ".bak").Data;
-        File.WriteAllText(Path.Combine(directory, "recovery-expected.json"), JsonUtility.ToJson(expected));
-        File.WriteAllText(manager.SavePath, "{deliberately damaged isolated primary}");
-        report.passed = true; Write("RESTART-REQUIRED"); Application.Quit();
+        ui.CompleteSelected(taskId);Check((await manager.FlushAsync()).Succeeded,"UI retry drains successfully");
+        var committed=await service.ReadVerificationSnapshotAsync();Check(committed.Succeeded&&committed.Value.history.Count(h=>h.taskId==taskId&&!h.revoked)==1,"UI retry settles exactly one completion");
+        original=JsonUtility.ToJson(committed.Value);
+        var duplicate=await service.CompleteAsync(taskId,true);Check(duplicate.Succeeded,"Duplicate command returns its committed receipt");
+        var duplicateState=await service.ReadVerificationSnapshotAsync();Check(duplicateState.Succeeded&&JsonUtility.ToJson(duplicateState.Value)==original,"Duplicate command cannot change data or pay again");
+        string portable=Path.Combine(directory,"verified.catquestbackup");var exported=await service.TransferBackupAsync(portable,true);Check(exported.Succeeded,"Consistent portable SQLite backup exports");
+        using(var backup=new SQLite.SQLiteConnection(portable,SQLite.SQLiteOpenFlags.ReadOnly))Check(backup.ExecuteScalar<string>("PRAGMA integrity_check")=="ok","Exported standalone SQLite backup passes integrity_check");
+        File.WriteAllText(Path.Combine(directory,"restart-expected.json"),original);
+        // This synthetic source is deliberately obsolete after successful migration.
+        // A real restart must keep authoritative SQLite progress instead of reimporting it.
+        File.WriteAllText(Path.Combine(directory,"test-save.json"),"{modified isolated legacy source}");
+        Check((await manager.FlushAsync()).Succeeded,"Committed SQLite progress flushed before real process restart");
     }
 }
 #endif

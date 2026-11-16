@@ -34,7 +34,7 @@ public sealed class LootShopUI : MonoBehaviour
     readonly List<LootShopItemUI> revealedItems=new List<LootShopItemUI>();
     LootShopItemUI hoverSource;
     public int RevealedCount {get;private set;}
-    TaskService service;
+    SqlitePlayerService service;
     TaskDialogKeyboard keyboard;
     Coroutine animation;
     LootReceipt shown;
@@ -44,7 +44,7 @@ public sealed class LootShopUI : MonoBehaviour
     bool playRewardSound;
     public bool Revealing => animation!=null;
     void Awake(){
-        service=GameDataManager.EnsureInstance().Tasks;
+        service=GameDataManager.EnsureInstance().Service;
         keyboard=GetComponent<TaskDialogKeyboard>();
         close.onClick.AddListener(Close);
         single.onClick.AddListener(()=>Prepare(1));ten.onClick.AddListener(()=>Prepare(10));
@@ -108,15 +108,18 @@ public sealed class LootShopUI : MonoBehaviour
         confirmation.SetActive(true);keyboard.Open(new[]{cancel,confirm},Cancel);
     }
     void Cancel(){confirmation.SetActive(false);busy=false;pendingCount=0;requestId=null;Refresh();FocusMain();}
-    public void Purchase(){
+    public async void Purchase(){
         if(!confirmation.activeSelf||pendingCount==0||!confirm.interactable)return;
         confirm.interactable=false;
         try {
-            if(!service.DrawLoot(pendingCount,requestId,out var receipt)){
+            var result = await service.DrawLootAsync(pendingCount,requestId);
+            if (!this || !isActiveAndEnabled) return;
+            var receipt = result.Value;
+            if(!result.Succeeded){
                 confirmationText.text=service.LastError+"\nRetry or cancel. No chest result has been delivered.";return;
             }
             pendingCount=0;requestId=null;confirmation.SetActive(false);Show(receipt,true);
-        } finally {confirm.interactable=true;}
+        } finally {if(confirm)confirm.interactable=true;}
     }
     void Show(LootReceipt receipt,bool animate){
         if(receipt==null)return;

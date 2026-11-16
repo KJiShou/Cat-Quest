@@ -20,7 +20,7 @@ public static class SettingsVerification
     sealed class Clock : ITaskClock
     { public DateTime LocalNow => new DateTime(2026,10,21,12,0,0); public DateTime UtcNow => LocalNow.AddHours(-8); }
     static SettingsVerification() { EditorApplication.update += Poll; }
-    static void Poll()
+    static async void Poll()
     {
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode) return;
         if (File.Exists("Temp/verify-settings-data.request"))
@@ -33,7 +33,7 @@ public static class SettingsVerification
             {
                 FocusImplementationVerification.Run();
                 Run(folder);
-                SettingsAccountVerification.Run();
+                await SettingsAccountVerification.Run();
                 report += "PASS: FocusImplementationVerification (including Rewards/Tasks), Settings persistence and prefab bindings, SettingsAccountVerification.\n";
             }
             catch (Exception e) { report += "FAIL: " + e; Debug.LogException(e); }

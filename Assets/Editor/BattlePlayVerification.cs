@@ -1,4 +1,6 @@
 using System;
+using System.Threading.Tasks;
+using static SqlitePlayVerificationSupport;
 using System.IO;
 using System.Collections;
 using System.Linq;
@@ -20,19 +22,23 @@ public static class BattlePlayVerification
     static BattlePlayVerification(){Application.logMessageReceived+=(message,trace,type)=>{if(SessionState.GetBool(Flag,false)&&(type==LogType.Exception||type==LogType.Error||message.Contains("Animator.GotoState")||message.Contains("inactive object")))error=message;};EditorApplication.update+=Poll;EditorApplication.playModeStateChanged+=s=>{
         if(!SessionState.GetBool(Flag,false))return;
         if(s==PlayModeStateChange.EnteredPlayMode){step=0;error=null;loadedScene=false;impacts=null;next=EditorApplication.timeSinceStartup+3;}
-        if(s==PlayModeStateChange.EnteredEditMode){UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+".scene",""));SessionState.SetBool(Flag,false);Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",SessionState.GetString(Flag+".env","") is string prior&&prior.Length>0?prior:null);
+        if(s==PlayModeStateChange.EnteredEditMode){SqlitePlayVerificationSupport.RestoreCustomSizes(Flag);(impacts as IDisposable)?.Dispose();impacts=null;UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+".scene",""));SessionState.SetBool(Flag,false);Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",SessionState.GetString(Flag+".env","") is string prior&&prior.Length>0?prior:null);
             var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));view.GetType().GetProperty("selectedSizeIndex",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic).SetValue(view,SessionState.GetInt(Flag+".size",0));Time.timeScale=SessionState.GetFloat(Flag+".timeScale",1);}
     };}
     static void Check(bool ok,string why){if(!ok)throw new Exception(why);}
     static void Resolution(int width,int height)=>typeof(DashboardRewardPlayVerification).GetMethod("Resolution",BindingFlags.NonPublic|BindingFlags.Static).Invoke(null,new object[]{width,height});
-    static void Poll()
+    static bool polling;
+    static PlayerData saved;
+    static IEnumerator Drain(SqlitePlayerService service){var t=DrainAsync(service);foreach(var delay in Wait(t))yield return delay;saved=t.Result;}
+    static async void Poll(){if(polling)return;polling=true;try{await PollAsync();}finally{polling=false;}}
+    static async Task PollAsync()
     {
         if(EditorApplication.isCompiling||EditorApplication.isUpdating)return;
         if(!EditorApplication.isPlayingOrWillChangePlaymode&&File.Exists("Temp/verify-battle-play.request")){
             File.Delete("Temp/verify-battle-play.request");Directory.CreateDirectory(Folder);
             File.WriteAllText(Folder+"/play-result.txt","RUNNING "+DateTime.UtcNow.ToString("O"));
             SessionState.SetString(Flag+".env",Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE")??"");SessionState.SetFloat(Flag+".timeScale",Time.timeScale);SessionState.SetFloat(Flag+".started",(float)EditorApplication.timeSinceStartup);
-            var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));SessionState.SetInt(Flag+".size",(int)view.GetType().GetProperty("selectedSizeIndex",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic).GetValue(view));Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(Folder+"/save-"+Guid.NewGuid().ToString("N")+".json"));SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene));UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");SessionState.SetBool(Flag,true);Resolution(1920,1080);EditorApplication.isPlaying=true;return;
+            var view=EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView"));SessionState.SetInt(Flag+".size",(int)view.GetType().GetProperty("selectedSizeIndex",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic).GetValue(view));Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE",Path.GetFullPath(Folder+"/save-"+Guid.NewGuid().ToString("N")+".json"));SessionState.SetString(Flag+".scene",AssetDatabase.GetAssetPath(UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene));UnityEditor.SceneManagement.EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CharacterHome.unity");SqlitePlayVerificationSupport.RememberCustomSizes(Flag);SessionState.SetBool(Flag,true);Resolution(1920,1080);EditorApplication.isPlaying=true;return;
         }
         if(SessionState.GetBool(Flag,false)&&EditorApplication.timeSinceStartup-SessionState.GetFloat(Flag+".started",0)>180){File.WriteAllText(Folder+"/play-result.txt","FAIL: timeout");EditorApplication.isPlaying=false;return;}
         if(!EditorApplication.isPlaying||!SessionState.GetBool(Flag,false)||EditorApplication.timeSinceStartup<next||(capture&&capture.Pending))return;
@@ -41,10 +47,10 @@ public static class BattlePlayVerification
             if(!loadedScene){loadedScene=true;UnityEngine.SceneManagement.SceneManager.LoadScene("CharacterHome");next=EditorApplication.timeSinceStartup+3;return;}
             var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
             if(!nav&&step==0){UnityEngine.SceneManagement.SceneManager.LoadScene("CharacterHome");next=EditorApplication.timeSinceStartup+3;return;}
-            Check(nav,"Navigation missing");var panel=nav.pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>();
+            Check(nav,"Navigation missing");saved=await DrainAsync(GameDataManager.Instance.Service);var panel=nav.pages[(int)MainMenuPage.Boss].GetComponent<BossPageUI>();
             if(step==0){
                 Check(GameDataManager.Instance.SavePath.Contains("BattleVerification"),"Must use isolated save");
-                GameDataManager.Instance.PlayerData.tickets=10;GameDataManager.Instance.PlayerData.experience=2025;GameDataManager.Instance.SaveData();
+                saved.tickets=10;saved.experience=2025;saved.tutorial=new TutorialProgress{version=1,dismissed=true,announcedLevel=10};Check((await SetFixtureAsync(saved)).Succeeded,"SQLite fixture commit");saved=await DrainAsync(GameDataManager.Instance.Service);
                 nav.ShowPage(MainMenuPage.Boss);
             }
             if(step>=1&&step<=4&&panel.arena.IsLoading){next=EditorApplication.timeSinceStartup+.1;return;}
@@ -53,16 +59,18 @@ public static class BattlePlayVerification
             if(step==3){if(panel.SelectedBoss!=3){panel.SelectStage(3);next=EditorApplication.timeSinceStartup+.1;return;}Check(panel.arena.IsReady&&panel.actors.Boss.name.StartsWith("Demon"),"Demon not selected");panel.SelectStage(1);Resolution(1280,720);}
             if(step==4){panel.stageButton.onClick.Invoke();Capture("stage-select-1280");}
             if(step==5){panel.SelectStage(1);var animator=panel.actors.Boss.GetComponentInChildren<Animator>();bossRestRotation=animator.transform.localRotation;bossRestScale=animator.transform.localScale;Capture("battle-ready-1280");}
-            if(step==6){tickets=GameDataManager.Instance.PlayerData.tickets;startX=panel.actors.Cat.position.x;panel.Action();Check(panel.confirmation.activeSelf,"Entry confirmation missing");Capture("confirm-1280");}
-            if(step==7){panel.Confirm();Check(panel.IsBattling&&GameDataManager.Instance.PlayerData.tickets==tickets-1,"Entry did not deduct exactly once");}
+            if(step==6){tickets=saved.tickets;startX=panel.actors.Cat.position.x;panel.Action();Check(panel.confirmation.activeSelf,"Entry confirmation missing");Capture("confirm-1280");}
+            if(step==7){panel.Confirm();saved=await DrainAsync(GameDataManager.Instance.Service);Check(panel.IsBattling&&saved.tickets==tickets-1,"Entry did not deduct exactly once");}
             if(step==8){Check(panel.actors.Cat.position.x>startX,"Cat did not run toward boss");Capture("run-1280");}
             if(step==9){normalSpeed=panel.actors.CatAnimationSpeed;Capture("attack-1280");}
             if(step==10){
-                if(panel.IsBattling){next=EditorApplication.timeSinceStartup+1;return;}
+                if(panel.IsBattling||panel.actors.IsFinishingVictory||!panel.resultPanels[0].activeSelf){next=EditorApplication.timeSinceStartup+.1;return;}
                 Check(panel.Simulation.Outcome==BattleOutcome.Victory,"Expected Lv10 Boss1 victory");
-                Check(GameDataManager.Instance.PlayerData.bossProgress[0].wins==1,"Victory not saved");Check(panel.resultPanels[0].activeSelf && panel.resultValues[0].text=="+30"&&panel.resultValues[0].transform.parent.Find("Icon_Trophy").gameObject.activeSelf,"Victory result/reward missing");Capture("victory-1280");
+                Check(saved.bossProgress[0].wins==1,"Victory not saved");Check(panel.resultPanels[0].activeSelf && panel.resultValues[0].text=="+30"&&panel.resultValues[0].transform.parent.Find("Icon_Trophy").gameObject.activeSelf,"Victory result/reward missing");Capture("victory-1280");
             }
             if(step==11){
+                if(panel.resultPanels[0].activeSelf)panel.CloseResult();
+                if(panel.IsReturningFromResult){next=EditorApplication.timeSinceStartup+.1;return;}
                 Check(Math.Abs(panel.actors.Cat.position.x-startX)<.001,"Cat did not return home after result");
                 Check(panel.bossBar.value==1 && panel.catHealth.GetComponent<UnityEngine.UI.Slider>().value==1,"Post-result health did not reset together");
                 CheckRestored(panel);Capture("post-battle-reset-1280");
@@ -72,19 +80,20 @@ public static class BattlePlayVerification
                 // Explicitly sample a completed death, then reselect the same boss.
                 var animator=panel.actors.Boss.GetComponentInChildren<Animator>();
                 animator.Play("Die",0,1);animator.Update(0);panel.SelectStage(1);CheckRestored(panel);
-                var stats=GameDataManager.Instance.Tasks.CatStats;stats.aspd=2;panel.actors.ResetPose();panel.actors.StartCombat(stats,BattleRules.Boss(1));
+                var stats=GameDataManager.Instance.Service.CatStats;stats.aspd=2;panel.actors.ResetPose();panel.actors.StartCombat(stats,BattleRules.Boss(1));
                 Check(Math.Abs(panel.actors.CatAnimationSpeed-normalSpeed*2)<.001,"Double ASPD did not double animation speed");Capture("attack-speed-2x");
             }
-            if(step==13){panel.SelectStage(1);panel.Action();panel.Confirm();Check(!nav.ShowPage(MainMenuPage.Dashboard)&&panel.confirmation.activeSelf&&panel.IsBattling,"Leaving page must confirm before stopping");panel.Confirm();Check(nav.CurrentPage==MainMenuPage.Dashboard&&GameDataManager.Instance.PlayerData.battles.Last().outcome==BattleOutcome.Stopped,"Confirmed departure must stop without refund");nav.ShowPage(MainMenuPage.Boss);}
+            if(step==13){panel.SelectStage(1);panel.Action();panel.Confirm();saved=await DrainAsync(GameDataManager.Instance.Service);Check(!nav.ShowPage(MainMenuPage.Dashboard)&&panel.confirmation.activeSelf&&panel.IsBattling,"Leaving page must confirm before stopping");panel.Confirm();saved=await DrainAsync(GameDataManager.Instance.Service);Check(nav.CurrentPage==MainMenuPage.Dashboard&&saved.battles.Last().outcome==BattleOutcome.Stopped,"Confirmed departure must stop without refund");nav.ShowPage(MainMenuPage.Boss);}
             if(step==14){
                 CheckRestored(panel);
-                GameDataManager.Instance.PlayerData.experience=0;GameDataManager.Instance.SaveData();
-                panel.SelectStage(1);panel.Action();panel.Confirm();panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);
+                saved.experience=550;Check((await SetFixtureAsync(saved)).Succeeded,"SQLite fixture commit");saved=await DrainAsync(GameDataManager.Instance.Service);
+                panel.SelectStage(1);panel.Action();panel.Confirm();saved=await DrainAsync(GameDataManager.Instance.Service);panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);saved=await DrainAsync(GameDataManager.Instance.Service);
                 Check(panel.resultPanels[1].activeSelf && !panel.resultPanels[0].activeSelf,"Defeat result missing");
                 Check(!panel.resultValues[1].text.Contains("+"),"Defeat shows fake reward");Capture("defeat-result-1280");
             }
             if(step==15){panel.resultContinue[1].onClick.Invoke();Check(!panel.resultPanels[1].activeSelf,"Continue did not close result");}
             if(step==16){
+                if(panel.IsReturningFromResult){next=EditorApplication.timeSinceStartup+.1;return;}
                 var health=panel.catHealth.GetComponent<PlayerHealthFeedback>();health.SetHealth(1,false);health.SetHealth(.2f,true);
                 var bossHealth=panel.bossBar.GetComponent<PlayerHealthFeedback>();bossHealth.SetHealth(1,false);bossHealth.SetHealth(.2f,true);
                 var numbers=panel.GetComponent<BattleDamageNumbers>();
@@ -133,14 +142,14 @@ public static class BattlePlayVerification
                 Check(panel.stageButton.transform.localScale==Vector3.one,"Shared button must preserve layout scale");
                 var juice=panel.action.GetComponent<JuicyButton>();Check(juice.visual.localScale.y<.92f,"Press must squash button");Capture("button-pressed-1280");
             }
-            if(step==23){panel.stageButton.interactable=false;var juice=panel.action.GetComponent<JuicyButton>();juice.OnPointerUp(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));juice.OnPointerExit(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));}
+            if(step==23){panel.stageButton.interactable=false;var juice=panel.action.GetComponent<JuicyButton>();UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);juice.OnDeselect(new UnityEngine.EventSystems.BaseEventData(UnityEngine.EventSystems.EventSystem.current));juice.OnPointerUp(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));juice.OnPointerExit(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current));}
             if(step==24){
                 CheckButtonText(panel.stageButton);
                 Check(Math.Abs(panel.stageButton.GetComponent<JuicyButton>().DrawScale.x-1)<.005f,"Disabled button must reset feedback");panel.stageButton.interactable=true;
                 var juice=panel.action.GetComponent<JuicyButton>();Check(Math.Abs(juice.visual.localScale.x-1)<.005f,"Button must return to rest");Capture("button-normal-1280");
             }
             if(step==25){
-                if(impacts==null)impacts=ImpactChecks(panel);
+                if(impacts==null)impacts=Flatten(ImpactChecks(panel));
                 if(impacts.MoveNext()){next=EditorApplication.timeSinceStartup+Convert.ToDouble(impacts.Current);return;}
                 Check(error==null,error);File.WriteAllText(Folder+"/play-result.txt","PASS "+DateTime.UtcNow.ToString("O")+": 55ms visual hit stop, camera shake/restore, stronger recoil on all three bosses, repeated/simultaneous hits, unscaled playback, attack continuity, death/reset/disable/focus cleanup; stage selector/portraits at 1920 and 1280, Orc/Demon preview, gate rejection, confirmation, one-ticket entry, cat run, combat, victory persistence, 2x ASPD doubles animation speed, navigation stops battle; death pose, health, same-stage replay and navigation reset; victory/defeat result prefabs, actual rewards and Continue; smooth drain, ghost lag/settle, panic/reset colors, independent pooled damage numbers and expiration.");Resolution(1920,1080);EditorApplication.isPlaying=false;return;}
             step++;next=EditorApplication.timeSinceStartup+(step==17?.12:step==18?1.6:step==11?2.5:step==9?1.5:.5);
@@ -148,16 +157,18 @@ public static class BattlePlayVerification
     }
     static IEnumerator RewardChecks(BossPageUI panel)
     {
-        var manager=GameDataManager.Instance;var service=manager.Tasks;
-        panel.CloseResult();manager.PlayerData.experience=2025;manager.PlayerData.tickets=10;
-        manager.PlayerData.rewardDays.Add(new RewardDay{day="2026-10-21",questsClaimed=true});manager.SaveData();
-        panel.SelectStage(1);panel.Action();panel.Confirm();panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);
-        Check(panel.resultPanels[0].activeSelf&&manager.PlayerData.battles.Last().experience==0,"Repeat victory fixture");
-        Check(panel.resultValues[0].text==""&&!panel.resultValues[0].transform.parent.gameObject.activeSelf&&!panel.resultDetails[0].gameObject.activeSelf,"Zero-EXP victory shows no mastery or empty reward frame");
-        foreach(int width in new[]{1920,1280}){Resolution(width,width==1920?1080:720);yield return .3;Capture("victory-no-exp-"+width);yield return .3;}
-        panel.CloseResult();panel.stageButton.onClick.Invoke();yield return .2;
+        var manager=GameDataManager.Instance;var service=manager.Service;yield return Drain(service);
+        panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;saved.experience=2025;saved.tickets=10;
+        saved.equipmentUnlocked=true;saved.rewardDays.Add(new RewardDay{day="2026-10-21",questsClaimed=true});yield return Command(SetFixtureAsync(saved));yield return Drain(service);
+        panel.SelectStage(1);panel.Action();panel.Confirm();yield return Drain(GameDataManager.Instance.Service);panel.Simulation.Advance(120);panel.Settle(panel.Simulation.Outcome);yield return Drain(GameDataManager.Instance.Service);
+        while(panel.actors.IsFinishingVictory)yield return .1;
+        yield return .1;
+        Check(panel.resultPanels[0].activeSelf&&saved.battles.Last().experience==10,"Repeat victory fixture");
+        Check(panel.resultValues[0].text=="+10"&&panel.resultValues[0].transform.parent.gameObject.activeSelf&&!panel.resultDetails[0].gameObject.activeSelf,"Repeat victory shows its committed EXP without obsolete mastery text");
+        foreach(int width in new[]{1920,1280}){Resolution(width,width==1920?1080:720);yield return .3;Capture("victory-repeat-exp-"+width);yield return .3;}
+        panel.CloseResult();while(panel.IsReturningFromResult)yield return .1;panel.stageButton.onClick.Invoke();yield return .2;
         Check(panel.masteryParticles.All(p=>!p.gameObject.activeSelf),"No particles without a claim");
-        var progress=manager.PlayerData.bossProgress[0];progress.wins=5;progress.pendingClaims=1;manager.SaveData();
+        var progress=saved.bossProgress[0];progress.wins=5;progress.pendingClaims=1;yield return Command(SetFixtureAsync(saved));yield return Drain(service);
         panel.stageButton.onClick.Invoke();yield return .2;
         Check(panel.masteryParticles[0].isActiveAndEnabled&&!panel.masteryParticles[1].gameObject.activeSelf,"Only claimable chest emits");
         Check(panel.masteryParticles.All(p=>!p.raycastTarget),"Particles do not block chest input");
@@ -167,7 +178,7 @@ public static class BattlePlayVerification
         }
         panel.closeStages.onClick.Invoke();Check(!panel.masteryParticles[0].isActiveAndEnabled,"Closed Stage stops particles");
         panel.stageButton.onClick.Invoke();yield return .2;Check(panel.masteryParticles[0].isActiveAndEnabled,"Reopened Stage resumes particles");
-        Check(service.ClaimEquipment("boss1-weapon"),"Claim fixture reward");yield return .2;
+        yield return Command(service.ClaimEquipmentAsync("boss1-weapon"));yield return Drain(service);yield return .2;
         Check(!panel.masteryParticles[0].gameObject.activeSelf,"Claim consumes chest sparkle immediately");
         panel.closeStages.onClick.Invoke();
     }
@@ -191,12 +202,25 @@ public static class BattlePlayVerification
             Check(Time.timeScale==1,"Hit stop must not pause the game clock");
             catAnimator.Update(.02f);Check(Mathf.Abs(catAnimator.GetCurrentAnimatorStateInfo(0).normalizedTime-phaseBeforeStop)<.0001f,"Frozen attack phase must hold");
             Check(actors.CatReacting&&actors.BossReacting,"Both actors must react to simultaneous hits");
-            bool displacedCat=false,displacedBoss=false,shook=false;
-            for(int frame=0;frame<12;frame++){
-                Capture("impact-"+id+"-"+frame.ToString("00"));yield return .025;
+            bool displacedCat=false,displacedBoss=false,shook=false;int renderedSamples=0;float peakCameraOffset=0;
+            // Observe the pose actually rendered, before screenshot PNG encoding can
+            // stall the Editor and before the next Update removes the visual offset.
+            Camera.CameraCallback observe=rendering=>{
+                if(rendering!=panel.arena.StageCamera)return;
+                renderedSamples++;peakCameraOffset=Mathf.Max(peakCameraOffset,Vector3.Distance(camera.localPosition,cameraRest));
                 shook|=Vector3.Distance(camera.localPosition,cameraRest)>.001f;
                 displacedCat|=actors.Cat.position.x<catPosition.x-.001f;displacedBoss|=actors.Boss.position.x>bossPosition.x+.001f;
-            }
+            };
+            Action<UnityEngine.Rendering.ScriptableRenderContext,Camera> observeSrp=(context,rendering)=>observe(rendering);
+            Camera.onPreRender+=observe;
+            UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering+=observeSrp;
+            try {
+                for(int frame=0;frame<12;frame++){
+                    Capture("impact-"+id+"-"+frame.ToString("00"));yield return .025;
+                }
+            } finally { Camera.onPreRender-=observe;UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering-=observeSrp; }
+            File.AppendAllText(Folder+"/impact-render-samples.txt",DateTime.UtcNow.ToString("O")+" boss="+id+" samples="+renderedSamples+" peakOffset="+peakCameraOffset+" recoil="+displacedCat+"/"+displacedBoss+"\n");
+            Check(renderedSamples>0,"Impact verification must observe actual rendered camera frames");
             Check(shook,"Arena camera must visibly shake");
             Check(!actors.IsHitStopped&&catAnimator.speed>0&&bossAnimator.speed>0,"Animations must resume after hit stop");
             Check(displacedCat&&displacedBoss,"Both actors must recoil away from the attacker");

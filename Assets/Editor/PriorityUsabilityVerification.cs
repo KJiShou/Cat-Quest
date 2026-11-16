@@ -112,7 +112,7 @@ public static class PriorityUsabilityVerification
         calendar.SetMode(TaskDisplayMode.Calendar);calendar.SelectDate(owner.Service.LocalNow.Date);
         yield return .2;
         var originalParent=owner.editor.transform.parent;
-        int savedCount=owner.Service.Snapshot.tasks.Count;
+        int savedCount=owner.Service.TaskSnapshot.tasks.Count;
         calendar.AddTask();owner.editor.taskTitle.text="Calendar Back draft";owner.editor.description.text="Keep these calendar edits";
         Check(owner.IsEditing&&owner.editor.transform.parent==calendar.drawerBody,"Calendar editor is owned by its drawer");
         calendar.Back();yield return .2;
@@ -122,7 +122,7 @@ public static class PriorityUsabilityVerification
         Check(owner.IsEditing&&calendar.DrawerOpen&&owner.editor.transform.parent==calendar.drawerBody&&owner.editor.taskTitle.text=="Calendar Back draft"&&owner.editor.description.text=="Keep these calendar edits","Calendar Back Keep editing preserves form and parent");
         calendar.Back();yield return .2;Click(DialogButton(owner,"Confirm"));
         Check(!owner.IsEditing&&owner.editor.transform.parent==originalParent&&calendar.monthInteraction.interactable&&calendar.listMode.interactable&&calendar.calendarMode.interactable,"Calendar Back discard restores parent and navigation");
-        Check(owner.Service.Snapshot.tasks.Count==savedCount,"Calendar Back discard does not create a task");
+        Check(owner.Service.TaskSnapshot.tasks.Count==savedCount,"Calendar Back discard does not create a task");
 
         calendar.AddTask();owner.editor.taskTitle.text="Calendar Close draft";owner.editor.description.text="Preserve on Keep editing";
         calendar.CloseDrawer();yield return .2;
@@ -130,9 +130,10 @@ public static class PriorityUsabilityVerification
         Click(DialogButton(owner,"Cancel"));
         Check(owner.IsEditing&&owner.editor.transform.parent==calendar.drawerBody&&owner.editor.taskTitle.text=="Calendar Close draft"&&owner.editor.description.text=="Preserve on Keep editing","Calendar Close Keep editing preserves form and parent");
         calendar.CloseDrawer();yield return .2;Click(DialogButton(owner,"Confirm"));
-        Check(!owner.IsEditing&&!calendar.DrawerOpen&&owner.editor.transform.parent==originalParent&&owner.Service.Snapshot.tasks.Count==savedCount,"Calendar confirmed Close discards only the draft and restores parent");
+        Check(!owner.IsEditing&&!calendar.DrawerOpen&&owner.editor.transform.parent==originalParent&&owner.Service.TaskSnapshot.tasks.Count==savedCount,"Calendar confirmed Close discards only the draft and restores parent");
         calendar.AddTask();owner.editor.taskTitle.text="Calendar task after discard";owner.SaveDraft();
-        Check(!owner.IsEditing&&owner.editor.transform.parent==originalParent&&owner.Service.Snapshot.tasks.Any(t=>t.title=="Calendar task after discard"),"Calendar can create and save normally after discarded drafts");
+        foreach(var wait in TaskCalendarPlayVerification.WaitDraft(owner))yield return wait;
+        Check(!owner.IsEditing&&owner.editor.transform.parent==originalParent&&owner.Service.TaskSnapshot.tasks.Any(t=>t.title=="Calendar task after discard"),"Calendar can create and save normally after discarded drafts");
         calendar.CloseDrawer();
 
         Resolution(Sizes[1]);yield return .5;
@@ -154,13 +155,15 @@ public static class PriorityUsabilityVerification
         UnityEngine.SceneManagement.SceneManager.LoadScene("CharacterHome");yield return 2;
         Resolution(Sizes[0]);yield return .5;
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
-        var manager=GameDataManager.EnsureInstance();var service=manager.Tasks;
+        var manager=GameDataManager.EnsureInstance();var service=manager.Service;
+        foreach(var wait in TaskCalendarPlayVerification.Await(manager.Ready))yield return wait;
         Check(manager.SavePath.Contains("PriorityUsabilityVerification"),"Isolated save in use");
         UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
         capture=new GameObject("Priority usability screenshots").AddComponent<RewardScreenshotCapture>();
         var owner=nav.taskSystem;
         Check(nav.ShowPage(MainMenuPage.Tasks),"Tasks available");yield return .5;
-        Check(service.Upsert(new QuestTask{title="Keep this draft",scheduled=true,date=TaskService.DateKey(service.LocalNow)},null,out var taskId),"Seed editable task");
+        string taskId=null;PlayerData persisted=null;
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.UpsertAsync(new QuestTask{title="Keep this draft",scheduled=true,date=TaskService.DateKey(service.LocalNow)},null),id=>taskId=id))yield return wait;
         owner.SelectTab(TaskTab.Today);Edit(owner,taskId);
         Check(nav.ShowPage(MainMenuPage.Focus)&&!Dialog(owner).Root.activeSelf,"Unchanged draft can leave without prompt");
         nav.ShowPage(MainMenuPage.Tasks);owner.SelectTab(TaskTab.Today);Edit(owner,taskId);
@@ -183,13 +186,17 @@ public static class PriorityUsabilityVerification
             tutorial.OpenTopic(1);yield return .2;
             Check(nav.CurrentPage==MainMenuPage.Tasks&&Dialog(owner).Root.activeSelf&&string.IsNullOrEmpty(tutorial.CurrentTopic),"Focus Help respects dirty draft guard without stacking tutorial");
             Click(DialogButton(owner,"Cancel"));
-            using(var locked=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) {
+            using(TaskCalendarPlayVerification.FailSqliteWrites()) {
                 owner.SaveDraft();
-                Check(owner.IsEditing&&service.Snapshot.tasks.Single(t=>t.id==taskId).description!="Unsaved description survives navigation","Failed task save preserves committed state and draft");
+                foreach(var wait in TaskCalendarPlayVerification.WaitDraft(owner))yield return wait;
+                Check(owner.IsEditing&&service.TaskSnapshot.tasks.Single(t=>t.id==taskId).description!="Unsaved description survives navigation","Failed task save preserves committed state and draft");
                 Dialog(owner).Dismiss();
             }
             owner.SaveDraft();
-            Check(!owner.IsEditing&&new PlayerDataStore(manager.SavePath).Data.tasks.Single(t=>t.id==taskId).description.Contains("survives"),"Task retry persists draft and reloads");
+            foreach(var wait in TaskCalendarPlayVerification.WaitDraft(owner))yield return wait;
+            var reloadedTask=TaskCalendarPlayVerification.ReadPersistedAsync<QuestTask>(PlayerRecordKind.Tasks,taskId);
+            foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>reloadedTask.IsCompleted,"Task reload timed out"))yield return wait;
+            Check(!owner.IsEditing&&reloadedTask.GetAwaiter().GetResult().description.Contains("survives"),"Task retry persists draft and reloads");
             Edit(owner,taskId);owner.editor.taskTitle.text="Discard me";
             int navigations=0;Action<MainMenuPage> changed=_=>navigations++;nav.PageChanged+=changed;
             Check(!nav.ShowPage(MainMenuPage.Focus),"Discard navigation opens prompt");
@@ -197,7 +204,7 @@ public static class PriorityUsabilityVerification
             var confirm=DialogButton(owner,"Confirm");Click(confirm);confirm.onClick.Invoke();
             nav.PageChanged-=changed;
             Check(nav.CurrentPage==MainMenuPage.Focus&&navigations==1&&!owner.IsEditing,"Discard resumes destination exactly once");
-            Check(service.Snapshot.tasks.Single(t=>t.id==taskId).title=="Keep this draft","Discard never writes task changes");
+            Check(service.TaskSnapshot.tasks.Single(t=>t.id==taskId).title=="Keep this draft","Discard never writes task changes");
             nav.ShowPage(MainMenuPage.Tasks);owner.SelectTab(TaskTab.Today);Edit(owner,taskId);owner.editor.description.text="Tab draft";
             owner.SelectTab(TaskTab.History);yield return .2;Click(DialogButton(owner,"Confirm"));
             Check(owner.CurrentTab==TaskTab.History&&!owner.IsEditing,"Confirmed discard resumes requested tab");
@@ -228,6 +235,7 @@ public static class PriorityUsabilityVerification
             boss.Action();yield return .2;
             foreach(var wait in ConfirmFeedback("boss-confirm-feedback",boss.cancel,boss.confirm))yield return wait;
             boss.Confirm();
+            foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>!(bool)typeof(BossPageUI).GetField("commandPending",Hidden).GetValue(boss),"Boss entry timed out"))yield return wait;
             Check(boss.IsBattling,"Boss entry ready for leave guard");
             int tickets=service.Tickets;
             Check(!nav.ShowPage(MainMenuPage.Tasks)&&boss.confirmation.activeSelf,"Boss sidebar opens Stop confirmation");
@@ -239,10 +247,13 @@ public static class PriorityUsabilityVerification
             Click(boss.cancel);Check(nav.CurrentPage==MainMenuPage.Boss&&boss.IsBattling&&service.Tickets==tickets,"Keep fighting does not spend another ticket");
             Check(!nav.ShowPage(MainMenuPage.Tasks),"Boss reopens leave confirmation");
             yield return .2;
-            using(var locked=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) {
-                Click(boss.confirm);Check(nav.CurrentPage==MainMenuPage.Boss&&service.HasActiveBattle,"Failed Boss stop save stays on page");
+            using(TaskCalendarPlayVerification.FailSqliteWrites()) {
+                Click(boss.confirm);
+                foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>!(bool)typeof(BossPageUI).GetField("commandPending",Hidden).GetValue(boss),"Boss stop timed out"))yield return wait;
+                Check(nav.CurrentPage==MainMenuPage.Boss&&service.HasActiveBattle,"Failed Boss stop save stays on page");
             }
             boss.Action();
+            foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>!(bool)typeof(BossPageUI).GetField("commandPending",Hidden).GetValue(boss),"Boss retry timed out"))yield return wait;
             Check(nav.CurrentPage==MainMenuPage.Tasks&&!service.HasActiveBattle&&service.Tickets==tickets,"Retry commits stop then navigates without refund/extra ticket");
             boss.Confirm();Check(nav.CurrentPage==MainMenuPage.Tasks&&service.Tickets==tickets,"Stale Boss confirmation cannot repeat");
 
@@ -250,8 +261,9 @@ public static class PriorityUsabilityVerification
             var panel=nav.pages[(int)MainMenuPage.Focus].GetComponent<FocusPanelUI>();var focus=panel.Controller;
             foreach(var size in Sizes) {
                 Resolution(size);toggle.isOn=false;yield return .5;
-                using(var locked=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) {
+                using(TaskCalendarPlayVerification.FailSqliteWrites()) {
                     Click(panel.start);yield return .2;
+                    foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>!focus.OperationPending,"Focus start timed out"))yield return wait;
                     Check(focus.Phase!=FocusPhase.Focusing&&!string.IsNullOrEmpty(focus.ErrorMessage),"Failed Focus start reports error");
                     Check(panel.allowanceNotice.activeSelf&&panel.allowance.text.Contains("Start failed"),"Start error is visible at "+size);
                     panel.allowance.ForceMeshUpdate();
@@ -264,10 +276,14 @@ public static class PriorityUsabilityVerification
             nav.ShowPage(MainMenuPage.Tasks);nav.ShowPage(MainMenuPage.Focus);yield return .3;
             Check(panel.allowanceNotice.activeSelf,"Focus error survives page close/reopen");
             var options=focus.Options.Copy();options.mode=FocusTimerMode.Countdown;options.focusMinutes=25;focus.Configure(options);
-            Click(panel.start);Check(focus.Phase==FocusPhase.Focusing&&string.IsNullOrEmpty(focus.ErrorMessage),"Successful Focus start clears error");
+            Click(panel.start);
+            foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>!focus.OperationPending,"Focus start timed out"))yield return wait;
+            Check(focus.Phase==FocusPhase.Focusing&&string.IsNullOrEmpty(focus.ErrorMessage),"Successful Focus start clears error");
             for(int second=0;second<61;second++)focus.Advance(1);
-            using(var locked=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) {
-                Check(!focus.EndEarly()&&focus.Phase==FocusPhase.Saving,"End Early failure preserves pending settlement");
+            using(TaskCalendarPlayVerification.FailSqliteWrites()) {
+                var failedEnd=focus.EndEarlyAsync();
+                foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>failedEnd.IsCompleted,"End Early timed out"))yield return wait;
+                Check(!failedEnd.GetAwaiter().GetResult()&&focus.Phase==FocusPhase.Saving,"End Early failure preserves pending settlement");
                 yield return 4.3;
                 Check(panel.allowanceNotice.activeSelf&&panel.allowance.text.Contains("Retry Save"),"Save error remains actionable past four seconds");
                 foreach(var size in Sizes.Take(2)) {
@@ -283,11 +299,19 @@ public static class PriorityUsabilityVerification
                 dialog.transform.Find("Dialog/Stay").GetComponent<Button>().onClick.Invoke();
             }
             yield return .2;
-            Click(panel.retry);Check(focus.Phase==FocusPhase.Finished&&string.IsNullOrEmpty(focus.ErrorMessage),"Focus retry commits earned End Early result");
-            var receipt=focus.LastResult;var committed=JsonUtility.ToJson(service.Snapshot);
+            Click(panel.retry);
+            foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>!focus.OperationPending,"Focus retry timed out"))yield return wait;
+            Check(focus.Phase==FocusPhase.Finished&&string.IsNullOrEmpty(focus.ErrorMessage),"Focus retry commits earned End Early result");
+            foreach(var wait in TaskCalendarPlayVerification.Await(service.ReadVerificationSnapshotAsync(),value=>persisted=value))yield return wait;
+            var receipt=focus.LastResult;var committed=JsonUtility.ToJson(persisted);
             Check(receipt!=null&&receipt.eligibleMinutes>=1&&receipt.status==FocusSessionStatus.EndedEarly,"End Early retains earned minutes");
-            panel.retry.onClick.Invoke();Check(JsonUtility.ToJson(service.Snapshot)==committed,"Repeated Focus retry preserves all rewards, sessions and receipt exactly");
-            Check(new PlayerDataStore(manager.SavePath).Data.focusSessions.Any(s=>s.id==receipt.id),"Focus result survives reload");
+            panel.retry.onClick.Invoke();
+            foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>!focus.OperationPending,"Repeated Focus retry timed out"))yield return wait;
+            foreach(var wait in TaskCalendarPlayVerification.Await(service.ReadVerificationSnapshotAsync(),value=>persisted=value))yield return wait;
+            Check(JsonUtility.ToJson(persisted)==committed,"Repeated Focus retry preserves all rewards, sessions and receipt exactly");
+            var reloadedFocus=TaskCalendarPlayVerification.ReadPersistedAsync<FocusSession>(PlayerRecordKind.FocusSessions,receipt.id);
+            foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>reloadedFocus.IsCompleted,"Focus reload timed out"))yield return wait;
+            Check(reloadedFocus.GetAwaiter().GetResult().id==receipt.id,"Focus result survives reload");
             var missing=nav.GetComponentInParent<Canvas>().rootCanvas.GetComponentsInChildren<Transform>(true).Sum(t=>GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject));
             Check(missing==0,"No missing scripts in rendered application UI");
         } finally { InputSystem.RemoveDevice(keyboard); }

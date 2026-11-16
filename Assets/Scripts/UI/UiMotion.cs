@@ -5,7 +5,7 @@ public static class UiMotion
 {
     static bool companionReduced;
     public static bool Reduced => GameDataManager.Instance
-        ? GameDataManager.Instance.Tasks != null && GameDataManager.Instance.Tasks.ReduceMotion
+        ? GameDataManager.Instance.Service != null && GameDataManager.Instance.Service.ReduceMotion
         : companionReduced;
     public static void ApplyCompanion(bool reduced) => companionReduced = reduced;
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

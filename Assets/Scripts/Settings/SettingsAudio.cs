@@ -21,7 +21,7 @@ public sealed class SettingsAudio : MonoBehaviour
     public AudioClip focusComplete, restComplete;
     AudioClip rewardCollect;
     AudioListener fallbackListener;
-    TaskService service;
+    SqlitePlayerService service;
     FocusPhase focusPhase;
     bool battling;
     AudioSource dialogueSource;
@@ -46,7 +46,7 @@ public sealed class SettingsAudio : MonoBehaviour
     void OnEnable()
     {
         if (Instance != this) return;
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         service.Changed += ApplySaved;
         service.LevelUp += OnLevelUp;
         SceneManager.sceneLoaded += OnSceneLoaded;

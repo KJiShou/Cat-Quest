@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -104,6 +105,47 @@ public static class TaskCalendarPlayVerification
         else RestoreSettings();
     }
     static void Check(bool condition,string message){if(!condition)throw new Exception(message);}
+    internal static IEnumerable<double> Await<T>(Task<OperationResult<T>> task, Action<T> receive = null)
+    {
+        foreach(var delay in WaitUntil(()=>task.IsCompleted,"SQLite operation timed out")) yield return delay;
+        var result=task.GetAwaiter().GetResult();
+        Check(result.Succeeded,result.Message);receive?.Invoke(result.Value);
+    }
+    internal static IEnumerable<double> WaitUntil(Func<bool> ready,string message)
+    {
+        double deadline=EditorApplication.timeSinceStartup+10;
+        while(!ready()) { Check(EditorApplication.timeSinceStartup<deadline,message);yield return .05; }
+    }
+    internal static IEnumerable<double> WaitDraft(TaskSystemUI owner)
+        =>WaitUntil(()=>!(bool)typeof(TaskSystemUI).GetField("savingDraft",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(owner),"Draft save timed out");
+    internal static IDisposable FailSqliteWrites()
+    {
+        var manager=GameDataManager.EnsureInstance();
+        string isolated=Environment.GetEnvironmentVariable(StoreVariable);
+        Check(!string.IsNullOrEmpty(isolated)&&Path.GetFullPath(manager.SavePath)==Path.GetFullPath(Path.ChangeExtension(isolated,".sqlite3")),"Fault injection requires the configured isolated save");
+        var repository=(SqlitePlayerRepository)typeof(GameDataManager).GetField("repository",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(manager);
+        return new FaultScope(repository);
+    }
+    internal static Task<T> ReadPersistedAsync<T>(PlayerRecordKind kind,string id) where T:class
+    {
+        string path=GameDataManager.EnsureInstance().SavePath;
+        string isolated=Environment.GetEnvironmentVariable(StoreVariable);
+        Check(!string.IsNullOrEmpty(isolated)&&Path.GetFullPath(path)==Path.GetFullPath(Path.ChangeExtension(isolated,".sqlite3")),"Reload check requires the configured isolated database");
+        Check(kind==PlayerRecordKind.Tasks||kind==PlayerRecordKind.FocusSessions,"Unsupported reload record");
+        return Task.Run(()=>{
+            using(var connection=new SQLite.SQLiteConnection(path,SQLite.SQLiteOpenFlags.ReadOnly|SQLite.SQLiteOpenFlags.FullMutex)) {
+                string payload=connection.ExecuteScalar<string>("SELECT payload FROM cq_"+kind+" WHERE id=?",id);
+                if(payload==null)throw new Exception("Expected persisted record missing");
+                return JsonUtility.FromJson<T>(payload);
+            }
+        });
+    }
+    sealed class FaultScope : IDisposable
+    {
+        readonly SqlitePlayerRepository repository;readonly Action<string> previous;
+        public FaultScope(SqlitePlayerRepository repository) { this.repository=repository;previous=repository.FaultPoint;repository.FaultPoint=stage=>{previous?.Invoke(stage);if(stage=="before-commit")throw new IOException("Injected isolated SQLite write failure");}; }
+        public void Dispose(){repository.FaultPoint=previous;}
+    }
     static Rect ScreenBounds(RectTransform rect)
     {
         var canvas=rect.GetComponentInParent<Canvas>().rootCanvas;
@@ -152,13 +194,16 @@ public static class TaskCalendarPlayVerification
         Check(Path.GetFullPath(GameDataManager.EnsureInstance().SavePath).StartsWith(Path.GetFullPath(Folder)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase),"Live save must never be used");
         nav.ShowPage(MainMenuPage.Tasks); yield return 1;
         var owner=nav.taskSystem; var calendar=owner.calendar;
+        foreach(var wait in Await(GameDataManager.EnsureInstance().Ready))yield return wait;
         Check(calendar, "Calendar binding missing");
         var now=owner.Service.LocalNow.Date;
         string[] titles={"Prepare project presentation","Review methodology chapter","Finish calendar usability testing","Read research paper","Plan next milestone"};
-        foreach(var title in titles) Check(owner.Service.Upsert(new QuestTask {title=title,scheduled=true,date=TaskService.DateKey(now)},null,out _),owner.Service.LastError);
-        Check(owner.Service.Upsert(new QuestTask{title="Daily reading",daily=true,scheduled=true,date=TaskService.DateKey(now)},null,out var daily),owner.Service.LastError);
-        Check(owner.Service.Upsert(new QuestTask{title="Unscheduled idea"},null,out _),owner.Service.LastError);
-        Check(owner.Service.Upsert(new QuestTask{title="Already completed",scheduled=true,date=TaskService.DateKey(now)},null,out var completed)&&owner.Service.Complete(completed,true),owner.Service.LastError);
+        foreach(var title in titles) foreach(var wait in Await(owner.Service.UpsertAsync(new QuestTask {title=title,scheduled=true,date=TaskService.DateKey(now)},null)))yield return wait;
+        string daily=null,completed=null;
+        foreach(var wait in Await(owner.Service.UpsertAsync(new QuestTask{title="Daily reading",daily=true,scheduled=true,date=TaskService.DateKey(now)},null),id=>daily=id))yield return wait;
+        foreach(var wait in Await(owner.Service.UpsertAsync(new QuestTask{title="Unscheduled idea"},null)))yield return wait;
+        foreach(var wait in Await(owner.Service.UpsertAsync(new QuestTask{title="Already completed",scheduled=true,date=TaskService.DateKey(now)},null),id=>completed=id))yield return wait;
+        foreach(var wait in Await(owner.Service.CompleteAsync(completed,true)))yield return wait;
         var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
         var toggle=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
         capture=new GameObject("Calendar capture").AddComponent<RewardScreenshotCapture>();
@@ -259,32 +304,40 @@ public static class TaskCalendarPlayVerification
         calendar.jumpPicker.dismiss.onClick.Invoke();yield return .2;
         context="failed-save retry";
         calendar.SelectDate(now);calendar.AddTask();yield return .2;owner.editor.taskTitle.text="Retry calendar save";
-        using(var locked=File.Open(GameDataManager.EnsureInstance().SavePath,FileMode.Open,FileAccess.ReadWrite,FileShare.None)){
-            owner.SaveDraft();Check(owner.IsEditing&&owner.HasTaskModal,"Failed write lost draft/error feedback");
-            Check(!owner.Service.Snapshot.tasks.Any(t=>t.title=="Retry calendar save"),"Failed write changed committed memory");
+        using(FailSqliteWrites()){
+            owner.SaveDraft();foreach(var wait in WaitDraft(owner))yield return wait;
+            Check(owner.IsEditing&&owner.HasTaskModal,"Failed write lost draft/error feedback");
+            Check(!owner.Service.TaskSnapshot.tasks.Any(t=>t.title=="Retry calendar save"),"Failed write changed committed memory");
         }
         ((TaskConfirmDialog)typeof(TaskSystemUI).GetField("confirmation",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(owner)).Dismiss();
-        owner.SaveDraft();yield return .3;
-        Check(!owner.IsEditing&&owner.Service.Snapshot.tasks.Count(t=>t.title=="Retry calendar save")==1,"Retry did not commit once");calendar.CloseDrawer();
+        owner.SaveDraft();foreach(var wait in WaitDraft(owner))yield return wait;yield return .3;
+        Check(!owner.IsEditing&&owner.Service.TaskSnapshot.tasks.Count(t=>t.title=="Retry calendar save")==1,"Retry did not commit once");calendar.CloseDrawer();
         context="CRUD and input";
         calendar.SelectDate(now);calendar.AddTask();yield return .2;
-        owner.editor.taskTitle.text="Created from calendar";owner.SaveDraft();yield return .5;
-        Check(!owner.IsEditing&&owner.Service.Snapshot.tasks.Count(t=>t.title=="Created from calendar")==1,"Draft did not save once");
-        var id=owner.Service.Snapshot.tasks.Single(t=>t.title=="Created from calendar").id;
-        var entry=owner.Service.QueryCalendar(now,now).days[now].items.Single(i=>i.view.task.id==id);
+        owner.editor.taskTitle.text="Created from calendar";owner.SaveDraft();foreach(var wait in WaitDraft(owner))yield return wait;yield return .5;
+        Check(!owner.IsEditing&&owner.Service.TaskSnapshot.tasks.Count(t=>t.title=="Created from calendar")==1,"Draft did not save once");
+        var id=owner.Service.TaskSnapshot.tasks.Single(t=>t.title=="Created from calendar").id;
+        TaskCalendarResult queried=null;PlayerData persisted=null;
+        foreach(var wait in Await(owner.Service.QueryCalendarAsync(now,now),value=>queried=value))yield return wait;
+        var entry=queried.days[now].items.Single(i=>i.view.task.id==id);
         calendar.OpenItem(entry);yield return .2;
         calendar.detailRoot.Find("Button/CompleteQuest").GetComponentInChildren<Button>().onClick.Invoke();yield return .4;
-        Check(owner.Service.Snapshot.history.Count(h=>h.taskId==id&&!h.revoked)==1,"Completion receipt missing/duplicated");
-        calendar.OpenItem(owner.Service.QueryCalendar(now,now).days[now].items.Single(i=>i.view.task.id==id));yield return .2;
+        foreach(var wait in Await(owner.Service.ReadVerificationSnapshotAsync(),value=>persisted=value))yield return wait;
+        Check(persisted.history.Count(h=>h.taskId==id&&!h.revoked)==1,"Completion receipt missing/duplicated");
+        foreach(var wait in Await(owner.Service.QueryCalendarAsync(now,now),value=>queried=value))yield return wait;
+        calendar.OpenItem(queried.days[now].items.Single(i=>i.view.task.id==id));yield return .2;
         Check(calendar.undo.gameObject.activeInHierarchy,"Undo missing");calendar.undo.onClick.Invoke();yield return .3;
-        Check(owner.Service.QueryCalendar(now,now).days[now].items.Single(i=>i.view.task.id==id).kind==CalendarTaskKind.Task,"Undo did not restore task");
+        foreach(var wait in Await(owner.Service.QueryCalendarAsync(now,now),value=>queried=value))yield return wait;
+        Check(queried.days[now].items.Single(i=>i.view.task.id==id).kind==CalendarTaskKind.Task,"Undo did not restore task");
         calendar.SelectDate(now.AddDays(1));yield return .2;
-        var preview=owner.Service.QueryCalendar(now.AddDays(1),now.AddDays(1)).days[now.AddDays(1)].items.Single(i=>i.view.task.id==daily);
+        foreach(var wait in Await(owner.Service.QueryCalendarAsync(now.AddDays(1),now.AddDays(1)),value=>queried=value))yield return wait;
+        var preview=queried.days[now.AddDays(1)].items.Single(i=>i.view.task.id==daily);
         calendar.OpenItem(preview);yield return .2;
         Check(!calendar.detailRoot.Find("Button/CompleteQuest").GetComponentInChildren<Button>().interactable,"Future Daily can be completed");
         calendar.CloseDrawer();
         owner.CompleteForDate(daily,TaskService.DateKey(now.AddDays(-1)));
-        Check(owner.HasTaskModal&&!owner.Service.Snapshot.history.Any(h=>h.taskId==daily&&!h.revoked),"Stale daily command settled a new day");
+        foreach(var wait in Await(owner.Service.ReadVerificationSnapshotAsync(),value=>persisted=value))yield return wait;
+        Check(owner.HasTaskModal&&!persisted.history.Any(h=>h.taskId==daily&&!h.revoked),"Stale daily command settled a new day");
         ((TaskConfirmDialog)typeof(TaskSystemUI).GetField("confirmation",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(owner)).Dismiss();
         calendar.search.text="no such task";yield return .2;
         Check(calendar.noDateCount.text=="0" && calendar.noDateCount.gameObject.activeInHierarchy, "Filtered zero badge missing");

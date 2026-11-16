@@ -17,7 +17,7 @@ public static class LootShopPlayVerification
     static System.Collections.IEnumerator run;
     static double next;
     static RewardScreenshotCapture capture;
-    static FileStream saveLock;
+    static IDisposable saveLock;
     static string FolderNow => SessionState.GetString(Flag + ".folder", Folder);
     static EditorWindow View => EditorWindow.GetWindow(typeof(Editor).Assembly.GetType("UnityEditor.GameView"));
     static PropertyInfo SizeProperty => View.GetType().GetProperty("selectedSizeIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -84,9 +84,10 @@ public static class LootShopPlayVerification
     }
     static System.Collections.IEnumerator Run(){
         var manager=GameDataManager.Instance;Check(manager.SavePath.Contains("LootShopPlayVerification"),"Isolated save");
+        foreach(var wait in TaskCalendarPlayVerification.Await(manager.Ready))yield return wait;
         UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
-        manager.PlayerData.experience=2025;manager.PlayerData.tickets=50;manager.PlayerData.fishCoins=1000;manager.PlayerData.equipmentUnlocked=true;manager.SaveData();
-        var service=manager.Tasks;var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();nav.ShowPage(MainMenuPage.CatHome);
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=2025;data.tickets=50;data.fishCoins=1000;data.equipmentUnlocked=true;})))yield return wait;
+        var service=manager.Service;var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();nav.ShowPage(MainMenuPage.CatHome);
         var page=nav.pages[4].GetComponent<EquipmentPageUI>();var shop=page.GetComponentInChildren<LootShopUI>(true);
         Check(shop&&shop.art.icons.Length==18&&shop.art.blueOpening.Length>40&&shop.art.goldOpening.Length>40,"Authored shop, icons and animation frames");
         foreach(var frames in new[]{shop.art.blueOpening,shop.art.purpleOpening,shop.art.goldOpening})
@@ -109,8 +110,9 @@ public static class LootShopPlayVerification
         Check(shop.catalog.All(c=>c.ownedIcon&&!c.ownedIcon.gameObject.activeSelf&&!c.ownedIcon.raycastTarget),"Unowned catalog has serialized non-blocking markers hidden");
         Check(!shop.informationText.gameObject.activeSelf&&string.IsNullOrEmpty(shop.informationText.text),"Removed independent draws footer");
         foreach(int tier in new[]{1,2,3}){
-            object[] args={1,"owned-marker-"+tier,null,(Func<int,int>)(max=>max==100?(tier==3?0:1):max==99?(tier==2?0:10):0)};
-            Check((bool)typeof(TaskService).GetMethod("DrawLoot",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(service,args),"Acquire ownership fixture");
+            object[] args={1,"owned-marker-"+tier,(Func<int,int>)(max=>max==100?(tier==3?0:1):max==99?(tier==2?0:10):0)};
+            var draw=(System.Threading.Tasks.Task<OperationResult<LootReceipt>>)typeof(SqlitePlayerService).GetMethod("DrawLootAsync",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(service,args);
+            foreach(var wait in TaskCalendarPlayVerification.Await(draw))yield return wait;
         }
         for(int i=0;i<shop.catalog.Length;i++)Check(shop.catalog[i].ownedIcon.gameObject.activeSelf==service.OwnsEquipment(LootRules.Catalog[i].Id),"Ownership refreshes on committed service change");
         yield return 4.0; // Let the fixture's currency feedback settle before visual comparison.
@@ -145,9 +147,9 @@ public static class LootShopPlayVerification
         for(int i=0;i<5;i++){feedback.OnPointerUp(pointer);feedback.OnPointerDown(pointer);}feedback.OnPointerExit(pointer);feedback.OnDeselect(pointer);yield return .7;
         Check(Vector2.Distance(feedback.DrawScale,Vector2.one)<.01f&&rect.rect.size==size,"Stable hitbox and reset after rapid input");
         feedback.SendMessage("OnApplicationFocus",false);Check(feedback.DrawScale==Vector2.one,"Focus reset");
-        shop.Prepare(10);saveLock=new FileStream(manager.SavePath,FileMode.Open,FileAccess.ReadWrite,FileShare.None);shop.Purchase();
+        shop.Prepare(10);saveLock=TaskCalendarPlayVerification.FailSqliteWrites();shop.Purchase();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;
         Check(shop.confirmation.activeSelf&&service.Tickets==tickets&&!shop.reveal.activeSelf,"Save failure keeps confirmation and does not reveal");saveLock.Dispose();saveLock=null;
-        shop.Purchase();shop.Purchase();Check(service.Tickets==tickets-10&&service.LastLootReceipt.count==10,"Ten pull exactly once");
+        shop.Purchase();shop.Purchase();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;Check(service.Tickets==tickets-10&&service.LastLootReceipt.count==10,"Ten pull exactly once");
         float revealStart=Time.unscaledTime;bool flewDuringOpening=false;
         int previous=shop.RevealedCount;bool sawFlight=false;
         for(int frame=0;frame<90&&shop.Revealing;frame++){
@@ -165,15 +167,16 @@ public static class LootShopPlayVerification
         var resultItem=shop.results.GetChild(0).GetComponent<LootShopItemUI>();resultItem.OnPointerEnter(new PointerEventData(EventSystem.current){position=RectTransformUtility.WorldToScreenPoint(null,resultItem.transform.position)});yield return .2;
         Check(shop.hoverDetail.gameObject.activeSelf,"Result equipment hover");Capture("result-hover-1280");yield return .2;resultItem.OnPointerExit(new PointerEventData(EventSystem.current));
         shop.done.onClick.Invoke();Check(!shop.GetComponentsInChildren<UnityEngine.UI.Button>(true).Any(b=>b.name=="LastResult"||b.GetComponentInChildren<TMPro.TMP_Text>(true)?.text=="Last result"),"Last Result removed");
-        shop.Prepare(1);shop.Purchase();Check(service.Tickets==tickets-11,"Single cost");for(int wait=0;wait<250&&!shop.flyingIcon.gameObject.activeSelf&&shop.Revealing;wait++)yield return .02;Check(shop.flyingIcon.gameObject.activeSelf,"Skip tested during flight");shop.skip.onClick.Invoke();Check(!shop.Revealing&&!shop.flyingIcon.gameObject.activeSelf&&shop.RevealedCount==1&&shop.results.gameObject.activeSelf,"Skip keeps committed reward and clears flight");shop.done.onClick.Invoke();
-        shop.Prepare(1);shop.Purchase();shop.SendMessage("OnApplicationFocus",false);Check(!shop.Revealing&&shop.results.gameObject.activeSelf,"Focus loss settles presentation");shop.done.onClick.Invoke();
-        shop.Prepare(1);shop.Purchase();shop.gameObject.SetActive(false);yield return .2;shop.gameObject.SetActive(true);yield return .2;
+        shop.Prepare(1);shop.Purchase();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;Check(service.Tickets==tickets-11,"Single cost");for(int wait=0;wait<250&&!shop.flyingIcon.gameObject.activeSelf&&shop.Revealing;wait++)yield return .02;Check(shop.flyingIcon.gameObject.activeSelf,"Skip tested during flight");shop.skip.onClick.Invoke();Check(!shop.Revealing&&!shop.flyingIcon.gameObject.activeSelf&&shop.RevealedCount==1&&shop.results.gameObject.activeSelf,"Skip keeps committed reward and clears flight");shop.done.onClick.Invoke();
+        shop.Prepare(1);shop.Purchase();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;shop.SendMessage("OnApplicationFocus",false);Check(!shop.Revealing&&shop.results.gameObject.activeSelf,"Focus loss settles presentation");shop.done.onClick.Invoke();
+        shop.Prepare(1);shop.Purchase();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;shop.gameObject.SetActive(false);yield return .2;shop.gameObject.SetActive(true);yield return .2;
         Check(!shop.Revealing&&!shop.reveal.activeSelf&&service.Tickets==tickets-13,"Disable/reopen no replay or repayment");
         Resolution(1920,1080);yield return .3;
         foreach(int tier in new[]{3,2,1}){
-            object[] args={1,"visual-tier-"+tier,null,(Func<int,int>)(max=>max==100?(tier==3?0:1):max==99?(tier==2?0:10):0)};
-            Check((bool)typeof(TaskService).GetMethod("DrawLoot",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(service,args),"Committed rarity fixture");
-            typeof(LootShopUI).GetMethod("Show",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(shop,new[]{args[2],(object)true});
+            object[] args={1,"visual-tier-"+tier,(Func<int,int>)(max=>max==100?(tier==3?0:1):max==99?(tier==2?0:10):0)};
+            LootReceipt receipt=null;var draw=(System.Threading.Tasks.Task<OperationResult<LootReceipt>>)typeof(SqlitePlayerService).GetMethod("DrawLootAsync",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(service,args);
+            foreach(var wait in TaskCalendarPlayVerification.Await(draw,value=>receipt=value))yield return wait;
+            typeof(LootShopUI).GetMethod("Show",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(shop,new object[]{receipt,true});
             for(int frame=0;frame<12;frame++){
                 if(shop.Revealing){var sprite=shop.chest.sprite;Check(Vector2.Distance(shop.chest.rectTransform.sizeDelta,sprite.rect.size*shop.chestFrameScale)<.01f,"Stable original-canvas frame scale");}
                 Capture("tier-"+tier+"-"+frame.ToString("00"));yield return .12;
@@ -182,13 +185,14 @@ public static class LootShopPlayVerification
             Resolution(1280,720);yield return .3;Capture("tier-"+tier+"-result-1280");yield return .2;
             Resolution(1920,1080);yield return .3;shop.done.onClick.Invoke();
         }
-        var settings=PlayerDataStore.Copy(service.Snapshot.settings);settings.reduceMotion=true;Check(service.SaveSettings(settings),"Reduce Motion setting");
-        shop.Prepare(1);shop.Purchase();Check(!shop.Revealing&&shop.results.gameObject.activeSelf,"Reduced motion keeps reward without animation");shop.done.onClick.Invoke();
-        settings.reduceMotion=false;Check(service.SaveSettings(settings),"Restore motion");
+        var settings=service.Settings;settings.reduceMotion=true;foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(settings)))yield return wait;
+        shop.Prepare(1);shop.Purchase();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;Check(!shop.Revealing&&shop.results.gameObject.activeSelf,"Reduced motion keeps reward without animation");shop.done.onClick.Invoke();
+        settings.reduceMotion=false;foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(settings)))yield return wait;
         Resolution(1280,720);yield return .3;
-        manager.PlayerData.tickets=0;manager.SaveData();shop.gameObject.SetActive(false);shop.gameObject.SetActive(true);Check(!shop.single.interactable&&!shop.ten.interactable&&shop.status.text.Length>0,"Empty balance disabled state");Capture("no-tickets-1280");yield return .2;
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>data.tickets=0)))yield return wait;
+        shop.gameObject.SetActive(false);shop.gameObject.SetActive(true);Check(!shop.single.interactable&&!shop.ten.interactable&&shop.status.text.Length>0,"Empty balance disabled state");Capture("no-tickets-1280");yield return .2;
         shop.Close();
-        manager.PlayerData.equipment=EquipmentRules.Catalog.Concat(LootRules.Catalog).Select(d=>new EquipmentItem{id=d.Id}).ToList();manager.SaveData();page.Refresh();yield return .5;
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>data.equipment=EquipmentRules.Catalog.Concat(LootRules.Catalog).Select(d=>new EquipmentItem{id=d.Id}).ToList())))yield return wait;page.Refresh();yield return .5;
         shop.gameObject.SetActive(true);shop.OpenInformation();yield return .3;
         Check(shop.catalog.All(c=>c.ownedIcon.gameObject.activeSelf),"Reopen reflects all owned equipment");Capture("all-owned-1280");yield return .2;shop.CloseInformation();shop.Close();
         foreach(int width in new[]{1920,1280,1024,2560}){
@@ -201,7 +205,7 @@ public static class LootShopPlayVerification
             if(toggle)toggle.isOn=false;
         }
         Resolution(1280,720);yield return .3;
-        var target=LootRules.Catalog.First(d=>d.IconName=="Armor_GauntletsGold");Check(service.Equip(target.Id,EquipmentSlot.Weapon),"Gauntlets weapon equip");page.OpenItem(target.Id);yield return .4;Capture("gauntlets-detail-1280");yield return .2;
+        var target=LootRules.Catalog.First(d=>d.IconName=="Armor_GauntletsGold");foreach(var wait in TaskCalendarPlayVerification.Await(service.EquipAsync(target.Id,EquipmentSlot.Weapon)))yield return wait;page.OpenItem(target.Id);yield return .4;Capture("gauntlets-detail-1280");yield return .2;
         var detail=(EquipmentItemDetailUI)typeof(EquipmentPageUI).GetField("itemDetail",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(page);
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);yield return .3;

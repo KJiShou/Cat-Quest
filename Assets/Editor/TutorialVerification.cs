@@ -39,7 +39,7 @@ public static class TutorialVerification
         EditorApplication.update+=Poll;
         EditorApplication.playModeStateChanged+=state=>{
             if(!SessionState.GetBool(Flag,false))return;
-            if(state==PlayModeStateChange.EnteredPlayMode){run=Flow();next=EditorApplication.timeSinceStartup+3;}
+            if(state==PlayModeStateChange.EnteredPlayMode){run=SqliteFlow(Flow());next=EditorApplication.timeSinceStartup+3;}
             if(state==PlayModeStateChange.EnteredEditMode)Restore();
         };
     }
@@ -130,18 +130,18 @@ public static class TutorialVerification
     static IEnumerator BackAndReturn(TutorialController tutorial,string previous,string current,bool targetAdvance=false)
     {
         FinishSpeech(tutorial);
-        var service=GameDataManager.Instance.Tasks;var before=service.Snapshot;
+        var service=GameDataManager.Instance.Service;var before=fixtureSnapshot;
         Check(tutorial.back && tutorial.back.gameObject.activeInHierarchy && tutorial.back.GetComponent<JuicyButton>(),"Back binding/shared feedback missing");
         Click((RectTransform)tutorial.back.transform);yield return .4;
         Check(tutorial.CurrentTopic==previous,"Back returned to the wrong step: "+tutorial.CurrentTopic);
         FinishSpeech(tutorial);
-        var reloaded=new PlayerDataStore(GameDataManager.Instance.SavePath).Data;
+        var reload=SqlitePlayVerificationSupport.ReloadAsync();foreach(var delay in SqlitePlayVerificationSupport.Wait(reload))yield return delay;var reloaded=reload.GetAwaiter().GetResult();
         Check(JsonUtility.ToJson(reloaded.tutorial)==JsonUtility.ToJson(service.Tutorial),"Back progress did not persist");
         if(targetAdvance)Click(tutorial.CurrentTarget);else tutorial.Continue();yield return .4;FinishSpeech(tutorial);
         Check(tutorial.CurrentTopic==current,"Forward navigation failed after Back");
-        Check(service.Snapshot.experience==before.experience && service.Snapshot.fishCoins==before.fishCoins
-            && service.Snapshot.tickets==before.tickets && service.Snapshot.tasks.Count==before.tasks.Count
-            && service.Snapshot.battles.Count==before.battles.Count,"Back changed committed work or rewards");
+        Check(fixtureSnapshot.experience==before.experience && fixtureSnapshot.fishCoins==before.fishCoins
+            && fixtureSnapshot.tickets==before.tickets && fixtureSnapshot.tasks.Count==before.tasks.Count
+            && fixtureSnapshot.battles.Count==before.battles.Count,"Back changed committed work or rewards");
         VerifyDialogueLayout(tutorial);
     }
     static IEnumerator BackFeedback(TutorialController tutorial)
@@ -181,7 +181,7 @@ public static class TutorialVerification
         Submit(button);yield return .3;FinishSpeech(tutorial);
         Check(tutorial.CurrentTopic=="equipment-step-1","Keyboard Back did not return one step");
         tutorial.GoBack();tutorial.GoBack();yield return .3;FinishSpeech(tutorial);
-        Check(tutorial.CurrentTopic=="equipment-step-0" && !button.gameObject.activeSelf && GameDataManager.Instance.Tasks.Tutorial.equipmentStep==0,"Rapid Back crossed the first-step boundary");
+        Check(tutorial.CurrentTopic=="equipment-step-0" && !button.gameObject.activeSelf && GameDataManager.Instance.Service.Tutorial.equipmentStep==0,"Rapid Back crossed the first-step boundary");
         tutorial.Continue();yield return .2;FinishSpeech(tutorial);tutorial.Continue();yield return .2;FinishSpeech(tutorial);
         Check(tutorial.CurrentTopic=="equipment-step-2","Forward navigation failed after repeated Back");
     }
@@ -215,6 +215,16 @@ public static class TutorialVerification
         Visible(tutorial.card);
         Check(!tutorial.dialogue.body.isTextOverflowing, "Tutorial talking text clipped: " + tutorial.CurrentTopic);
     }
+    static PlayerData fixtureSnapshot;
+    static IEnumerator SqliteFlow(IEnumerator source)
+    {
+        using var cleanup=source as IDisposable;
+        foreach(var delay in TaskCalendarPlayVerification.Await(GameDataManager.EnsureInstance().Ready))yield return delay;
+        while(true) {
+            var read=GameDataManager.Instance.Service.ReadVerificationSnapshotAsync();foreach(var delay in TaskCalendarPlayVerification.Await(read))yield return delay;fixtureSnapshot=SqlitePlayVerificationSupport.Value(read);
+            if(!source.MoveNext())yield break;yield return source.Current;
+        }
+    }
     static IEnumerator Flow()
     {
         if(Intro)
@@ -243,7 +253,7 @@ public static class TutorialVerification
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         var tutorial=UnityEngine.Object.FindFirstObjectByType<TutorialController>();
         Check(nav&&tutorial,"Tutorial bindings unavailable");
-        var manager=GameDataManager.Instance;var service=manager.Tasks;
+        var manager=GameDataManager.Instance;var service=manager.Service;
         Check(manager.SavePath.Contains("TutorialVerification"),"Unsafe save path");
         Check(service.Settings.musicVolume==1f && service.Settings.soundVolume==1f
             && SettingsAudio.Instance.musicSource.volume==1f && SettingsAudio.Instance.soundSource.volume==1f,
@@ -258,7 +268,7 @@ public static class TutorialVerification
         }
         if(SessionState.GetBool(Flag+".equipment",false)) {
             tutorial.Skip();
-            manager.PlayerData.equipmentUnlocked=true; manager.SaveData();
+            foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.equipmentUnlocked=true; })))yield return delay;
             tutorial.SendMessage("OnApplicationFocus",true);
             tutorial.OpenTopic(2); yield return .5;
             FinishSpeech(tutorial); tutorial.Continue(); yield return .5;
@@ -270,7 +280,7 @@ public static class TutorialVerification
             foreach(var image in tutorial.highlight.GetComponentsInChildren<Image>()) image.type=Image.Type.Simple;
             yield return .2; Capture("equipment-highlight-before-simple"); yield return .3;
             foreach(var image in tutorial.highlight.GetComponentsInChildren<Image>()) image.type=Image.Type.Sliced;
-            int coins=service.Snapshot.fishCoins, count=service.Snapshot.equipment.Count;
+            int coins=fixtureSnapshot.fishCoins, count=fixtureSnapshot.equipment.Count;
             for(int equipmentStep=0;equipmentStep<7;equipmentStep++) {
                 Check(tutorial.CurrentTopic=="equipment-step-"+equipmentStep,"Equipment step missing: "+equipmentStep);
                 FinishSpeech(tutorial);
@@ -278,8 +288,8 @@ public static class TutorialVerification
                 if(equipmentStep==2) {
                     var reverse=BackAndReturn(tutorial,"equipment-step-1","equipment-step-2");while(reverse.MoveNext())yield return reverse.Current;
                     var feedback=BackFeedback(tutorial);while(feedback.MoveNext())yield return feedback.Current;
-                    using(var locked=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) {
-                        tutorial.GoBack();Check(tutorial.CurrentTopic=="error" && service.Tutorial.equipmentStep==2,"Failed Back persistence advanced tutorial");
+                    using(var locked=TaskCalendarPlayVerification.FailSqliteWrites()) {
+                        tutorial.GoBack();foreach(var delay in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return delay;yield return .05;Check(tutorial.CurrentTopic=="error" && service.Tutorial.equipmentStep==2,"Failed Back persistence advanced tutorial");
                     }
                     tutorial.SendMessage("OnApplicationFocus",false);tutorial.SendMessage("OnApplicationFocus",true);yield return .5;FinishSpeech(tutorial);
                     Check(tutorial.CurrentTopic=="equipment-step-2","Failed Back could not resume the committed step");
@@ -301,7 +311,7 @@ public static class TutorialVerification
                     }
                 }
                 if(equipmentStep==2) {
-                    Check(new PlayerDataStore(manager.SavePath).Data.tutorial.equipmentStep==2,"Equipment progress did not survive reload");
+                    var reload=SqlitePlayVerificationSupport.ReloadAsync();foreach(var delay in SqlitePlayVerificationSupport.Wait(reload))yield return delay;Check(reload.GetAwaiter().GetResult().tutorial.equipmentStep==2,"Equipment progress did not survive reload");
                     tutorial.SendMessage("OnApplicationFocus",false); yield return .2;
                     Check(!tutorial.panel.activeSelf&&!tutorial.spotlight.gameObject.activeSelf,"Equipment guide did not release input");
                     tutorial.SendMessage("OnApplicationFocus",true); yield return .5;
@@ -310,7 +320,7 @@ public static class TutorialVerification
                 tutorial.Continue(); yield return .4;
             }
             Check(service.Tutorial.read.Contains("equipment")&&!tutorial.panel.activeSelf,"Equipment guide did not finish");
-            Check(service.Snapshot.fishCoins==coins&&service.Snapshot.equipment.Count==count,"Equipment guide changed inventory/currency");
+            Check(fixtureSnapshot.fishCoins==coins&&fixtureSnapshot.equipment.Count==count,"Equipment guide changed inventory/currency");
             tutorial.OpenTopic(2); yield return .4; FinishSpeech(tutorial); tutorial.Continue(); yield return .4;
             Check(tutorial.CurrentTopic=="equipment-step-0","Help did not restart equipment guide");
             tutorial.Skip(); Check(!tutorial.spotlight.gameObject.activeSelf,"Skip did not release spotlight");
@@ -319,7 +329,7 @@ public static class TutorialVerification
         }
         if(Before) {
             Resolution(1920,1080);yield return .5;Capture("before-welcome");yield return .3;
-            tutorial.Skip(); manager.PlayerData.experience=100;manager.SaveData();
+            tutorial.Skip(); foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=100;})))yield return delay;
             nav.ShowPage(MainMenuPage.Focus);yield return 3;tutorial.OpenTopic(1);yield return 6;
             Capture("before-focus");yield return .3;yield break;
         }
@@ -359,21 +369,21 @@ public static class TutorialVerification
         Check(Hit((RectTransform)taskInput.transform)!=tutorial.spotlight.gameObject,"Task name input blocked");
         FinishSpeech(tutorial);
         taskInput.text="Keep draft";Click((RectTransform)tutorial.back.transform);yield return .3;FinishSpeech(tutorial);
-        Check(tutorial.CurrentTopic=="task-page-5" && tutorial.next.gameObject.activeSelf && taskInput.text=="Keep draft" && service.Snapshot.tasks.Count==0,"Back lost, saved or stranded an open task draft");
+        Check(tutorial.CurrentTopic=="task-page-5" && tutorial.next.gameObject.activeSelf && taskInput.text=="Keep draft" && fixtureSnapshot.tasks.Count==0,"Back lost, saved or stranded an open task draft");
         tutorial.Continue();yield return .3;FinishSpeech(tutorial);
         Check(tutorial.CurrentTopic=="task-page-6" && !tutorial.next.gameObject.activeSelf,"Returning to input did not hide Continue");
         taskInput.Select();taskInput.ActivateInputField();
         taskInput.text="Read one page";
         keyboard=InputSystem.AddDevice<Keyboard>();Key(UnityEngine.InputSystem.Key.Enter);yield return .15;Key();yield return 1;
-        Check(service.Snapshot.tasks.Any(t=>t.title=="Read one page"),"Task input did not save under spotlight");
-        Check(service.Tutorial.taskStep==3&&service.Tutorial.taskPageStep==6&&service.Snapshot.history.Count==0,"Save advanced explanation or fabricated completion");
+        Check(fixtureSnapshot.tasks.Any(t=>t.title=="Read one page"),"Task input did not save under spotlight");
+        Check(service.Tutorial.taskStep==3&&service.Tutorial.taskPageStep==6&&fixtureSnapshot.history.Count==0,"Save advanced explanation or fabricated completion");
         for(int wait=0;wait<40 && tutorial.CurrentTopic!="task-page-6-saved";wait++)yield return .25;
         Check(tutorial.CurrentTopic=="task-page-6-saved","Saved-task explanation did not resume");
-        FinishSpeech(tutorial);int savedTaskCount=service.Snapshot.tasks.Count;
+        FinishSpeech(tutorial);int savedTaskCount=fixtureSnapshot.tasks.Count;
         Click((RectTransform)tutorial.back.transform);yield return .3;FinishSpeech(tutorial);
         Check(tutorial.CurrentTopic=="task-page-5" && tutorial.next.gameObject.activeSelf,"Saved-task Back requires a duplicate creation");
         tutorial.Continue();yield return .3;FinishSpeech(tutorial);
-        Check(service.Snapshot.tasks.Count==savedTaskCount && service.Tutorial.taskStep==3 && service.Snapshot.history.Count==0,"Back changed committed task work");
+        Check(fixtureSnapshot.tasks.Count==savedTaskCount && service.Tutorial.taskStep==3 && fixtureSnapshot.history.Count==0,"Back changed committed task work");
         Capture("task-saved");yield return .3;
         if(tutorial.IsTyping)tutorial.Continue();tutorial.Continue();yield return .5;
         Check(tutorial.CurrentTopic=="task-page-7","Task completion explanation missing");
@@ -386,7 +396,7 @@ public static class TutorialVerification
             Visible((RectTransform)tutorial.next.transform);Visible((RectTransform)tutorial.skip.transform);
         }
         if(tutorial.IsTyping)tutorial.Continue();Capture("task-checkbox");yield return .3;tutorial.Continue();yield return .5;
-        var tasksBeforeMenu = JsonUtility.ToJson(service.Snapshot);
+        var tasksBeforeMenu = JsonUtility.ToJson(fixtureSnapshot);
         for(int menuStep=9;menuStep<=26;menuStep++) {
             Check(tutorial.CurrentTopic=="task-page-"+menuStep,"Missing menu explanation: "+menuStep);
             FinishSpeech(tutorial);
@@ -398,7 +408,7 @@ public static class TutorialVerification
                 Check(Hit(tutorial.CurrentTarget)==tutorial.spotlight.gameObject,"Menu demonstration accepts real actions");
                 Capture("task-menu-"+menuStep+"-"+size.x);yield return .2;
             }
-            var disk = new PlayerDataStore(manager.SavePath).Data;
+            var reload=SqlitePlayVerificationSupport.ReloadAsync();foreach(var delay in SqlitePlayVerificationSupport.Wait(reload))yield return delay;var disk=reload.GetAwaiter().GetResult();
             Check(disk.tutorial.taskPageStep==menuStep,"Menu explanation progress not persisted");
             if(menuStep==10) {
                 var backFlow = BackAndReturn(tutorial,"task-page-9","task-page-10");
@@ -411,7 +421,7 @@ public static class TutorialVerification
             tutorial.Continue();yield return .3;
         }
         var beforeMenu = JsonUtility.FromJson<PlayerData>(tasksBeforeMenu);
-        var afterMenu = service.Snapshot; beforeMenu.tutorial = afterMenu.tutorial;
+        var afterMenu = fixtureSnapshot; beforeMenu.tutorial = afterMenu.tutorial;
         Check(JsonUtility.ToJson(beforeMenu)==JsonUtility.ToJson(afterMenu),"Menu guide changed domain state");
         Check(!tutorial.GetComponentInChildren<TaskContextMenu>(),"Menu preview leaked into tab guide");
         for(int stepIndex=0;stepIndex<=4;stepIndex++)
@@ -438,12 +448,12 @@ public static class TutorialVerification
         }
         Check(tutorial.CurrentTopic=="task-page-8","Task History explanation missing");
         FinishSpeech(tutorial);Click(tutorial.CurrentTarget);yield return .5;
-        Check(service.Tutorial.taskStep==4&&service.Snapshot.history.Count==0,"Task guide fabricated completion");
+        Check(service.Tutorial.taskStep==4&&fixtureSnapshot.history.Count==0,"Task guide fabricated completion");
         Check(!tutorial.tasks.TutorialOwnsInput,"Task guide retained ownership after completion");
         tutorial.tasks.SelectTab(TaskTab.Today);tutorial.tasks.BeginAdd();yield return .2;
         tutorial.tasks.QuickAddInput.text="Normal blur save";
         EventSystem.current.SetSelectedGameObject(nav.buttons[(int)MainMenuPage.Dashboard].gameObject);yield return .4;
-        Check(service.Snapshot.tasks.Any(t=>t.title=="Normal blur save") && !tutorial.tasks.QuickAddInput,"Ordinary task blur save stopped after guide completion");
+        Check(fixtureSnapshot.tasks.Any(t=>t.title=="Normal blur save") && !tutorial.tasks.QuickAddInput,"Ordinary task blur save stopped after guide completion");
         tutorial.OpenHelp();yield return .5;Capture("help");yield return .3;
         if(keyboard==null)keyboard=InputSystem.AddDevice<Keyboard>();
         Check(EventSystem.current.currentSelectedGameObject==tutorial.topics[0].gameObject,"Help initial keyboard selection");
@@ -453,7 +463,7 @@ public static class TutorialVerification
         Check(!tutorial.helpPanel.activeSelf&&!tutorial.helpBackdrop.activeSelf,"Help Escape dismissal");
         tutorial.OpenHelp();yield return .3;
         tutorial.OpenTopic(1);yield return .5;Capture("focus-locked-help");yield return .3;tutorial.Continue();tutorial.Continue();
-        manager.PlayerData.experience=100;manager.SaveData();var p=service.Tutorial;p.dismissed=false;p.announcedLevel=2;service.SaveTutorial(p);
+        foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=100;})))yield return delay;var p=service.Tutorial;p.dismissed=false;p.announcedLevel=2;foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveTutorialAsync(p)))yield return delay;
         Check(nav.ShowPage(MainMenuPage.Focus),"Lv.2 Focus navigation");yield return 5;
         tutorial.OpenTopic(1);yield return .2;
         var mentorAnimator=tutorial.mentor.CharacterAnimator;Check(mentorAnimator,"Missing animated Master Loke");
@@ -500,8 +510,8 @@ public static class TutorialVerification
         }
         Check(FocusRunner.EnsureInstance().Controller.Phase==FocusPhase.Focusing,"Target click did not start Focus");
         if(tutorial.panel.activeSelf){FinishSpeech(tutorial);tutorial.Continue();}yield return .5;
-        manager.PlayerData.experience=550;manager.PlayerData.tickets=1;manager.SaveData();
-        p=service.Tutorial;p.announcedLevel=5;service.SaveTutorial(p);
+        foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=550;data.tickets=1;})))yield return delay;
+        p=service.Tutorial;p.announcedLevel=5;foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveTutorialAsync(p)))yield return delay;
         var runningFocus=FocusRunner.EnsureInstance().Controller;
         string session=runningFocus.SessionId; double elapsed=runningFocus.ElapsedSeconds;
         Check(nav.ShowPage(MainMenuPage.Boss),"Boss navigation while focusing");yield return 1;
@@ -514,11 +524,11 @@ public static class TutorialVerification
         Check(tutorial.CurrentTopic=="leaderboard-step-0" && tutorial.panel.activeSelf,"Leaderboard tutorial suppressed during Focus");
         FinishSpeech(tutorial); VerifyDialogueLayout(tutorial); Capture("leaderboard-during-focus");yield return .3;
         Check(runningFocus.Phase==FocusPhase.Focusing && runningFocus.SessionId==session && runningFocus.ElapsedSeconds>=elapsed
-            && service.Snapshot.tickets==1 && service.Snapshot.battles.Count==0,"Tutorial changed Focus session or spent a ticket");
-        Check(FocusRunner.EnsureInstance().Controller.Cancel(),"Focus cancel failed");
-        manager.PlayerData.experience=550;manager.PlayerData.tickets=1;manager.SaveData();p=service.Tutorial;p.announcedLevel=5;service.SaveTutorial(p);
+            && fixtureSnapshot.tickets==1 && fixtureSnapshot.battles.Count==0,"Tutorial changed Focus session or spent a ticket");
+        var cancel=FocusRunner.EnsureInstance().Controller.CancelAsync();foreach(var delay in SqlitePlayVerificationSupport.Wait(cancel))yield return delay;Check(cancel.GetAwaiter().GetResult(),"Focus cancel failed");
+        foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=550;data.tickets=1;})))yield return delay;p=service.Tutorial;p.announcedLevel=5;foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveTutorialAsync(p)))yield return delay;
         Check(nav.ShowPage(MainMenuPage.Boss),"Lv.5 Boss navigation");yield return 3;tutorial.OpenTopic(3);yield return .5;
-        int ticketsBefore=service.Snapshot.tickets,battlesBefore=service.Snapshot.battles.Count;
+        int ticketsBefore=fixtureSnapshot.tickets,battlesBefore=fixtureSnapshot.battles.Count;
         for(int stepIndex=0;stepIndex<=6;stepIndex++)
         {
             Check(tutorial.CurrentTopic=="boss-step-"+stepIndex,"Boss explanation order: "+stepIndex);
@@ -548,7 +558,7 @@ public static class TutorialVerification
         Check(tutorial.bossPage.confirmation.activeSelf,"Challenge target did not open original confirmation");
         Submit(tutorial.bossPage.cancel);yield return .3;
         Check(!tutorial.bossPage.stagePicker.activeSelf&&!tutorial.spotlight.gameObject.activeSelf,"Boss guide did not release popup/input");
-        Check(service.Snapshot.tickets==ticketsBefore&&service.Snapshot.battles.Count==battlesBefore,"Boss tutorial spent tickets or entered battle");
+        Check(fixtureSnapshot.tickets==ticketsBefore&&fixtureSnapshot.battles.Count==battlesBefore,"Boss tutorial spent tickets or entered battle");
         Check(nav.ShowPage(MainMenuPage.Leaderboard),"Lv.5 leaderboard navigation");yield return 1;tutorial.OpenTopic(4);yield return .5;
         var accountBefore=JsonUtility.ToJson(service.AccountSettings);
         for(int stepIndex=0;stepIndex<3;stepIndex++) {
@@ -571,7 +581,7 @@ public static class TutorialVerification
         }
         Check(!tutorial.settings.gameObject.activeSelf&&JsonUtility.ToJson(service.AccountSettings)==accountBefore,"Leaderboard guide did not preserve settings/close owned view");
         nav.ShowPage(MainMenuPage.Dashboard);yield return .5;
-        manager.PlayerData.experience=0;manager.SaveData();p=service.Tutorial;service.SaveTutorial(p);
+        foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=0;})))yield return delay;p=service.Tutorial;foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveTutorialAsync(p)))yield return delay;
         var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
         var toggle=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
         foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(1024,768),new Vector2Int(2560,1080)})
@@ -584,13 +594,13 @@ public static class TutorialVerification
         tutorial.settings.Open(nav.gameObject);yield return .5;Capture("settings-help-entry");yield return .3;
         tutorial.OpenHelp();yield return .3;Check(tutorial.helpPanel.activeSelf&&!tutorial.settings.gameObject.activeSelf,"Settings Help handoff failed");tutorial.CloseHelp();
         p=service.Tutorial;p.dismissed=false;p.taskStep=4;p.announcedLevel=1;p.read.Add("reward");p.read.Add("daily");p.read.Add("equipment");
-        manager.PlayerData.experience=550;manager.SaveData();service.SaveTutorial(p);
+        foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=550;})))yield return delay;foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveTutorialAsync(p)))yield return delay;
         typeof(TutorialController).GetField("snoozed",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(tutorial,false);
         yield return 6;
         Check(tutorial.CurrentTopic=="unlock"&&nav.CurrentPage==MainMenuPage.Dashboard,"Cross-threshold unlock did not wait for user navigation");
         Capture("combined-unlock");yield return .3;tutorial.Continue();tutorial.Continue();yield return .5;
         Check(service.Tutorial.announcedLevel==5&&nav.CurrentPage==MainMenuPage.Focus,"Combined unlock ordering/receipt");
-        nav.ShowPage(MainMenuPage.Dashboard);manager.PlayerData.experience=0;manager.SaveData();service.SaveTutorial(service.Tutorial);yield return 4;
+        nav.ShowPage(MainMenuPage.Dashboard);foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=0;})))yield return delay;foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveTutorialAsync(service.Tutorial)))yield return delay;yield return 4;
         tutorial.OpenTopic(0);yield return .5;tutorial.SendMessage("OnApplicationFocus",false);yield return .2;
         Check(!tutorial.panel.activeSelf&&!tutorial.spotlight.gameObject.activeSelf,"Guide remained active after focus loss");tutorial.SendMessage("OnApplicationFocus",true);yield return .5;
         Check(tutorial.panel.activeSelf,"Guide did not recover after focus return");
@@ -602,17 +612,17 @@ public static class TutorialVerification
     static IEnumerator FocusAccess(TutorialController tutorial, MainMenuNavigation nav, GameDataManager manager)
     {
         tutorial.Skip();
-        manager.PlayerData.experience=100; manager.PlayerData.tickets=1; manager.SaveData();
-        var service=manager.Tasks;
+        foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=100; data.tickets=1; })))yield return delay;
+        var service=manager.Service;
         var progress=service.Tutorial;
         progress.dismissed=false; progress.taskStep=4; progress.announcedLevel=2;
         foreach(var key in new[]{"tasks","focus","reward","daily"}) if(!progress.read.Contains(key))progress.read.Add(key);
-        Check(service.SaveTutorial(progress),service.LastError);
+        foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveTutorialAsync(progress)))yield return delay;
         tutorial.SendMessage("OnApplicationFocus",true);
         Check(nav.ShowPage(MainMenuPage.Focus),"Focus page unavailable");yield return .5;
         tutorial.OpenHelp();tutorial.CloseHelp();
         var focus=FocusRunner.EnsureInstance().Controller;
-        Check(focus.Start(),"Could not start isolated Focus session");
+        var start=focus.StartAsync();foreach(var delay in SqlitePlayVerificationSupport.Wait(start))yield return delay;Check(start.GetAwaiter().GetResult(),"Could not start isolated Focus session");
         string session=focus.SessionId; double elapsed=focus.ElapsedSeconds;
         yield return 5;
         foreach(var lockedPage in new[]{MainMenuPage.Boss,MainMenuPage.Leaderboard}) {
@@ -620,8 +630,8 @@ public static class TutorialVerification
             Check(tutorial.panel.activeSelf && tutorial.CurrentTopic=="locked","Unlock explanation disappeared during Focus: "+lockedPage);
             FinishSpeech(tutorial); tutorial.Continue();yield return .5;
         }
-        manager.PlayerData.experience=550;manager.SaveData();
-        progress=service.Tutorial;progress.announcedLevel=5;Check(service.SaveTutorial(progress),service.LastError);
+        foreach(var delay in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.experience=550;})))yield return delay;
+        progress=service.Tutorial;progress.announcedLevel=5;foreach(var delay in TaskCalendarPlayVerification.Await(service.SaveTutorialAsync(progress)))yield return delay;
         var sidebar=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
         var expand=(Toggle)typeof(ResisesSideMenuInLayoutGroup).GetField("expander",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(sidebar);
         foreach(var page in new[]{MainMenuPage.Boss,MainMenuPage.Leaderboard}) {
@@ -642,12 +652,12 @@ public static class TutorialVerification
                 }
             }
             Check(focus.Phase==FocusPhase.Focusing && focus.SessionId==session && focus.ElapsedSeconds>=elapsed
-                && service.Snapshot.tickets==1 && service.Snapshot.battles.Count==0,"Guide changed timer/tickets/battles");
+                && fixtureSnapshot.tickets==1 && fixtureSnapshot.battles.Count==0,"Guide changed timer/tickets/battles");
         }
         tutorial.Skip();
         Check(nav.ShowPage(MainMenuPage.Boss),"Boss return failed");yield return 1;
         Check(!tutorial.panel.activeSelf && service.Tutorial.dismissed,"Explicit Skip was not respected during Focus");
-        Check(focus.Cancel(),"Isolated Focus cancellation failed");
+        var cancel=focus.CancelAsync();foreach(var delay in SqlitePlayVerificationSupport.Wait(cancel))yield return delay;Check(cancel.GetAwaiter().GetResult(),"Isolated Focus cancellation failed");
         File.WriteAllText(Folder+"/checks.txt","PASS: fresh music and SFX at 100%, explicit mute retained; automatic Boss/Leaderboard guides during active Focus after Help snooze; four resolutions with both sidebar states; dialogue/actions contained and nonoverlapping; unchanged session, increasing elapsed time, unchanged tickets/battles; explicit Skip respected; isolated cancellation.");
     }
 }

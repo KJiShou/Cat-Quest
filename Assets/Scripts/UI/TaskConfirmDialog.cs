@@ -12,6 +12,7 @@ public sealed class TaskConfirmDialog
     private Action accepted;
     private readonly TaskDialogKeyboard keyboard;
     private readonly Button closeButton;
+    private readonly NotificationReveal noticeReveal;
     public TaskConfirmDialog(GameObject template, Transform canvas, TMP_FontAsset font)
     {
         Root=UnityEngine.Object.Instantiate(template,canvas); Root.name="TaskConfirmDialog";
@@ -49,6 +50,8 @@ public sealed class TaskConfirmDialog
         (outside.GetComponent<JuicyButton>()??outside.gameObject.AddComponent<JuicyButton>()).enabled=false;
         outside.onClick.RemoveAllListeners(); outside.onClick.AddListener(Close);
         outside.navigation=new Navigation { mode=Navigation.Mode.None };
+        noticeReveal=popup.GetComponent<NotificationReveal>();
+        if(noticeReveal)noticeReveal.CaptureLayout();
         Root.SetActive(false);
         keyboard=Root.AddComponent<TaskDialogKeyboard>();
     }
@@ -64,6 +67,7 @@ public sealed class TaskConfirmDialog
     }
     public void Show(string title,string body,Action onConfirm,string confirmLabel="Confirm",string cancelLabel="Cancel")
     {
+        if(noticeReveal)noticeReveal.Settle();
         cancel.gameObject.SetActive(true); confirm.GetComponentInChildren<TMP_Text>(true).text=confirmLabel;
         cancel.GetComponentInChildren<TMP_Text>(true).text=cancelLabel;
         accepted=onConfirm; heading.text=title; message.text=body; Root.SetActive(true); Root.transform.SetAsLastSibling();
@@ -74,6 +78,7 @@ public sealed class TaskConfirmDialog
         Show(title,body,null); cancel.gameObject.SetActive(false);
         confirm.GetComponentInChildren<TMP_Text>(true).text="OK";
         keyboard.Open(new[]{confirm,closeButton},Close);
+        if(noticeReveal)noticeReveal.Play();
     }
     public void Dismiss() => Close();
     private void Close() { Root.SetActive(false); accepted=null; }

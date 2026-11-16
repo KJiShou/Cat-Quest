@@ -31,7 +31,7 @@ public sealed class AiChatDraftCard : MonoBehaviour
         }
         changes.gameObject.SetActive(changes.text.Length>0);
         foreach(Transform child in tags)Destroy(child.gameObject);
-        var catalog=GameDataManager.EnsureInstance().Tasks.TagCatalog;
+        var catalog=GameDataManager.EnsureInstance().Service.TagCatalog;
         foreach(var id in task.tagIds){var tag=catalog.FirstOrDefault(t=>t.id==id);if(tag==null)continue;
             var chip=Instantiate(tagTemplate,tags);chip.SetActive(true);TaskUIBuilder.LayoutTag(chip,tag.name);TagColors.Apply(chip,tag.colorHex,tagTintSprite);
             foreach(var button in chip.GetComponents<Button>())button.interactable=false;

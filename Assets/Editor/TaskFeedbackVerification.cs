@@ -100,16 +100,18 @@ public static class TaskFeedbackVerification
     }
     static IEnumerator Flow()
     {
+        foreach(var delay in SqlitePlayVerificationSupport.Wait(GameDataManager.EnsureInstance().Ready)) yield return delay;
+        if(!Intro) SqlitePlayVerificationSupport.Value(GameDataManager.Instance.Ready);
         if(Intro){
             var input=UnityEngine.Object.FindFirstObjectByType<UsernameInputController>();
             Check(input&&GameDataManager.Instance.SavePath.Contains("TaskFeedbackVerification"),"Intro/isolation unavailable");
             var error=(TMPro.TMP_Text)typeof(UsernameInputController).GetField("errorText",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(input);
             bool before=SessionState.GetBool(Flag+".introBefore",false);
             if(!before){
-                string original=File.ReadAllText(GameDataManager.Instance.SavePath);
+                string original=File.ReadAllText(Folder+"/save.json");
                 input.ConfirmUsername();input.ConfirmUsername();
                 Check(GameDataManager.Instance.IsSaveReadOnly&&error.text.Contains("Update Cat Quest"),"Intro did not explain write protection.");
-                Check(File.ReadAllText(GameDataManager.Instance.SavePath)==original&&Directory.GetFiles(Folder,"save.json*").Length==1,"Intro modified unsupported save.");
+                Check(File.ReadAllText(Folder+"/save.json")==original&&Directory.GetFiles(Folder,"save.json*").Length==1,"Intro modified unsupported save.");
             }
             foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720)}){
                 Resolution(size.x,size.y);yield return 1;Canvas.ForceUpdateCanvases();
@@ -170,26 +172,57 @@ public static class TaskFeedbackVerification
 
             var notice=UnityEngine.Object.FindFirstObjectByType<TaskResultNotice>(FindObjectsInactive.Include);
             owner.BeginAdd();owner.QuickAddInput.text="Feedback regression task";
-            Check(owner.CommitQuickAdd(true),"Quick add failed");yield return .3;
+            owner.CommitQuickAdd(true);
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(owner.Service.FlushAsync())) yield return delay;
+            yield return .3;
             Check(notice.gameObject.activeSelf&&notice.message.text=="Task saved."&&!dialog.Root.activeSelf,"Successful save has no nonblocking feedback.");
             Check(events.currentSelectedGameObject==owner.QuickAddInput.gameObject,"Success feedback stole quick-add focus.");
-            string id=owner.Service.Snapshot.tasks.Single().id;owner.CancelQuickAdd();
-            owner.CompleteSelected(id);yield return .2;
+            string id=owner.Service.TaskSnapshot.tasks.Single().id;owner.CancelQuickAdd();
+            owner.CompleteSelected(id);
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(owner.Service.FlushAsync())) yield return delay;
+            yield return .2;
             Check(notice.message.text.Contains("+25 EXP, +10 Fish Coins") && notice.message.text.Contains("+1 Ticket"),"Receipt rewards not displayed.");
-            owner.CompleteSelected(id);Check(notice.message.text.Contains("already completed"),"Duplicate completion not distinguished.");
-            string receipt=owner.Service.Snapshot.history.Single().id;Check(owner.Service.UndoCompletion(receipt),"Undo failed");
-            owner.CompleteSelected(id);Check(notice.message.text.Contains("previous rewards are kept"),"Recompletion not distinguished.");
-            var saved=owner.Service.Snapshot;Check(saved.history.Count==1&&saved.fishCoins==10&&saved.experience==25&&saved.tickets==1,"Feedback changed reward settlement.");
+            owner.CompleteSelected(id);
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(owner.Service.FlushAsync())) yield return delay;
+            Check(notice.message.text.Contains("already completed"),"Duplicate completion not distinguished.");
+            var snapshot=owner.Service.ReadVerificationSnapshotAsync();
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(snapshot)) yield return delay;
+            string receipt=SqlitePlayVerificationSupport.Value(snapshot).history.Single().id;
+            var undo=owner.Service.UndoCompletionAsync(receipt);
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(undo)) yield return delay;
+            Check(SqlitePlayVerificationSupport.Value(undo),"Undo failed");
+            owner.CompleteSelected(id);
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(owner.Service.FlushAsync())) yield return delay;
+            Check(notice.message.text.Contains("previous rewards are kept"),"Recompletion not distinguished.");
+            snapshot=owner.Service.ReadVerificationSnapshotAsync();
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(snapshot)) yield return delay;
+            var saved=SqlitePlayVerificationSupport.Value(snapshot);Check(saved.history.Count==1&&saved.fishCoins==10&&saved.experience==25&&saved.tickets==1,"Feedback changed reward settlement.");
 
             // Seed only this runner's isolated store at the existing cap; no production rules change.
-            var day=GameDataManager.Instance.PlayerData.rewardDays.Single();day.taskExperience=owner.Service.TaskExperienceLimit;day.taskFishCoins=owner.Service.TaskFishLimit;
-            GameDataManager.Instance.SaveData();
-            Check(owner.Service.Upsert(new QuestTask {title="At reward limit"},null,out var capped),owner.Service.LastError);
-            owner.CompleteSelected(capped);Check(notice.message.text.Contains("Daily task reward limit reached"),"Cap message is misleading.");
-            Check(owner.Service.Snapshot.history.Count==2&&owner.Service.Snapshot.fishCoins==10,"Capped completion missing or rewarded.");
-            var disk=new PlayerDataStore(GameDataManager.Instance.SavePath);
-            Check(disk.Data.history.Count==2&&disk.Data.experience==25&&disk.Data.tickets==1,"Result not persisted.");
-            owner.CompleteSelected("missing-task");Check(dialog.Root.activeSelf&&!notice.gameObject.activeSelf,"Failure displayed a success notice.");dialog.Dismiss();
+            var seedCap=owner.Service.ApplyVerificationFixtureAsync(tx=>{
+                var day=tx.Read<RewardDay>(PlayerRecordKind.RewardDays, TaskService.DateKey(owner.Service.LocalNow));
+                day.taskExperience=owner.Service.TaskExperienceLimit;day.taskFishCoins=owner.Service.TaskFishLimit;
+                tx.Put(PlayerRecordKind.RewardDays,day);
+            });
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(seedCap)) yield return delay;
+            SqlitePlayVerificationSupport.Value(seedCap);
+            var added=owner.Service.UpsertAsync(new QuestTask {title="At reward limit"},null);
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(added)) yield return delay;
+            string capped=SqlitePlayVerificationSupport.Value(added);
+            owner.CompleteSelected(capped);
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(owner.Service.FlushAsync())) yield return delay;
+            Check(notice.message.text.Contains("Daily task reward limit reached"),"Cap message is misleading.");
+            snapshot=owner.Service.ReadVerificationSnapshotAsync();
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(snapshot)) yield return delay;
+            saved=SqlitePlayVerificationSupport.Value(snapshot);
+            Check(saved.history.Count==2&&saved.fishCoins==10,"Capped completion missing or rewarded.");
+            using(var disk=new SQLite.SQLiteConnection(GameDataManager.Instance.SavePath,SQLite.SQLiteOpenFlags.ReadOnly)) {
+                var profile=JsonUtility.FromJson<PlayerData>(disk.ExecuteScalar<string>("SELECT payload FROM cq_Profile"));
+                Check(disk.ExecuteScalar<int>("SELECT COUNT(*) FROM cq_History")==2&&profile.experience==25&&profile.tickets==1,"Result not persisted.");
+            }
+            owner.CompleteSelected("missing-task");
+            foreach(var delay in SqlitePlayVerificationSupport.Wait(owner.Service.FlushAsync())) yield return delay;
+            Check(dialog.Root.activeSelf&&!notice.gameObject.activeSelf,"Failure displayed a success notice.");dialog.Dismiss();
             Check(notice.fade.blocksRaycasts&&notice.GetComponent<Graphic>().raycastTarget,"Notice cannot be dismissed by clicking.");
             owner.Notify("Task saved.");yield return 4.4;Check(notice.gameObject.activeSelf,"Notice expired before player dismissed it.");
             ExecuteEvents.Execute(notice.gameObject,new PointerEventData(events){button=PointerEventData.InputButton.Left},ExecuteEvents.pointerClickHandler);

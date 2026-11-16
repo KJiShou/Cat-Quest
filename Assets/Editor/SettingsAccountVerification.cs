@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,8 +14,20 @@ public static class SettingsAccountVerification
     sealed class Clock : ITaskClock { public DateTime LocalNow => new DateTime(2026, 10, 21, 12, 0, 0); public DateTime UtcNow => LocalNow.AddHours(-8); }
     sealed class Store : IPlayerDataStore
     {
-        public PlayerData Data { get; private set; } = new PlayerData();
+        public PlayerData Data { get; set; } = new PlayerData();
         public bool fail;
+        public SqlitePlayerRepository repository;
+        public SqlitePlayerService service;
+        public async Task SeedAsync() {
+            bool injection = fail; fail = false;
+            try {
+                var result = await repository.ExecuteAsync(tx => { tx.Put(PlayerRecordKind.Profile,Data); tx.Put(PlayerRecordKind.Account,Data.account); return true; });
+                Check(result.Succeeded, result.Message);
+                Check((await service.SaveSettingsAsync(Data.settings)).Succeeded,"Could not refresh isolated account fixture.");
+            } finally { fail = injection; }
+        }
+        public async Task RefreshAsync() { var result = await repository.ReadAllForVerificationAsync(); Check(result.Succeeded,result.Message); Data = result.Value; }
+
         public bool TrySave(PlayerData value, out string error) { error = fail ? "Test save failure" : null; if (fail) return false; Data = value; return true; }
     }
     sealed class Http : IAccountHttp
@@ -34,25 +47,32 @@ public static class SettingsAccountVerification
     const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     const string OldVersion = "2026-10-21T04:00:00.000001Z", NewVersion = "2026-10-21T04:00:01.000001Z";
     static SettingsAccountVerification() { EditorApplication.update += Poll; }
-    static void Poll()
+    static async void Poll()
     {
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists("Temp/verify-settings-account.request")) return;
         File.Delete("Temp/verify-settings-account.request");
-        try { Run(); } catch (Exception error) { Debug.LogException(error); }
+        try { await Run(); } catch (Exception error) { Debug.LogException(error); }
     }
     static void Check(bool value, string why) { if (!value) throw new Exception(why); }
     static void Set(AccountController c, string name, object value) => typeof(AccountController).GetField(name, Private).SetValue(c, value);
     static T Get<T>(AccountController c, string name) => (T)typeof(AccountController).GetField(name, Private).GetValue(c);
     static IEnumerator Synchronize(AccountController c, bool replace = false) => (IEnumerator)typeof(AccountController).GetMethod("Synchronize", Private).Invoke(c, new object[] { replace });
-    static void Drain(IEnumerator routine)
+    static async Task Drain(IEnumerator routine, Store store = null)
     {
         using var disposable = routine as IDisposable;
         int steps = 0;
         while (routine.MoveNext())
         {
-            if (++steps > 100) throw new Exception("Account verification did not settle.");
-            if (routine.Current is IEnumerator nested) Drain(nested);
+            if (++steps > 1000) throw new Exception("Account verification did not settle.");
+            if (routine.Current is IEnumerator nested) await Drain(nested);
+            else await Task.Delay(5);
         }
+        if (store != null) await store.RefreshAsync();
+    }
+    static async Task WaitLocal(AccountController controller, Store store) {
+        for (int i=0; i<1000 && Get<int>(controller,"pendingLocalSaves") != 0; i++) await Task.Delay(5);
+        Check(Get<int>(controller,"pendingLocalSaves") == 0,"Local account save timed out.");
+        await store.RefreshAsync();
     }
     static AccountHttpResult Reply(long code, string body = null) => new AccountHttpResult { code = code, body = body };
     static string Document(AccountAggregate aggregate, string version)
@@ -73,47 +93,58 @@ public static class SettingsAccountVerification
         config = ScriptableObject.CreateInstance<AccountConnectionConfig>();
         config.firebaseProjectId = "catquest-test"; config.firebaseApiKey = "test-key"; config.googleDesktopClientId = "test.apps.googleusercontent.com";
         controller.configuration = config;
-        Set(controller, "service", new TaskService(store, new Clock())); Set(controller, "http", http);
+        Set(controller, "service", store.service); Set(controller, "http", http);
         Set(controller, "uid", "test-owner"); Set(controller, "idToken", "fake-token"); Set(controller, "refreshToken", "fake-refresh");
         Set(controller, "expiresAt", DateTimeOffset.UtcNow.AddHours(1));
         return controller;
     }
-    static void WithController(Action<AccountController, Store, Http> test)
+    static async Task WithController(Func<AccountController, Store, Http, Task> test)
     {
         var store = new Store(); var http = new Http();
+        string folder = Path.GetFullPath("Temp/SQLiteMigrationVerification/account-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
+        store.repository = new SqlitePlayerRepository(Path.Combine(folder,"data.sqlite3"),null);
+        store.repository.FaultPoint = stage => { if(store.fail && stage=="before-commit") throw new IOException("Injected failure"); };
+        store.service = new SqlitePlayerService(store.repository,new Clock());
+        Check((await store.service.InitializeAsync()).Succeeded,"Account fixture failed initialization.");
+        await store.RefreshAsync();
         var controller = Controller(store, http, out var host, out var config);
-        try { test(controller, store, http); }
-        finally { UnityEngine.Object.DestroyImmediate(host); UnityEngine.Object.DestroyImmediate(config); }
+        try { await test(controller, store, http); }
+        finally { UnityEngine.Object.DestroyImmediate(host); UnityEngine.Object.DestroyImmediate(config); await store.service.CloseAsync(); }
     }
-    static void Bound(Store store, bool upload = true, string version = "")
+    static async Task Bound(Store store, bool upload = true, string version = "")
     {
         store.Data.account = new AccountPreferences { boundUid = "test-owner", playerName = "Mochi", uploadEnabled = upload, lastServerUpdateTime = version };
+        await store.SeedAsync();
     }
 
     [MenuItem("Tools/Cat Quest/Verify Settings Account")]
-    public static void Run()
+    static async void RunFromMenu()
+    {
+        try { await Run(); } catch (Exception error) { Debug.LogException(error); }
+    }
+    public static async Task Run()
     {
         Directory.CreateDirectory("Library/SettingsAccountVerification");
         string context = "UTC " + DateTime.UtcNow.ToString("o") + " | Unity " + Application.unityVersion;
         try
         {
-            VerifyPlayerName(); VerifyAggregates(); VerifyOAuthAndWire(); VerifyLocalOwnership(); VerifyPublication();
+            await VerifyPlayerName(); VerifyAggregates(); VerifyOAuthAndWire(); await VerifyLocalOwnership(); await VerifyPublication();
             File.WriteAllText("Temp/verify-settings-account.result", "PASS: " + context +
                 "\nIsolated aggregate caps/duplicates/undo, cumulative Focus seconds, Boss gates, equipped Power, OAuth PKCE/state/path, strict payload, ownership, disk reload, local write failure, conflict/lost response, opt-out and in-flight signout.\nNo Google/Firebase calls or real credentials used. Live sign-in and deployed rules remain unverified.");
             Debug.Log("Settings account verification: PASS");
         }
         catch (Exception error) { File.WriteAllText("Temp/verify-settings-account.result", "FAIL: " + context + "\n" + error); throw; }
     }
-    static void VerifyPlayerName()
+    static async Task VerifyPlayerName()
     {
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            store.Data.username = "Original"; store.Data.account.playerName = "Original";
-            store.fail = true; c.SetPlayerName("New name");
+            store.Data.username = "Original"; store.Data.account.playerName = "Original"; await store.SeedAsync();
+            store.fail = true; c.SetPlayerName("New name"); await WaitLocal(c,store);
             Check(store.Data.username == "Original" && store.Data.account.playerName == "Original", "Failed rename changed names.");
-            store.fail = false; c.SetPlayerName("  Mochi  "); c.SetPlayerName("Mochi");
+            store.fail = false; c.SetPlayerName("  Mochi  "); await WaitLocal(c,store); c.SetPlayerName("Mochi"); await WaitLocal(c,store);
             Check(store.Data.username == "Mochi" && c.State.playerName == "Mochi", "Rename did not synchronize names.");
-            foreach (string invalid in new[] { "", "<b>name</b>", new string('a', 21) }) c.SetPlayerName(invalid);
+            foreach (string invalid in new[] { "", "<b>name</b>", new string('a', 21) }) c.SetPlayerName(invalid); await WaitLocal(c,store);
             Check(store.Data.username == "Mochi" && store.Data.account.playerName == "Mochi", "Invalid rename changed names.");
             string path = Path.GetFullPath("Library/SettingsAccountVerification/name-" + Guid.NewGuid().ToString("N") + ".json");
             var disk = new PlayerDataStore(path); Check(disk.TrySave(PlayerDataStore.Copy(store.Data), out _), "Name save failed.");
@@ -182,17 +213,17 @@ public static class SettingsAccountVerification
         Check(AccountRest.BuildAggregateCommit("catquest-test", aggregate, OldVersion).Contains("\"updateTime\":\"" + OldVersion + "\"") &&
             AccountRest.BuildAggregateCommit("catquest-test", aggregate, OldVersion).Contains("REQUEST_TIME"), "Update guard/server timestamp missing.");
     }
-    static void VerifyLocalOwnership()
+    static async Task VerifyLocalOwnership()
     {
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            store.Data.username = "Mochi"; store.fail = true; c.SetUploadEnabled(true);
+            store.Data.username = "Mochi"; await store.SeedAsync(); store.fail = true; c.SetUploadEnabled(true); await WaitLocal(c,store);
             Check(string.IsNullOrEmpty(store.Data.account.boundUid) && http.methods.Count == 0, "Failed bind persisted/uploaded.");
             Check(Get<int>(c, "retryCount") == 3, "Failed local save would retry every frame.");
-            store.fail = false; c.SetUploadEnabled(true);
+            store.fail = false; c.SetUploadEnabled(true); await WaitLocal(c,store);
             Check(store.Data.account.boundUid == "test-owner" && store.Data.account.uploadEnabled, "First opt-in did not bind local save.");
             c.SignOut(); Check(store.Data.account.boundUid == "test-owner" && !c.State.signedIn, "Signout discarded binding.");
-            Set(c, "uid", "different"); Set(c, "refreshToken", "fake"); c.SetUploadEnabled(true);
+            Set(c, "uid", "different"); Set(c, "refreshToken", "fake"); c.SetUploadEnabled(true); await WaitLocal(c,store);
             Check(c.State.wrongAccount && store.Data.account.boundUid == "test-owner", "Another account stole bound progress.");
             string path = Path.GetFullPath("Library/SettingsAccountVerification/account-" + Guid.NewGuid().ToString("N") + ".json");
             var disk = new PlayerDataStore(path); Check(disk.TrySave(PlayerDataStore.Copy(store.Data), out _), "Isolated account save failed.");
@@ -200,72 +231,74 @@ public static class SettingsAccountVerification
             Check(reloaded.boundUid == "test-owner" && reloaded.playerName == "Mochi", "Account ownership/name lost on reload.");
         });
     }
-    static void VerifyPublication()
+    static async Task VerifyPublication()
     {
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            Bound(store); http.replies.Enqueue(Reply(404)); http.replies.Enqueue(Reply(200, "{\"writeResults\":[{\"updateTime\":\"" + NewVersion + "\"}]}"));
-            Drain(Synchronize(c));
+            await Bound(store); http.replies.Enqueue(Reply(404)); http.replies.Enqueue(Reply(200, "{\"writeResults\":[{\"updateTime\":\"" + NewVersion + "\"}]}"));
+            await Drain(Synchronize(c),store);
             Check(http.methods.SequenceEqual(new[] { "GET", "POST" }) && store.Data.account.lastServerUpdateTime == NewVersion && store.Data.account.pendingSnapshotJson == "", "First publication acknowledgement failed.");
         });
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            Bound(store, true, OldVersion); var local = AccountAggregate.From(store.Data, "test-owner", "Mochi");
+            await Bound(store, true, OldVersion); var local = AccountAggregate.From(store.Data, "test-owner", "Mochi");
             var remote = PlayerDataStore.Copy(local); remote.totalTasksCompleted = 20;
-            http.replies.Enqueue(Reply(200, Document(remote, NewVersion))); Drain(Synchronize(c));
+            http.replies.Enqueue(Reply(200, Document(remote, NewVersion))); await Drain(Synchronize(c),store);
             Check(c.State.conflict && http.methods.Count == 1 && store.Data.history.Count == 0, "Remote conflict overwrote local data or auto-published.");
             http.replies.Enqueue(Reply(200, Document(remote, NewVersion)));
             http.replies.Enqueue(Reply(200, "{\"writeResults\":[{\"updateTime\":\"2026-10-21T04:00:02Z\"}]}"));
-            Drain(Synchronize(c, true)); Check(!c.State.conflict && http.methods.Last() == "POST", "Explicit snapshot replacement failed.");
+            await Drain(Synchronize(c, true),store); Check(!c.State.conflict && http.methods.Last() == "POST", "Explicit snapshot replacement failed.");
         });
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            Bound(store); var local = AccountAggregate.From(store.Data, "test-owner", "Mochi");
-            http.replies.Enqueue(Reply(404)); http.replies.Enqueue(new AccountHttpResult { transportError = true }); Drain(Synchronize(c));
+            await Bound(store); var local = AccountAggregate.From(store.Data, "test-owner", "Mochi");
+            http.replies.Enqueue(Reply(404)); http.replies.Enqueue(new AccountHttpResult { transportError = true }); await Drain(Synchronize(c),store);
             Check(!string.IsNullOrEmpty(store.Data.account.pendingSnapshotJson), "Uncertain upload was forgotten.");
-            http.replies.Enqueue(Reply(200, Document(local, NewVersion))); Drain(Synchronize(c));
+            http.replies.Enqueue(Reply(200, Document(local, NewVersion))); await Drain(Synchronize(c),store);
             Check(http.methods.Count(method => method == "POST") == 1 && store.Data.account.lastServerUpdateTime == NewVersion, "Lost response caused another write or false conflict.");
         });
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            Bound(store, true, OldVersion); c.SetUploadEnabled(false);
+            await Bound(store, true, OldVersion); c.SetUploadEnabled(false); await WaitLocal(c,store);
             Check(store.Data.account.pendingRemoval && !store.Data.account.uploadEnabled, "Opt-out did not persist removal.");
-            http.replies.Enqueue(new AccountHttpResult { transportError = true }); Drain(Synchronize(c));
+            http.replies.Enqueue(new AccountHttpResult { transportError = true }); await Drain(Synchronize(c),store);
             Check(store.Data.account.pendingRemoval, "Offline removal reported success.");
             var remote = AccountAggregate.From(store.Data, "test-owner", "Mochi");
-            http.replies.Enqueue(Reply(200, Document(remote, OldVersion))); http.replies.Enqueue(Reply(200)); Drain(Synchronize(c));
+            http.replies.Enqueue(Reply(200, Document(remote, OldVersion))); http.replies.Enqueue(Reply(200)); await Drain(Synchronize(c),store);
             Check(!store.Data.account.pendingRemoval && store.Data.account.boundUid == "test-owner" && http.methods.Last() == "DELETE", "Removal lost ownership or did not delete.");
         });
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            Bound(store); http.pause = true; http.replies.Enqueue(Reply(404));
+            await Bound(store); http.pause = true; http.replies.Enqueue(Reply(404));
             var guarded = (IEnumerator)typeof(AccountController).GetMethod("Run", Private).Invoke(c, new object[] { Synchronize(c), Get<int>(c, "generation") });
-            Check(guarded.MoveNext(), "Test request did not pause in flight."); c.SignOut(); Drain(guarded);
+            for(int i=0;i<1000 && http.methods.Count==0;i++) { Check(guarded.MoveNext(), "Test request ended before HTTP."); await Task.Delay(5); }
+            Check(http.methods.Count>0, "Test request did not pause in flight."); c.SignOut(); await Drain(guarded,store);
             Check(http.methods.SequenceEqual(new[] { "GET" }) && http.cancels > 0 && string.IsNullOrEmpty(store.Data.account.pendingSnapshotJson), "Stale callback published after signout.");
         });
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            Bound(store); http.pauseMethod = "POST";
+            await Bound(store); http.pauseMethod = "POST";
             http.replies.Enqueue(Reply(404)); http.replies.Enqueue(Reply(200, "{\"writeResults\":[{\"updateTime\":\"" + NewVersion + "\"}]}"));
             var guarded = (IEnumerator)typeof(AccountController).GetMethod("Run", Private).Invoke(c, new object[] { Synchronize(c), Get<int>(c, "generation") });
-            Check(guarded.MoveNext() && http.methods.Last() == "POST", "Test did not pause the first-create request.");
-            c.SetUploadEnabled(false);
+            for(int i=0;i<1000 && http.methods.LastOrDefault()!="POST";i++) { Check(guarded.MoveNext(),"Test request ended before POST."); await Task.Delay(5); }
+            Check(http.methods.LastOrDefault() == "POST", "Test did not pause the first-create request.");
+            c.SetUploadEnabled(false); await WaitLocal(c,store);
             Check(store.Data.account.pendingRemoval && !store.Data.account.uploadEnabled && http.cancels == 0, "Opt-out aborted an in-flight publication.");
-            Drain(guarded);
+            await Drain(guarded,store);
             Check(store.Data.account.pendingRemoval && store.Data.account.lastServerUpdateTime == NewVersion, "Opt-out was lost after upload completed.");
             http.replies.Enqueue(Reply(200, Document(AccountAggregate.From(store.Data, "test-owner", "Mochi"), NewVersion))); http.replies.Enqueue(Reply(200));
-            Drain(Synchronize(c));
+            await Drain(Synchronize(c),store);
             Check(!store.Data.account.pendingRemoval && http.methods.Last() == "DELETE", "Serialized opt-out did not remove the completed publication.");
         });
-        WithController((c, store, http) =>
+        await WithController(async (c, store, http) =>
         {
-            Bound(store); http.replies.Enqueue(Reply(404)); http.replies.Enqueue(new AccountHttpResult { transportError = true }); Drain(Synchronize(c));
-            http.replies.Enqueue(Reply(404)); Drain(Synchronize(c));
+            await Bound(store); http.replies.Enqueue(Reply(404)); http.replies.Enqueue(new AccountHttpResult { transportError = true }); await Drain(Synchronize(c),store);
+            http.replies.Enqueue(Reply(404)); await Drain(Synchronize(c),store);
             Check(http.methods.Count(method => method == "POST") == 1, "An uncertain first create was submitted twice.");
-            c.SetUploadEnabled(false); http.replies.Enqueue(Reply(404)); Drain(Synchronize(c));
+            c.SetUploadEnabled(false); await WaitLocal(c,store); http.replies.Enqueue(Reply(404)); await Drain(Synchronize(c),store);
             Check(store.Data.account.pendingRemoval && store.Data.account.pendingWriteMayCreate, "Absent document falsely confirmed removal while first create could still arrive.");
             var pending = AccountAggregate.ReadPending(store.Data.account.pendingSnapshotJson);
-            http.replies.Enqueue(Reply(200, Document(pending, NewVersion))); http.replies.Enqueue(Reply(200)); Drain(Synchronize(c));
+            http.replies.Enqueue(Reply(200, Document(pending, NewVersion))); http.replies.Enqueue(Reply(200)); await Drain(Synchronize(c),store);
             Check(!store.Data.account.pendingRemoval && !store.Data.account.pendingWriteMayCreate, "Late first create was not removed after reconciliation.");
         });
     }

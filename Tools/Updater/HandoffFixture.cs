@@ -10,12 +10,21 @@ public static class HandoffFixture
 {
     public static int Main(string[] args)
     {
+        try { return Run(args); }
+        catch(Exception error) {
+            string folder=args.Length>0?Path.GetFullPath(args[0]):AppDomain.CurrentDomain.BaseDirectory;
+            try { File.WriteAllText(Path.Combine(folder,"fixture-failure.txt"),DateTime.UtcNow.ToString("O")+"\n"+error); } catch { }
+            return 2;
+        }
+    }
+    static int Run(string[] args)
+    {
         string target=AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
         if(args.Length==0){File.WriteAllText(Path.Combine(target,"restarted.txt"),"restarted "+DateTime.UtcNow.ToString("O"));return 0;}
         string work=Path.GetFullPath(args[0]);
         var manifest=Installer.Read<ReleaseManifest>(Path.Combine(work,"release.json"));
         using(var parent=Process.GetCurrentProcess())
-            Installer.Write(Path.Combine(work,"request.json"),new InstallRequest{directory=target,package=Path.Combine(work,"package.zip"),version=manifest.version,sha256=manifest.sha256,size=manifest.size,parentPid=parent.Id,parentStartedUtcTicks=parent.StartTime.ToUniversalTime().Ticks});
+            Installer.Write(Path.Combine(work,"request.json"),new InstallRequest{directory=target,package=Path.Combine(work,"package.zip"),version=manifest.version,sha256=manifest.sha256,size=manifest.size,parentPid=parent.Id,parentStartedUtcTicks=parent.StartTime.ToUniversalTime().Ticks,verificationDirectory=args.Length>1?Path.GetFullPath(args[1]):null});
         using(var updater=Process.Start(new ProcessStartInfo(Path.Combine(work,"CatQuestUpdater.exe"),"\""+Path.Combine(work,"request.json")+"\""){UseShellExecute=false,CreateNoWindow=true}))
         {
             File.WriteAllText(Path.Combine(work,"helper.pid"),updater.Id.ToString());

@@ -102,16 +102,23 @@ public static class TaskFilterVerification
     static void Check(bool condition,string message){if(!condition)throw new Exception(message);}
     static IEnumerator Run()
     {
+        foreach(var delay in SqlitePlayVerificationSupport.Wait(GameDataManager.EnsureInstance().Ready)) yield return delay;
+        SqlitePlayVerificationSupport.Value(GameDataManager.Instance.Ready);
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();
         Check(nav && nav.taskSystem,"Task navigation missing.");
         Check(Path.GetFullPath(GameDataManager.EnsureInstance().SavePath).StartsWith(Path.GetFullPath(Folder)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase),"Not using isolated save.");
         nav.ShowPage(MainMenuPage.Tasks); yield return 1;
         var owner=nav.taskSystem; owner.SelectTab(TaskTab.Todo);
-        var tag=owner.Service.Snapshot.tags[0];
-        string id;
-        Check(owner.Service.Upsert(new QuestTask{title="Hard tagged",difficulty=TaskDifficulty.Hard,tagIds=new List<string>{tag.id}},null,out id),"Cannot seed task.");
-        Check(owner.Service.Upsert(new QuestTask{title="Easy tagged",difficulty=TaskDifficulty.Easy,tagIds=new List<string>{tag.id}},null,out id),"Cannot seed task.");
-        Check(owner.Service.Upsert(new QuestTask{title="Hard untagged",difficulty=TaskDifficulty.Hard},null,out id),"Cannot seed task.");
+        var tag=owner.Service.TagCatalog[0];
+        var seedHardtagged=owner.Service.UpsertAsync(new QuestTask{title="Hard tagged",difficulty=TaskDifficulty.Hard,tagIds=new List<string>{tag.id}},null);
+        foreach(var delay in SqlitePlayVerificationSupport.Wait(seedHardtagged)) yield return delay;
+        SqlitePlayVerificationSupport.Value(seedHardtagged);
+        var seedEasytagged=owner.Service.UpsertAsync(new QuestTask{title="Easy tagged",difficulty=TaskDifficulty.Easy,tagIds=new List<string>{tag.id}},null);
+        foreach(var delay in SqlitePlayVerificationSupport.Wait(seedEasytagged)) yield return delay;
+        SqlitePlayVerificationSupport.Value(seedEasytagged);
+        var seedHarduntagged=owner.Service.UpsertAsync(new QuestTask{title="Hard untagged",difficulty=TaskDifficulty.Hard},null);
+        foreach(var delay in SqlitePlayVerificationSupport.Wait(seedHarduntagged)) yield return delay;
+        SqlitePlayVerificationSupport.Value(seedHarduntagged);
         owner.filterButton.onClick.Invoke();yield return .3;
         var d=UnityEngine.Object.FindFirstObjectByType<TaskFilterDialog>();
         Check(d && d.difficultyPanel.activeSelf && !d.tagsPanel.activeSelf,"Initial panel selection wrong.");

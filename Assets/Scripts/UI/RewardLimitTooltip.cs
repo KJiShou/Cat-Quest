@@ -11,7 +11,7 @@ public sealed class RewardLimitTooltip : MonoBehaviour
     public TMP_Text taskValue, focusValue, ticketValue;
     public float twoRowHeight = 292, ticketHeight = 198;
     public float focusSessionTicketHeight = 220;
-    TaskService service;
+    SqlitePlayerService service;
     RewardLimitHoverTarget source;
     MainMenuNavigation navigation;
     MainMenuPage page;
@@ -34,7 +34,7 @@ public sealed class RewardLimitTooltip : MonoBehaviour
     }
     void OnEnable()
     {
-        service = GameDataManager.EnsureInstance().Tasks;
+        service = GameDataManager.EnsureInstance().Service;
         service.Changed += Refresh;
         canvas = GetComponentInParent<Canvas>().rootCanvas;
     }
