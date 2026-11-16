@@ -299,7 +299,9 @@ public sealed class BossPageUI : MonoBehaviour
         message.text=receipt.outcome==BattleOutcome.Victory ? "Victory"+(receipt.experience>0?$" · +{receipt.experience} EXP":"") : receipt.outcome==BattleOutcome.Defeat?"Defeat · Train and try again":receipt.outcome==BattleOutcome.Stopped?"Battle stopped":"Battle interrupted · Ticket restored";
         if(isActiveAndEnabled && (receipt.outcome==BattleOutcome.Victory || receipt.outcome==BattleOutcome.Defeat)) {
             resultAwaitingConfirmation=true;
-            if(actors.Ready&&victoryResultAt<=0){actors.StartExit(arena.StageCamera);walkingOut=true;}
+            // A defeated cat must finish and hold Die until the result is dismissed.
+            // StartExit rebinds its rig and plays Run, so it belongs only to victory.
+            if(receipt.outcome==BattleOutcome.Victory&&actors.Ready&&victoryResultAt<=0){actors.StartExit(arena.StageCamera);walkingOut=true;}
             int index=receipt.outcome==BattleOutcome.Victory?0:1;
             foreach(var panel in resultPanels)panel.SetActive(false);
             resultValues[index].text=index==0 ? (receipt.experience>0?$"+{receipt.experience}":"") : "Train and try again";

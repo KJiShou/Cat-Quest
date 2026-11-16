@@ -52,7 +52,7 @@ Master 选择器是 Canvas 的 StageSelection/Master 可编辑金色卡，复用
 
 EquipmentClaimUI 只保留一排宝箱，蓝紫黄表示三个 Boss 品质。每箱预览固定物品，提交成功后显示 Owned。锁定和已领也可使用不阻挡的真实属性悬停预览。服务胜场门槛和原子结算防早领重复，旧乱序获得装备保留，剩余仍可补齐。
 
-普通胜利成功提交后，猫先原地停留，等待现有 1.8 秒 Boss 倒下表现结束，再从右侧跑离并显示结果；Skip 与战败保留立即离场。Continue 立即播放局部 EndTransition，在遮挡下重置普通/当前关或切换已保存下一 Master，再播放 StartTransition。两个过渡是 Boss Arena 遮罩内现有预制体实例，有序列化绑定，不改全局过渡或顶栏侧栏。返回中忽略重复 Continue/Challenge/Stage，离页取消清理，失败回同关，下一战仍需确认扣券。
+普通胜利成功提交后，猫先原地停留，等待现有 1.8 秒 Boss 倒下表现结束，再从右侧跑离并显示结果；Skip 胜利仍立即跑步离场。普通失败和 Skip 失败均原地播放并保留猫的死亡动作，直至 Continue；战败不会跑步离场。Continue 立即播放局部 EndTransition，在遮挡下重置普通/当前关或切换已保存下一 Master，再播放 StartTransition。两个过渡是 Boss Arena 遮罩内现有预制体实例，有序列化绑定，不改全局过渡或顶栏侧栏。返回中忽略重复 Continue/Challenge/Stage，离页取消清理，失败回同关，下一战仍需确认扣券。
 
 ## 验证
 

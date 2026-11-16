@@ -82,6 +82,14 @@ public static class BossSkipVerification
         SessionState.SetBool(Flag, true); Resolution(1920, 1080); EditorApplication.isPaused=false; EditorApplication.isPlaying = true;
     }
     static int spent,wins;
+    static Vector3 defeatedPosition;
+    static void CheckDeath(BossPageUI panel,bool completed)
+    {
+        var state=panel.actors.Cat.GetComponentInChildren<Animator>().GetCurrentAnimatorStateInfo(0);
+        Check(state.IsName("Die"),"Defeated cat must play Die instead of Run");
+        Check(Vector3.Distance(panel.actors.Cat.position,defeatedPosition)<.001f,"Defeated cat must not run out of the arena");
+        if(completed)Check(state.normalizedTime>=1,"Cat death clip must finish while the result stays open");
+    }
     static void Begin(BossPageUI panel){panel.Action();panel.Confirm();Check(panel.IsBattling,"Cannot begin battle: "+panel.message.text);}
     static void Tick(){
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();var panel=nav.pages[3].GetComponent<BossPageUI>();var manager=GameDataManager.Instance;var service=manager.Tasks;var ui=panel.skipUI;
@@ -101,8 +109,8 @@ public static class BossSkipVerification
             if(panel.arena.IsLoading){next=EditorApplication.timeSinceStartup+.1;return;}
             Check(panel.arena.IsReady,"Orc arena failed to load");Begin(panel);
         }
-        if(step==6){FocusLayoutVerification.Click(ui.skip);Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&panel.resultPanels[1].activeSelf,"Skip fabricated a win");Capture("defeat-1280");}
-        if(step==7)panel.CloseResult();
+        if(step==6){FocusLayoutVerification.Click(ui.skip);Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&panel.resultPanels[1].activeSelf,"Skip fabricated a win");defeatedPosition=panel.actors.Cat.position;CheckDeath(panel,false);Capture("defeat-1280");}
+        if(step==7){CheckDeath(panel,true);Capture("defeat-held-1280");panel.CloseResult();}
         if(step==8){manager.PlayerData.experience=3000;manager.SaveData();panel.SelectStage(1);Begin(panel);saveLock=File.Open(manager.SavePath+".tmp",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);ui.skip.onClick.Invoke();Check(panel.actionLabel.text=="Retry Save"&&!ui.skip.gameObject.activeSelf,"Save failure not retryable");Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Running,"Failed save committed outcome");}
         if(step==9){saveLock.Dispose();saveLock=null;panel.Action();Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Victory&&service.Snapshot.bossProgress[0].wins==wins+1,"Retry did not settle once");panel.CloseResult();}
         if(step==10){
@@ -123,11 +131,26 @@ public static class BossSkipVerification
             var reloaded=new TaskService(new PlayerDataStore(manager.SavePath),new SystemTaskClock());
             Check(reloaded.Snapshot.battles.Last().outcome==BattleOutcome.Stopped&&reloaded.Tickets==spent,"Stopped entry and spent ticket must survive reload");
             panel.Confirm();nav.ShowPage(MainMenuPage.Boss);Check(!ui.skip.gameObject.activeSelf&&!panel.confirmation.activeSelf,"Stale stop/skip after reopen");
+            panel.SelectStage(1);
+        }
+        if(step==12){
+            if(panel.arena.IsLoading){next=EditorApplication.timeSinceStartup+.1;return;}
             Begin(panel);nav.ShowPage(MainMenuPage.Tasks);panel.SkipBattle();
             Check(nav.CurrentPage==MainMenuPage.Boss&&!panel.confirmation.activeSelf&&service.Snapshot.battles.Last().outcome==BattleOutcome.Victory,"A completed battle must invalidate unconfirmed navigation");
             panel.Confirm();Check(nav.CurrentPage==MainMenuPage.Boss&&panel.resultPanels[0].activeSelf,"Stale leave confirmation must not hide the result");
         }
-        if(step==12){File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: single-click skip, deterministic win/loss, duplicate guard, save retry; navigation confirmation/cancel/default focus; failed stop remains visible, retry navigates once, original destination retained, reload; natural result invalidates stale leave; page close/reopen.");EditorApplication.isPlaying=false;return;}
-        step++;next=EditorApplication.timeSinceStartup+1;
+        if(step==13){panel.CloseResult();Resolution(1920,1080);}
+        if(step==14){manager.PlayerData.experience=550;manager.SaveData();Begin(panel);}
+        if(step==15){
+            if(panel.IsBattling){next=EditorApplication.timeSinceStartup+.05;return;}
+            Check(service.Snapshot.battles.Last().outcome==BattleOutcome.Defeat&&panel.resultPanels[1].activeSelf,"Natural defeat result missing");
+            defeatedPosition=panel.actors.Cat.position;CheckDeath(panel,false);Capture("natural-defeat-1920");
+        }
+        if(step==16){CheckDeath(panel,true);Capture("natural-defeat-held-1920");panel.CloseResult();}
+        if(step==17){
+            Check(panel.actors.Cat.GetComponentInChildren<Animator>().GetCurrentAnimatorStateInfo(0).IsName("Idle"),"Continue must restore the cat after defeat");
+            File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: single-click skip, deterministic win/loss, duplicate guard, save retry; navigation confirmation/cancel/default focus; failed stop remains visible, retry navigates once, original destination retained, reload; natural result invalidates stale leave; page close/reopen; skipped and natural defeat play and hold cat death without exit movement; Continue restores Idle.");EditorApplication.isPlaying=false;return;
+        }
+        step++;next=EditorApplication.timeSinceStartup+(step==7||step==16?3:1);
     }
 }
