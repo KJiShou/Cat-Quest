@@ -326,7 +326,8 @@ public static class LeaderboardPlayVerification
     static IEnumerator Run()
     {
         var nav=UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>();Check(nav && EventSystem.current,"Navigation missing");
-        Check(Path.GetFullPath(GameDataManager.EnsureInstance().SavePath)==Path.GetFullPath(Folder+"/save.json"),"Live save used");
+        Check(Path.GetFullPath(GameDataManager.EnsureInstance().SavePath)==Path.GetFullPath(Folder+"/save.sqlite3"),"Live save used");
+        foreach(var wait in TaskCalendarPlayVerification.Await(GameDataManager.Instance.Ready))yield return wait;
         GameObject reference=null;var source=new Source();
         try
         {
@@ -384,6 +385,8 @@ public static class LeaderboardPlayVerification
                 var hover=detail.equipmentHover;
                 Check(hover&&hover.gameObject.activeInHierarchy&&hover.IsHoverPreview,"Shared Cat Home hover missing");
                 Check(hover.card.rect.height<600,"Legendary hover retained empty bottom space");
+                hover.equipmentEffect.SendMessage("OnApplicationFocus",true);
+                Check(hover.equipmentEffect.IsPlaying&&!hover.equipmentEffect.view.raycastTarget,"Published Legendary hover has nonblocking particles");
                 Check(hover.itemName.text=="Magic Staff"&&hover.level.text==panel.Snapshot.leaders[0].weaponLevel.ToString()&&hover.tier.text=="Legendary","Hover did not use published gear");
                 Check(hover.abilityText.gameObject.activeSelf&&hover.abilityText.text.Contains("5th"),"Legendary ability missing");
                 Check(!hover.equip.gameObject.activeSelf&&!hover.upgrade.gameObject.activeSelf&&!hover.close.gameObject.activeSelf,"Remote hover exposed local actions");
@@ -393,6 +396,7 @@ public static class LeaderboardPlayVerification
                 Capture("player-gear-hint-"+suffix);yield return .2;
                 ExecuteEvents.Execute(gearControl.gameObject,Pointer(gearControl),ExecuteEvents.pointerExitHandler);yield return .2;
                 Check(!hover.gameObject.activeSelf,"Gear tooltip stuck after pointer exit");
+                Check(!hover.equipmentEffect.IsPlaying,"Pointer exit clears published hover particles");
                 gearControl.Select();yield return .2;Check(hover.gameObject.activeSelf,"Keyboard gear preview missing");
                 var hoverTarget=gearControl.GetComponent<LeaderboardEquipmentHover>();
                 foreach(var corner in new[]{new Vector2(2,2),new Vector2(size.x-2,size.y-2)}){
@@ -412,6 +416,7 @@ public static class LeaderboardPlayVerification
                 detail.Show(legacy,51,LeaderboardKind.Power,selectedRow.gameObject);yield return .3;
                 Check(detail.characterPreview.EquipmentAura.Tier==0,"Legacy player borrowed local/previous aura");
                 Check(detail.equipmentNames.All(t=>t.text=="Not shared yet"),"Legacy profile fabricated gear");Capture("player-legacy-"+suffix);yield return .2;detail.Close();
+                Check(detail.equipmentEffects.All(e=>!e.IsPlaying),"Legacy/closed profile has no equipment particles");
                 legacy.weaponId=legacy.bodyId=legacy.headId="";
                 detail.Show(legacy,51,LeaderboardKind.Power,selectedRow.gameObject);yield return .2;
                 Check(detail.equipmentNames.All(t=>t.text=="No equipment"),"Empty slots indistinguishable from legacy");detail.Close();
@@ -419,9 +424,13 @@ public static class LeaderboardPlayVerification
                 legacy.weaponLevel=legacy.bodyLevel=legacy.headLevel=1;
                 detail.Show(legacy,51,LeaderboardKind.Power,selectedRow.gameObject);yield return .5;
                 Check(detail.characterPreview.EquipmentAura.Tier==3&&detail.characterPreview.EquipmentAura.Pieces==3,"Three-piece remote aura mismatch");
+                foreach(var glow in detail.equipmentEffects)glow.SendMessage("OnApplicationFocus",true);
+                Check(detail.equipmentEffects.Length==3&&detail.equipmentEffects.All(e=>e.IsPlaying&&!e.view.raycastTarget),"Remote Demon slots show nonblocking particles");
                 Capture("player-full-set-"+suffix);yield return .2;detail.Close();
                 legacy.weaponId="chest-armor_gauntletsgold";legacy.bodyId="chest-armor_heavyarmor";legacy.headId="chest-armor_helmgolden";
                 detail.Show(legacy,51,LeaderboardKind.Power,selectedRow.gameObject);yield return .5;
+                foreach(var glow in detail.equipmentEffects)glow.SendMessage("OnApplicationFocus",true);
+                Check(detail.equipmentEffects.All(e=>e.IsPlaying),"Remote Legendary slots show particles");
                 Check(detail.characterPreview.EquipmentAura.Tier==CharacterEquipmentAura.LegendaryTier && detail.characterPreview.EquipmentAura.Circle.transform.childCount==3,"Legendary three rings missing");
                 Capture("player-legendary-three-"+suffix);yield return .2;detail.Close();
                 legacy.totalFocusMinutes=legacy.totalTasksCompleted=long.MaxValue;legacy.power=int.MaxValue;legacy.bossStage=int.MaxValue;

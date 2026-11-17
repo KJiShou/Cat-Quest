@@ -12,6 +12,7 @@ public sealed class LeaderboardPlayerUI : MonoBehaviour, IPointerClickHandler
     public TMP_Text playerName, subtitle, publication;
     public TMP_Text[] metrics, equipmentNames, equipmentDetails;
     public Image[] equipmentIcons, equipmentFrames;
+    public LootRevealEffect[] equipmentEffects;
     public Sprite[] slotIcons;
     public LootArt lootArt;
     public CharacterHomePreview characterPreview;
@@ -45,13 +46,17 @@ public sealed class LeaderboardPlayerUI : MonoBehaviour, IPointerClickHandler
             equipmentDetails[i].text = definition == null ? EquipmentRules.SlotName(slot) :
                 $"{EquipmentRules.SlotName(slot)} · {(definition.IsLoot ? LootRules.Rarity(definition.Tier) : EquipmentRules.BossName(definition.Tier) + " Set")}\nLevel {level:N0} · {EquipmentRules.Effect(definition, level)}" +
                 (EquipmentRules.Ability(definition) == EquipmentAbility.None ? "" : "\n" + EquipmentRules.AbilityDescription(definition));
-            equipmentIcons[i].sprite = definition != null && definition.IsLoot && lootArt ? lootArt.Icon(definition.Id) : slotIcons[i];
+            equipmentIcons[i].sprite = definition != null && lootArt && lootArt.Icon(definition.Id) ? lootArt.Icon(definition.Id) : slotIcons[i];
             equipmentIcons[i].color = definition == null ? new Color(.65f,.7f,.78f) : Color.white;
             equipmentFrames[i].color = definition == null ? new Color(.91f,.94f,.98f) : LootShopUI.Tint(definition.Tier);
         }
         CharacterEquipmentAura.SelectEquipment(player.weaponId, player.bodyId, player.headId, out int auraTier, out int auraPieces);
         characterPreview.SetRemoteEquipment(auraTier, auraPieces);
         gameObject.SetActive(true); transform.SetAsLastSibling(); close.Select();
+        for(int i=0;i<3;i++)if(equipmentEffects!=null&&i<equipmentEffects.Length&&equipmentEffects[i]){
+            if(EquipmentRules.Find(player.EquipmentId((EquipmentSlot)i))?.Tier==3)equipmentEffects[i].Play();
+            else equipmentEffects[i].Stop();
+        }
     }
     public void Close() { gameObject.SetActive(false); }
     public void ShowEquipment(LeaderboardEquipmentHover source,Vector2 position)

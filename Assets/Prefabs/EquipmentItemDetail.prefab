@@ -1775,6 +1775,7 @@ MonoBehaviour:
   nextIcon: {fileID: 8633228049297767231}
   grade: {fileID: 1204289466354925542}
   itemBackground: {fileID: 4043833591138624799}
+  equipmentEffect: {fileID: 8517003418495436795}
   abilityText: {fileID: 2043069836232577621}
   abilityIcon: {fileID: 4350930303295949361}
   abilityIcons:
@@ -4087,6 +4088,7 @@ GameObject:
   - component: {fileID: 6292195098245158754}
   - component: {fileID: 7118914677546530306}
   - component: {fileID: 4043833591138624799}
+  - component: {fileID: 8517003418495436795}
   m_Layer: 5
   m_Name: Item
   m_TagString: Untagged
@@ -4108,6 +4110,7 @@ RectTransform:
   m_Children:
   - {fileID: 2293977812628578962}
   - {fileID: 2386533040829902432}
+  - {fileID: 2038379331843473886}
   m_Father: {fileID: 2595648009206674903}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -4153,6 +4156,19 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 2
+--- !u!114 &8517003418495436795
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7180758411274475653}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11e704cb3da9acc4994142ef1099ca1c, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::LootRevealEffect
+  view: {fileID: 2103471544009925616}
 --- !u!1 &7371045601881960718
 GameObject:
   m_ObjectHideFlags: 0
@@ -4289,6 +4305,72 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
   visual: {fileID: 0}
   shine: {fileID: 0}
+--- !u!1 &7400694622635528387
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2038379331843473886}
+  - component: {fileID: 1915550184080879271}
+  - component: {fileID: 2103471544009925616}
+  m_Layer: 0
+  m_Name: LegendaryEffect
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!224 &2038379331843473886
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400694622635528387}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6292195098245158754}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: -0.25, y: -0.25}
+  m_AnchorMax: {x: 1.25, y: 1.25}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &1915550184080879271
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400694622635528387}
+  m_CullTransparentMesh: 1
+--- !u!114 &2103471544009925616
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400694622635528387}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 08695b17b21e4b241b16cc9f6960b012, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::ChestRewardParticles
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  particleSprite: {fileID: 0}
 --- !u!1 &7444385562295918234
 GameObject:
   m_ObjectHideFlags: 0

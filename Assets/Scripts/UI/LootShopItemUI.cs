@@ -11,6 +11,7 @@ public sealed class LootShopItemUI : MonoBehaviour, IPointerEnterHandler, IPoint
     public Image ownedIcon;
     public CanvasGroup visibility;
     public Button button;
+    public LootRevealEffect revealEffect;
     LootShopUI owner;
     string itemId;
     public void Bind(LootShopUI shop,string id){owner=shop;itemId=id;}

@@ -167,6 +167,7 @@ public sealed class LootShopUI : MonoBehaviour
             }
             flyingIcon.gameObject.SetActive(false);cell.visibility.alpha=1;RevealedCount++;
             cell.icon.GetComponent<JuicyButtonMesh>()?.PlayRewardPulse();
+            if(EquipmentRules.Find(shown.drops[i].itemId).Tier==3)cell.revealEffect?.Play();
             if(playRewardSound)SettingsAudio.Instance?.PlayEquipmentClaim();
             float landed=Time.unscaledTime;
             while(Time.unscaledTime-landed<flightGap){UpdateChestFrame(frames,Time.unscaledTime-started);yield return null;}
@@ -189,10 +190,12 @@ public sealed class LootShopUI : MonoBehaviour
         StopAnimation();skip.gameObject.SetActive(false);results.gameObject.SetActive(true);done.gameObject.SetActive(true);
         var frames=art.Opening(shown.drops.Max(d=>EquipmentRules.Find(d.itemId).Tier));if(frames.Length>0)ApplyChestFrame(frames[frames.Length-1]);chest.gameObject.SetActive(true);
         foreach(var item in revealedItems){item.visibility.alpha=1;item.visibility.interactable=true;item.visibility.blocksRaycasts=true;}RevealedCount=revealedItems.Count;
+        for(int i=0;i<revealedItems.Count;i++)if(EquipmentRules.Find(shown.drops[i].itemId).Tier==3)revealedItems[i].revealEffect?.Play();
         if(playRewardSound){playRewardSound=false;SettingsAudio.Instance?.PlayEquipmentClaim();}
         keyboard.Open(new[]{done}.Concat(revealedItems.Select(c=>c.button)).ToArray(),CloseResults);
     }
-    void CloseResults(){HideHover();StopAnimation();reveal.SetActive(false);busy=false;Refresh();FocusMain();}
+    void StopRevealEffects(){foreach(var item in revealedItems)if(item)item.revealEffect?.Stop();}
+    void CloseResults(){HideHover();StopAnimation();StopRevealEffects();reveal.SetActive(false);busy=false;Refresh();FocusMain();}
     public void Close(){if(hoverSource){HideHover();return;}if(informationPanel.activeSelf){CloseInformation();return;}if(confirmation.activeSelf){Cancel();return;}if(reveal.activeSelf){if(Revealing)FinishReveal();else CloseResults();return;}gameObject.SetActive(false);}
     public static Color Tint(int tier)=>tier==3?new Color32(255,237,170,255):tier==2?new Color32(235,212,255,255):new Color32(187,240,255,255);
 }

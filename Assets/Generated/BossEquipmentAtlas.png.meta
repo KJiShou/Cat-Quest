@@ -1,0 +1,512 @@
+fileFormatVersion: 2
+guid: 8a0a16145bad33e4b8b8145e0c23987e
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 2652860594836232989
+    second: BossEquipmentAtlas_0
+  - first:
+      213: -4848408881179235977
+    second: BossEquipmentAtlas_1
+  - first:
+      213: 6463077231947035015
+    second: BossEquipmentAtlas_2
+  - first:
+      213: 2475983548622365787
+    second: BossEquipmentAtlas_3
+  - first:
+      213: 817576984985006408
+    second: BossEquipmentAtlas_4
+  - first:
+      213: 7005775960196812142
+    second: BossEquipmentAtlas_5
+  - first:
+      213: 5746539898616145524
+    second: BossEquipmentAtlas_6
+  - first:
+      213: -111545609382471351
+    second: BossEquipmentAtlas_7
+  - first:
+      213: -5172398280333595524
+    second: BossEquipmentAtlas_8
+  - first:
+      213: -4304882350015313537
+    second: BossEquipmentAtlas_9
+  - first:
+      213: 4281820334890156113
+    second: BossEquipmentAtlas_10
+  - first:
+      213: 57229738913572601
+    second: BossEquipmentAtlas_11
+  - first:
+      213: -5071317798854591379
+    second: BossEquipmentAtlas_12
+  - first:
+      213: 5337686490492916958
+    second: BossEquipmentAtlas_13
+  - first:
+      213: -426793493919300328
+    second: BossEquipmentAtlas_14
+  - first:
+      213: -4233934281185297544
+    second: BossEquipmentAtlas_15
+  - first:
+      213: -469504027664989460
+    second: BossEquipmentAtlas_16
+  - first:
+      213: -1271953681054151173
+    second: BossEquipmentAtlas_17
+  - first:
+      213: 8421908962728209914
+    second: BossEquipmentAtlas_18
+  - first:
+      213: -8581805285026549548
+    second: BossEquipmentAtlas_19
+  - first:
+      213: -3452850615520838717
+    second: BossEquipmentAtlas_20
+  - first:
+      213: -1833457521174859481
+    second: BossEquipmentAtlas_21
+  - first:
+      213: -5995977040135734428
+    second: BossEquipmentAtlas_22
+  - first:
+      213: 4503637666855507002
+    second: BossEquipmentAtlas_23
+  - first:
+      213: 1685604032753468867
+    second: BossEquipmentAtlas_24
+  - first:
+      213: -1691654021253889776
+    second: BossEquipmentAtlas_25
+  - first:
+      213: -8848794884021999258
+    second: BossEquipmentAtlas_26
+  - first:
+      213: -403319430754158220
+    second: BossEquipmentAtlas_27
+  - first:
+      213: -1840537675675713421
+    second: BossEquipmentAtlas_28
+  - first:
+      213: 1446904979168023997
+    second: BossEquipmentAtlas_29
+  - first:
+      213: -7800781583121069138
+    second: BossEquipmentAtlas_30
+  - first:
+      213: 1353592678567531471
+    second: BossEquipmentAtlas_31
+  - first:
+      213: -5960162041753453489
+    second: BossEquipmentAtlas_32
+  - first:
+      213: 1151524698450879332
+    second: BossEquipmentAtlas_33
+  - first:
+      213: 3744042422524921338
+    second: BossEquipmentAtlas_34
+  - first:
+      213: 5550793689364595096
+    second: BossEquipmentAtlas_35
+  - first:
+      213: -3910427641206496047
+    second: BossEquipmentAtlas_36
+  - first:
+      213: 113031400864862638
+    second: boss1-weapon
+  - first:
+      213: 2511370591889251467
+    second: boss1-body
+  - first:
+      213: 8852508780030366167
+    second: boss1-head
+  - first:
+      213: -1628050747583313235
+    second: boss2-weapon
+  - first:
+      213: 8851900989948903600
+    second: boss2-body
+  - first:
+      213: 3795717471287307353
+    second: boss2-head
+  - first:
+      213: 8834145738801580350
+    second: boss3-weapon
+  - first:
+      213: -1429926793866115608
+    second: boss3-body
+  - first:
+      213: 3278171483454241016
+    second: boss3-head
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: boss1-weapon
+      rect:
+        serializedVersion: 2
+        x: 80
+        y: 858
+        width: 278
+        height: 319
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ea1d301d571919100800000000000000
+      internalID: 113031400864862638
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: boss1-body
+      rect:
+        serializedVersion: 2
+        x: 457
+        y: 865
+        width: 337
+        height: 297
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b8cdbec5f3e2ad220800000000000000
+      internalID: 2511370591889251467
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: boss1-head
+      rect:
+        serializedVersion: 2
+        x: 872
+        y: 899
+        width: 312
+        height: 232
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7d19cb435dd6ada70800000000000000
+      internalID: 8852508780030366167
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: boss2-weapon
+      rect:
+        serializedVersion: 2
+        x: 76
+        y: 456
+        width: 296
+        height: 333
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: daaccf988700869e0800000000000000
+      internalID: -1628050747583313235
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: boss2-body
+      rect:
+        serializedVersion: 2
+        x: 444
+        y: 466
+        width: 361
+        height: 316
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0b045dc0d0548da70800000000000000
+      internalID: 8851900989948903600
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: boss2-head
+      rect:
+        serializedVersion: 2
+        x: 851
+        y: 480
+        width: 350
+        height: 288
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 95ce2d7fde81da430800000000000000
+      internalID: 3795717471287307353
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: boss3-weapon
+      rect:
+        serializedVersion: 2
+        x: 85
+        y: 63
+        width: 275
+        height: 334
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e398c4f7eb0399a70800000000000000
+      internalID: 8834145738801580350
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: boss3-body
+      rect:
+        serializedVersion: 2
+        x: 454
+        y: 82
+        width: 345
+        height: 301
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8e50cc43821e72ce0800000000000000
+      internalID: -1429926793866115608
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: boss3-head
+      rect:
+        serializedVersion: 2
+        x: 880
+        y: 81
+        width: 291
+        height: 304
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8f8fa1088976e7d20800000000000000
+      internalID: 3278171483454241016
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    outline: []
+    customData:
+    physicsShape: []
+    bones: []
+    spriteID:
+    internalID: 0
+    vertices: []
+    indices:
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      BossEquipmentAtlas_0: 2652860594836232989
+      BossEquipmentAtlas_1: -4848408881179235977
+      BossEquipmentAtlas_10: 4281820334890156113
+      BossEquipmentAtlas_11: 57229738913572601
+      BossEquipmentAtlas_12: -5071317798854591379
+      BossEquipmentAtlas_13: 5337686490492916958
+      BossEquipmentAtlas_14: -426793493919300328
+      BossEquipmentAtlas_15: -4233934281185297544
+      BossEquipmentAtlas_16: -469504027664989460
+      BossEquipmentAtlas_17: -1271953681054151173
+      BossEquipmentAtlas_18: 8421908962728209914
+      BossEquipmentAtlas_19: -8581805285026549548
+      BossEquipmentAtlas_2: 6463077231947035015
+      BossEquipmentAtlas_20: -3452850615520838717
+      BossEquipmentAtlas_21: -1833457521174859481
+      BossEquipmentAtlas_22: -5995977040135734428
+      BossEquipmentAtlas_23: 4503637666855507002
+      BossEquipmentAtlas_24: 1685604032753468867
+      BossEquipmentAtlas_25: -1691654021253889776
+      BossEquipmentAtlas_26: -8848794884021999258
+      BossEquipmentAtlas_27: -403319430754158220
+      BossEquipmentAtlas_28: -1840537675675713421
+      BossEquipmentAtlas_29: 1446904979168023997
+      BossEquipmentAtlas_3: 2475983548622365787
+      BossEquipmentAtlas_30: -7800781583121069138
+      BossEquipmentAtlas_31: 1353592678567531471
+      BossEquipmentAtlas_32: -5960162041753453489
+      BossEquipmentAtlas_33: 1151524698450879332
+      BossEquipmentAtlas_34: 3744042422524921338
+      BossEquipmentAtlas_35: 5550793689364595096
+      BossEquipmentAtlas_36: -3910427641206496047
+      BossEquipmentAtlas_4: 817576984985006408
+      BossEquipmentAtlas_5: 7005775960196812142
+      BossEquipmentAtlas_6: 5746539898616145524
+      BossEquipmentAtlas_7: -111545609382471351
+      BossEquipmentAtlas_8: -5172398280333595524
+      BossEquipmentAtlas_9: -4304882350015313537
+      boss1-body: 2511370591889251467
+      boss1-head: 8852508780030366167
+      boss1-weapon: 113031400864862638
+      boss2-body: 8851900989948903600
+      boss2-head: 3795717471287307353
+      boss2-weapon: -1628050747583313235
+      boss3-body: -1429926793866115608
+      boss3-head: 3278171483454241016
+      boss3-weapon: 8834145738801580350
+  mipmapLimitGroupName:
+  pSDRemoveMatte: 0
+  userData:
+  assetBundleName:
+  assetBundleVariant:

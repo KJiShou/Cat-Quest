@@ -1381,6 +1381,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 8202973374240293644}
   visibility: {fileID: 0}
   button: {fileID: 3506089252939461501}
+  revealEffect: {fileID: 0}
 --- !u!114 &3506089252939461501
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1635,6 +1636,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 5208398583012205963}
   visibility: {fileID: 0}
   button: {fileID: 4220183760078827080}
+  revealEffect: {fileID: 0}
 --- !u!114 &4220183760078827080
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2048,6 +2050,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 2922570413405453174}
   visibility: {fileID: 0}
   button: {fileID: 602061626382096649}
+  revealEffect: {fileID: 0}
 --- !u!114 &602061626382096649
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3180,6 +3183,72 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!1 &1051881045902257742
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7093538111499110982}
+  - component: {fileID: 1047002808160105985}
+  - component: {fileID: 5511652371257057055}
+  m_Layer: 0
+  m_Name: LegendaryEffect
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!224 &7093538111499110982
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1051881045902257742}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6197980959869907403}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: -0.25, y: -0.25}
+  m_AnchorMax: {x: 1.25, y: 1.25}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &1047002808160105985
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1051881045902257742}
+  m_CullTransparentMesh: 1
+--- !u!114 &5511652371257057055
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1051881045902257742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 08695b17b21e4b241b16cc9f6960b012, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::ChestRewardParticles
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  particleSprite: {fileID: 0}
 --- !u!1 &1076917002902005435
 GameObject:
   m_ObjectHideFlags: 0
@@ -4611,6 +4680,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 2101602330488214865}
   visibility: {fileID: 0}
   button: {fileID: 5052056286659341683}
+  revealEffect: {fileID: 0}
 --- !u!114 &5052056286659341683
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5139,6 +5209,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 2554362695175320791}
   visibility: {fileID: 0}
   button: {fileID: 2668281851417147779}
+  revealEffect: {fileID: 0}
 --- !u!114 &2668281851417147779
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6125,6 +6196,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 7448549199881471052}
   visibility: {fileID: 0}
   button: {fileID: 1330322912440158346}
+  revealEffect: {fileID: 0}
 --- !u!114 &1330322912440158346
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6599,6 +6671,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 3937092488171469005}
   visibility: {fileID: 0}
   button: {fileID: 3590545734849391057}
+  revealEffect: {fileID: 0}
 --- !u!114 &3590545734849391057
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8966,6 +9039,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 830908708179358594}
   visibility: {fileID: 0}
   button: {fileID: 4328100228087249922}
+  revealEffect: {fileID: 0}
 --- !u!114 &4328100228087249922
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -16046,6 +16120,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 6395313705677486207}
   visibility: {fileID: 0}
   button: {fileID: 5733060826126295916}
+  revealEffect: {fileID: 0}
 --- !u!114 &5733060826126295916
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17842,6 +17917,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 2825395044599411324}
   visibility: {fileID: 0}
   button: {fileID: 8683173564371693657}
+  revealEffect: {fileID: 0}
 --- !u!114 &8683173564371693657
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -18343,6 +18419,7 @@ GameObject:
   - component: {fileID: 4473099513945193482}
   - component: {fileID: 6593229340487556025}
   - component: {fileID: 4102240075681615227}
+  - component: {fileID: 4956803923329987415}
   m_Layer: 0
   m_Name: ResultTemplate
   m_TagString: Untagged
@@ -18364,6 +18441,7 @@ RectTransform:
   m_Children:
   - {fileID: 5601279811408538040}
   - {fileID: 4400991820447999624}
+  - {fileID: 7093538111499110982}
   - {fileID: 7291190856793666751}
   - {fileID: 3238560775364850531}
   - {fileID: 2226438833165421598}
@@ -18449,6 +18527,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 0}
   visibility: {fileID: 4473099513945193482}
   button: {fileID: 6593229340487556025}
+  revealEffect: {fileID: 4956803923329987415}
 --- !u!225 &4473099513945193482
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -18519,6 +18598,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::JuicyButton
   visual: {fileID: 0}
   shine: {fileID: 0}
+--- !u!114 &4956803923329987415
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5005766549700299535}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11e704cb3da9acc4994142ef1099ca1c, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::LootRevealEffect
+  view: {fileID: 5511652371257057055}
 --- !u!1 &5070039415105911030
 GameObject:
   m_ObjectHideFlags: 0
@@ -19732,6 +19824,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 1660579552735571276}
   visibility: {fileID: 0}
   button: {fileID: 6686204050101505467}
+  revealEffect: {fileID: 0}
 --- !u!114 &6686204050101505467
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -22559,6 +22652,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 5163751528650007171}
   visibility: {fileID: 0}
   button: {fileID: 3187972084781595083}
+  revealEffect: {fileID: 0}
 --- !u!114 &3187972084781595083
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -22813,6 +22907,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 3431626982157603555}
   visibility: {fileID: 0}
   button: {fileID: 7370501171588253328}
+  revealEffect: {fileID: 0}
 --- !u!114 &7370501171588253328
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -24191,6 +24286,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 501809181446706900}
   visibility: {fileID: 0}
   button: {fileID: 8534483876839615529}
+  revealEffect: {fileID: 0}
 --- !u!114 &8534483876839615529
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -26334,6 +26430,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 8679081909716325066}
   visibility: {fileID: 0}
   button: {fileID: 4157634123412205782}
+  revealEffect: {fileID: 0}
 --- !u!114 &4157634123412205782
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -28023,6 +28120,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 8912404067196926094}
   visibility: {fileID: 0}
   button: {fileID: 3125853612761189684}
+  revealEffect: {fileID: 0}
 --- !u!114 &3125853612761189684
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -28339,6 +28437,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 1457248274081297225}
   visibility: {fileID: 0}
   button: {fileID: 12778737245158170}
+  revealEffect: {fileID: 0}
 --- !u!114 &12778737245158170
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29599,6 +29698,7 @@ MonoBehaviour:
   ownedIcon: {fileID: 6485254592331994670}
   visibility: {fileID: 0}
   button: {fileID: 3737076713666718783}
+  revealEffect: {fileID: 0}
 --- !u!114 &3737076713666718783
 MonoBehaviour:
   m_ObjectHideFlags: 0

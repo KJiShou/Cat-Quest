@@ -1,0 +1,11 @@
+# Boss equipment artwork
+
+Generated with the built-in image generation tool on 2026-11-17.
+
+Asset: `Assets/Generated/BossEquipmentAtlas.png`, a transparent 3 × 3 atlas. Rows are Cyclope, Orc and Demon; columns are Weapon, Body and Head. Unity sprite rectangles trim transparent margins without modifying the generated pixels. `LootArt.bossIcons` binds the nine existing equipment IDs to these sprites. Rewards, stats, set bonuses and saved equipment IDs are unchanged.
+
+Style references: the existing Layer Lab Minimal-HeroEquipIcons `Armor_HeavyArmor`, `Armor_HelmGolden` and `Weapon_ShortSword` 512px icons. Vendor artwork is unchanged.
+
+## Generation prompt
+
+Create a production game equipment SPRITE ATLAS, a single square transparent PNG containing exactly NINE isolated item icons on a precise uniform 3 by 3 grid. Style reference images are existing loot equipment: match their thick BLACK rounded outlines, chunky compact silhouettes, flat bright colors, two-tone cel shading and simple mobile RPG cartoon illustration. No realistic rendering, no gradients, no glow, no shadows outside items. Each cell has generous transparent padding (20% on all sides); all items entirely within their own cell, equal apparent scale. NO text, labels, frames, cards, dividers, background, characters, hands. Equipment only. Column order WEAPON, BODY ARMOUR, HEAD ACCESSORY. Row 1 Cyclope set: chunky stone-grey short sword with brown leather grip and a single turquoise eye motif on guard, matching grey stone breastplate with brown leather straps and one turquoise eye medallion, matching grey helmet/headband with one turquoise eye motif (wearable equipment, not a creature head). Row 2 Orc set: chunky green-steel cleaver sword with brown grip and ivory tusk guard, green-steel chest armour with brown leather and two small ivory tusks at shoulders, matching green helmet with two ivory tusks. Row 3 Demon set: dark purple short sword with crimson inset and gold guard, dark purple breastplate with crimson central gem and gold trim, dark purple horned helmet with short ivory horns and crimson gem. All weapons diagonal lower-left handle to upper-right tip; armour and helmets front-facing slightly three-quarter as reference. Designs must be bold legible at 64px with few details. Keep thick black contours consistent across all nine. True alpha transparent background.

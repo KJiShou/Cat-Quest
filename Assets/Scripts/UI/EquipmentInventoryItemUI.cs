@@ -9,4 +9,5 @@ public sealed class EquipmentInventoryItemUI : MonoBehaviour
     public TMP_Text level;
     public GameObject equipped;
     public GameObject upgradeAvailable;
+    public LootRevealEffect legendaryEffect;
 }

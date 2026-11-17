@@ -31,6 +31,16 @@ MonoBehaviour:
   - {fileID: 21300000, guid: 58e0042d502a54a2db06f790f672161e, type: 3}
   - {fileID: 21300000, guid: 920c15bccb35f4a43b9e2e89c13893a7, type: 3}
   - {fileID: 21300000, guid: 1b8103cfd16cb428db0cb1aeaa680092, type: 3}
+  bossIcons:
+  - {fileID: 113031400864862638, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
+  - {fileID: 2511370591889251467, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
+  - {fileID: 8852508780030366167, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
+  - {fileID: -1628050747583313235, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
+  - {fileID: 8851900989948903600, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
+  - {fileID: 3795717471287307353, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
+  - {fileID: 8834145738801580350, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
+  - {fileID: -1429926793866115608, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
+  - {fileID: 3278171483454241016, guid: 8a0a16145bad33e4b8b8145e0c23987e, type: 3}
   frameCanvasSize: {x: 1200, y: 1200}
   releaseFrame: 28
   blueOpening:

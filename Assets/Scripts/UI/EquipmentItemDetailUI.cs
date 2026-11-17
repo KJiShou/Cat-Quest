@@ -12,6 +12,7 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
     public TMP_Text itemName, tier, level, currentLabel, currentValue, nextValue, setInfo, status, equipLabel, price;
     public Image itemIcon, currentIcon, nextIcon, grade;
     public Image itemBackground;
+    public LootRevealEffect equipmentEffect;
     public TMP_Text abilityText;
     public Image abilityIcon;
     public Sprite[] abilityIcons;
@@ -28,6 +29,7 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
     public Image[] setBonusCards, setProgressPips;
     public void ShowSet(int tierIndex,int pieces)
     {
+        if(equipmentEffect){if(tierIndex==3)equipmentEffect.Play();else equipmentEffect.Stop();}
         var accent=tierIndex==1?new Color32(67,164,240,255):tierIndex==2?new Color32(170,100,225,255):new Color32(235,174,42,255);
         grade.sprite=tierLabels[tierIndex-1];grade.color=Color.white;
         if(itemBackground)itemBackground.color=LootShopUI.Tint(tierIndex);

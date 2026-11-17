@@ -177,14 +177,64 @@ public static class LootShopPlayVerification
             LootReceipt receipt=null;var draw=(System.Threading.Tasks.Task<OperationResult<LootReceipt>>)typeof(SqlitePlayerService).GetMethod("DrawLootAsync",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(service,args);
             foreach(var wait in TaskCalendarPlayVerification.Await(draw,value=>receipt=value))yield return wait;
             typeof(LootShopUI).GetMethod("Show",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(shop,new object[]{receipt,true});
+            // The editor may be in the background. Establish a focused fixture;
+            // focus-loss/resume is exercised separately below.
+            foreach(var glow in shop.results.GetComponentsInChildren<LootRevealEffect>())glow.SendMessage("OnApplicationFocus",true);
+            bool sawLegendaryEffect=false;
             for(int frame=0;frame<12;frame++){
+                var effects=shop.results.GetComponentsInChildren<LootRevealEffect>();
+                if(effects.Any(e=>e.IsPlaying))sawLegendaryEffect=true;
+                if(tier!=3)Check(effects.All(e=>!e.IsPlaying),"Only Legendary drops play the Legendary particles");
                 if(shop.Revealing){var sprite=shop.chest.sprite;Check(Vector2.Distance(shop.chest.rectTransform.sizeDelta,sprite.rect.size*shop.chestFrameScale)<.01f,"Stable original-canvas frame scale");}
                 Capture("tier-"+tier+"-"+frame.ToString("00"));yield return .12;
             }
+            Check(tier!=3||sawLegendaryEffect,"Committed Legendary landing plays the Legendary particles");
             yield return .5;shop.FinishReveal();Capture("tier-"+tier+"-result");yield return .2;
+            Check(shop.results.GetComponentsInChildren<LootRevealEffect>().All(e=>e.IsPlaying==(tier==3)),"Reveal all keeps Legendary glow and leaves other rarities plain");
+            if(tier==3){
+                var effect=shop.results.GetComponentInChildren<LootRevealEffect>();
+                Check(effect&&effect.view&&!effect.view.raycastTarget,"Serialized nonblocking Legendary effect");
+                var rewardCard=effect.GetComponent<LootShopItemUI>().background.rectTransform;
+                var effectRect=effect.view.rectTransform;
+                Check(Vector3.Distance(rewardCard.TransformPoint(rewardCard.rect.center),effectRect.TransformPoint(effectRect.rect.center))<.1f,"Legendary effect centered on entire result card");
+                Check(effectRect.rect.width>=rewardCard.rect.width*1.4f&&effectRect.rect.height>=rewardCard.rect.height*1.4f,"Legendary effect has room to reach all card edges");
+                Check(effect.view.GetComponent<UnityEngine.UI.RawImage>()==null,"Legendary particles render directly in the Canvas");
+                foreach(int width in new[]{1920,1280}){
+                    Resolution(width,width==1920?1080:720);yield return .2;effect.Play();
+                    for(int frame=0;frame<10;frame++){yield return .16;Capture("legendary-effect-"+width+"-"+frame.ToString("00"));yield return .02;}
+                }
+                float originalAge=effect.view.LegendaryAge;effect.Play();shop.FinishReveal();
+                Check(effect.IsPlaying&&effect.view.LegendaryAge==originalAge,"Repeated reveal does not restart active particles");
+                effect.SendMessage("OnApplicationFocus",false);Check(!effect.IsPlaying&&!effect.view.gameObject.activeSelf,"Focus loss releases Legendary preview");
+                effect.SendMessage("OnApplicationFocus",true);Check(effect.IsPlaying,"Focus return resumes an open Legendary result");
+                float scale=Time.timeScale;
+                try{Time.timeScale=0;yield return 8.2;Check(effect.IsPlaying&&effect.view.IsLegendaryActive,"Legendary glow persists beyond two seconds while game time is paused");Capture("legendary-after-eight-seconds");yield return .2;}
+                finally{Time.timeScale=scale;}
+                effect.Play();effect.gameObject.SetActive(false);Check(!effect.IsPlaying,"Disable clears Legendary stage");effect.gameObject.SetActive(true);
+            }
             Resolution(1280,720);yield return .3;Capture("tier-"+tier+"-result-1280");yield return .2;
             Resolution(1920,1080);yield return .3;shop.done.onClick.Invoke();
+            Check(shop.results.GetComponentsInChildren<LootRevealEffect>(true).All(e=>!e.IsPlaying&&!e.view.gameObject.activeSelf),"Closing results releases all Legendary effects");
         }
+        object[] manyArgs={10,"legendary-ten-glow",(Func<int,int>)(max=>0)};
+        var manyDraw=(System.Threading.Tasks.Task<OperationResult<LootReceipt>>)typeof(SqlitePlayerService).GetMethod("DrawLootAsync",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(service,manyArgs);
+        LootReceipt manyReceipt=null;foreach(var wait in TaskCalendarPlayVerification.Await(manyDraw,value=>manyReceipt=value))yield return wait;
+        typeof(LootShopUI).GetMethod("Show",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(shop,new object[]{manyReceipt,false});
+        var manyEffects=shop.results.GetComponentsInChildren<LootRevealEffect>();
+        foreach(var glow in manyEffects)glow.SendMessage("OnApplicationFocus",true);
+        Check(manyEffects.Length==10&&manyEffects.All(e=>e.IsPlaying),"Reveal all starts every committed Legendary glow");
+        foreach(int width in new[]{1920,1280}){Resolution(width,width==1920?1080:720);yield return .4;Capture("legendary-ten-"+width);yield return .2;}
+        shop.done.onClick.Invoke();Check(manyEffects.All(e=>!e.IsPlaying&&!e.view.gameObject.activeSelf),"Ten-result close releases every preview");
+        int mixedIndex=0;
+        object[] mixedArgs={10,"mixed-rarity-particles",(Func<int,int>)(max=>max==100?(mixedIndex++==4?0:1):max==99?10:0)};
+        var mixedDraw=(System.Threading.Tasks.Task<OperationResult<LootReceipt>>)typeof(SqlitePlayerService).GetMethod("DrawLootAsync",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(service,mixedArgs);
+        LootReceipt mixedReceipt=null;foreach(var wait in TaskCalendarPlayVerification.Await(mixedDraw,value=>mixedReceipt=value))yield return wait;
+        typeof(LootShopUI).GetMethod("Show",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(shop,new object[]{mixedReceipt,false});
+        var mixedEffects=shop.results.GetComponentsInChildren<LootRevealEffect>();
+        foreach(var glow in mixedEffects)glow.SendMessage("OnApplicationFocus",true);
+        Check(mixedEffects.Count(e=>e.IsPlaying)==1,"Only the Legendary result gets ambient particles in a mixed ten-pull");
+        foreach(int width in new[]{1920,1280}){Resolution(width,width==1920?1080:720);yield return .4;Capture("legendary-mixed-"+width);yield return .2;}
+        shop.done.onClick.Invoke();
         var settings=service.Settings;settings.reduceMotion=true;foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(settings)))yield return wait;
         shop.Prepare(1);shop.Purchase();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;Check(!shop.Revealing&&shop.results.gameObject.activeSelf,"Reduced motion keeps reward without animation");shop.done.onClick.Invoke();
         settings.reduceMotion=false;foreach(var wait in TaskCalendarPlayVerification.Await(service.SaveSettingsAsync(settings)))yield return wait;
@@ -195,6 +245,49 @@ public static class LootShopPlayVerification
         foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>data.equipment=EquipmentRules.Catalog.Concat(LootRules.Catalog).Select(d=>new EquipmentItem{id=d.Id}).ToList())))yield return wait;page.Refresh();yield return .5;
         shop.gameObject.SetActive(true);shop.OpenInformation();yield return .3;
         Check(shop.catalog.All(c=>c.ownedIcon.gameObject.activeSelf),"Reopen reflects all owned equipment");Capture("all-owned-1280");yield return .2;shop.CloseInformation();shop.Close();
+        var inventory=page.GetComponentInChildren<EquipmentInventoryUI>();
+        foreach(var demon in EquipmentRules.Catalog.Where(d=>d.Tier==3))
+            foreach(var wait in TaskCalendarPlayVerification.Await(service.EquipAsync(demon.Id,demon.Slot)))yield return wait;
+        page.Refresh();yield return .2;
+        foreach(var glow in page.equipmentEffects)glow.SendMessage("OnApplicationFocus",true);
+        Check(page.equipmentEffects.Length==3&&page.equipmentEffects.All(e=>e.IsPlaying&&!e.view.raycastTarget),"Cat Home equipped Demon slots have nonblocking particles");
+        var equipmentArt=AssetDatabase.LoadAssetAtPath<LootArt>("Assets/Prefabs/LootArt.asset");
+        Check(equipmentArt.bossIcons.Length==9&&equipmentArt.bossIcons.Distinct().Count()==9,"Each Boss reward has unique generated artwork");
+        foreach(var cell in inventory.backpack.GetComponentsInChildren<EquipmentInventoryItemUI>()){
+            cell.legendaryEffect.SendMessage("OnApplicationFocus",true);
+            var definition=EquipmentRules.Find(cell.name.Substring("Item_".Length));
+            if(!definition.IsLoot)Check(cell.icon.sprite==equipmentArt.Icon(definition.Id),"Boss inventory icon uses generated art");
+            Check(cell.legendaryEffect.IsPlaying==(definition.Tier==3),"Legendary loot and Demon equipment glow in inventory");
+            Check(!cell.legendaryEffect.view.raycastTarget,"Inventory particles cannot block item input");
+            Check(cell.equipped.activeSelf==(EquipmentRules.Equipped(service.EquipmentSnapshot,definition.Slot)==definition.Id),"Wearing icon follows committed equipped item");
+            Check(cell.equipped.transform.Find("WearingIcon").GetComponent<Image>().sprite,"Wearing badge has authored clothing icon");
+        }
+        foreach(int width in new[]{1920,1280}){
+            Resolution(width,width==1920?1080:720);yield return .3;
+            inventory.scroll.verticalNormalizedPosition=0;yield return .4;
+            Capture("inventory-legendary-"+width);yield return .2;
+        }
+        for(int category=1;category<=3;category++){
+            inventory.filters[category].onClick.Invoke();yield return .3;
+            foreach(var cell in inventory.backpack.GetComponentsInChildren<EquipmentInventoryItemUI>(true)){
+                if(cell.gameObject.activeInHierarchy)cell.legendaryEffect.SendMessage("OnApplicationFocus",true);
+                var definition=EquipmentRules.Find(cell.name.Substring("Item_".Length));
+                Check(cell.legendaryEffect.IsPlaying==(cell.gameObject.activeInHierarchy&&definition.Tier==3),"Filtering resets hidden Legendary particles");
+            }
+            Capture("inventory-legendary-filter-"+category);yield return .2;
+        }
+        inventory.filters[0].onClick.Invoke();yield return .3;
+        nav.ShowPage(MainMenuPage.Dashboard);yield return .2;
+        var dashboardGear=nav.pages[0].GetComponentInChildren<DashboardEquipmentUI>();
+        foreach(var glow in dashboardGear.equipmentEffects)glow.SendMessage("OnApplicationFocus",true);
+        Check(dashboardGear.equipmentEffects.Length==3&&dashboardGear.equipmentEffects.All(e=>e.IsPlaying),"Dashboard equipped Demon particles");
+        foreach(int width in new[]{1920,1280}){Resolution(width,width==1920?1080:720);yield return .4;Capture("dashboard-equipped-particles-"+width);yield return .2;}
+        Check(inventory.backpack.GetComponentsInChildren<EquipmentInventoryItemUI>(true).All(c=>!c.legendaryEffect.IsPlaying),"Leaving inventory clears particles");
+        nav.ShowPage(MainMenuPage.CatHome);yield return .3;
+        Check(dashboardGear.equipmentEffects.All(e=>!e.IsPlaying),"Leaving Dashboard clears equipped particles");
+        foreach(var cell in inventory.backpack.GetComponentsInChildren<EquipmentInventoryItemUI>())cell.legendaryEffect.SendMessage("OnApplicationFocus",true);
+        Check(inventory.backpack.GetComponentsInChildren<EquipmentInventoryItemUI>().Count(c=>c.legendaryEffect.IsPlaying)==9,"Reopening inventory resumes Legendary and Demon effects");
+        inventory.scroll.verticalNormalizedPosition=1;
         foreach(int width in new[]{1920,1280,1024,2560}){
             Resolution(width,width==1920||width==2560?1080:width==1024?768:720);yield return .4;
             var toggle=(Toggle)typeof(SidebarNavigationButton).GetField("expandedToggle",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(nav.buttons[4]);
@@ -204,6 +297,31 @@ public static class LootShopPlayVerification
             }
             if(toggle)toggle.isOn=false;
         }
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.equippedWeaponId=null;data.equippedBodyOutfitId=null;data.equippedHeadAccessoryId=null;})))yield return wait;
+        page.Refresh();yield return .2;
+        Check(inventory.backpack.GetComponentsInChildren<EquipmentInventoryItemUI>().All(c=>!c.equipped.activeSelf),"Unequipped inventory clears wearing badges");
+        Check(page.equipmentEffects.All(e=>!e.IsPlaying),"Empty equipped slots clear particles");
+        foreach(int width in new[]{1920,1280}){
+            Resolution(width,width==1920?1080:720);yield return .3;
+            foreach(var definition in EquipmentRules.Catalog){
+                page.OpenItem(definition.Id);yield return .15;
+                var bossDetail=page.GetComponentInChildren<EquipmentItemDetailUI>();
+                bossDetail.equipmentEffect.SendMessage("OnApplicationFocus",true);
+                Check(bossDetail.equipmentEffect.IsPlaying==(definition.Tier==3),"Detail particles match equipment tier");
+                Check(bossDetail.itemIcon.sprite==equipmentArt.Icon(definition.Id),"Boss detail matches inventory art");
+                if(definition.Slot==EquipmentSlot.Body){Capture("boss-art-"+definition.Tier+"-"+width);yield return .2;}
+                bossDetail.close.onClick.Invoke();
+                Check(!bossDetail.equipmentEffect.IsPlaying,"Closing detail clears its particles");
+                if(definition.Tier==3&&definition.Slot==EquipmentSlot.Body){
+                    var hoverTarget=inventory.backpack.Find("Item_"+definition.Id).GetComponent<EquipmentHoverTarget>();
+                    page.ShowHover(hoverTarget,definition.Id,new Vector2(width-30,30));yield return .3;
+                    bossDetail.equipmentEffect.SendMessage("OnApplicationFocus",true);
+                    Check(bossDetail.IsHoverPreview&&bossDetail.equipmentEffect.IsPlaying&&!bossDetail.equipmentEffect.view.raycastTarget,"Demon hover uses nonblocking particles");
+                    Capture("demon-hover-particles-"+width);yield return .2;
+                    page.HideHover();Check(!bossDetail.equipmentEffect.IsPlaying,"Pointer exit clears hover particles");
+                }
+            }
+        }
         Resolution(1280,720);yield return .3;
         var target=LootRules.Catalog.First(d=>d.IconName=="Armor_GauntletsGold");foreach(var wait in TaskCalendarPlayVerification.Await(service.EquipAsync(target.Id,EquipmentSlot.Weapon)))yield return wait;page.OpenItem(target.Id);yield return .4;Capture("gauntlets-detail-1280");yield return .2;
         var detail=(EquipmentItemDetailUI)typeof(EquipmentPageUI).GetField("itemDetail",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(page);
@@ -211,6 +329,8 @@ public static class LootShopPlayVerification
             Resolution(width,width==1920?1080:720);yield return .3;
             foreach(var icon in new[]{"Armor_MagicCrown","Armor_HeavyArmor","Armor_GauntletsGold","Armor_GauntletsSteel","Armor_BoneArmor"}){
                 var definition=LootRules.Catalog.Single(d=>d.IconName==icon);page.OpenItem(definition.Id);yield return .2;
+                detail.equipmentEffect.SendMessage("OnApplicationFocus",true);
+                Check(detail.equipmentEffect.IsPlaying==(definition.Tier==3),"Switching loot details resets rarity particles");
                 Check(detail.itemBackground&&detail.itemBackground.color==LootShopUI.Tint(definition.Tier),"Detail icon background follows rarity");
                 Check(detail.abilityText.gameObject.activeSelf==(EquipmentRules.Ability(definition)!=EquipmentAbility.None),"Only implemented legendary abilities shown");
                 if(detail.abilityText.gameObject.activeSelf){detail.abilityText.ForceMeshUpdate();Check(!detail.abilityText.isTextOverflowing&&Inside(detail.abilityText.rectTransform,detail.card),"Ability text fits detail");}
@@ -218,6 +338,28 @@ public static class LootShopPlayVerification
             }
         }
         Check(service.EquipmentStats.SetPieces.All(x=>x==0),"Loot does not activate Boss set");
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{
+            data.equipment.RemoveAll(e=>e.id.StartsWith("boss3-"));
+            var mastery=data.bossProgress.Single(p=>p.bossId==3);mastery.wins=15;mastery.pendingClaims=3;mastery.claimedComponents=0;
+        })))yield return wait;
+        nav.ShowPage(MainMenuPage.Boss);yield return .3;
+        var claimPage=nav.pages[(int)MainMenuPage.Boss].GetComponent<EquipmentPageUI>();
+        claimPage.OpenClaim(3);yield return .3;
+        var claim=claimPage.claimView;
+        foreach(var glow in claim.equipmentEffects)glow.SendMessage("OnApplicationFocus",true);
+        Check(claim.equipmentEffects.Length==3&&claim.equipmentEffects.All(e=>e.IsPlaying&&!e.view.raycastTarget),"Demon claim cards show nonblocking particles");
+        foreach(int width in new[]{1920,1280}){Resolution(width,width==1920?1080:720);yield return .4;Capture("demon-claim-ready-"+width);yield return .2;}
+        for(int slot=0;slot<3;slot++){
+            Check(claim.buttons[slot].interactable,"Demon reward available before claim");claim.buttons[slot].onClick.Invoke();
+            foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;yield return .2;
+            Check(service.OwnsEquipment(EquipmentRules.Catalog.Single(d=>d.Tier==3&&(int)d.Slot==slot).Id),"Demon claim commits ownership");
+            Check(claim.ownedMarks[slot].activeSelf&&claim.equipmentEffects[slot].IsPlaying,"Claimed Demon reward retains particles");
+        }
+        foreach(int width in new[]{1920,1280}){Resolution(width,width==1920?1080:720);yield return .4;Capture("demon-claim-owned-"+width);yield return .2;}
+        claimPage.OpenClaim(2);yield return .2;Check(claim.equipmentEffects.All(e=>!e.IsPlaying),"Switching to Orc clears claim particles");
+        claimPage.OpenClaim(3);yield return .2;foreach(var glow in claim.equipmentEffects)glow.SendMessage("OnApplicationFocus",true);
+        claimPage.transform.Find("ItemModal/Card/Close").GetComponent<Button>().onClick.Invoke();
+        Check(claim.equipmentEffects.All(e=>!e.IsPlaying),"Closing claim dialog clears particles");
         File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: serialized bindings; four shop sizes; cancel, save failure/retry, single/ten/duplicate submission; opening-time flight, faster ten pull and skip; catalog information; focus/disable cleanup; no-ticket state; 27-item inventory and gauntlet equip. Visual captures require inspection.");
     }
 }

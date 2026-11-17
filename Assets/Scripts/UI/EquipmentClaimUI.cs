@@ -14,6 +14,7 @@ public sealed class EquipmentClaimUI : MonoBehaviour
     public GameObject[] ownedMarks;
     public Button[] buttons;
     public ChestRewardParticles[] particles;
+    public LootRevealEffect[] equipmentEffects;
     public int Boss { get; private set; }
 
     void Awake(){for(int i=0;i<particles.Length;i++)particles[i].Bind(chests[i].rectTransform);}
@@ -47,6 +48,9 @@ public sealed class EquipmentClaimUI : MonoBehaviour
             var tint=boss==1?new Color32(144,218,255,255):boss==2?new Color32(216,182,255,255):new Color32(255,224,134,255);
             buttons[i].GetComponent<Image>().color=tint;
             var icon=itemIcons[i].rectTransform;icon.anchorMin=owned?new Vector2(.18f,.20f):new Vector2(.59f,.05f);icon.anchorMax=owned?new Vector2(.82f,.87f):new Vector2(.96f,.42f);icon.offsetMin=icon.offsetMax=Vector2.zero;
+            if(equipmentEffects!=null&&i<equipmentEffects.Length&&equipmentEffects[i]){
+                if(boss==3)equipmentEffects[i].Play();else equipmentEffects[i].Stop();
+            }
         }
     }
 }
