@@ -27,6 +27,8 @@ public class DashboardTasksUI : MonoBehaviour
     private bool savingTask;
     private bool pendingRefresh;
     private bool pendingBlur;
+    private bool restoreQuickFocus;
+    private QuestTask quickDraft;
     private TaskResultNotice resultNotice;
     private RewardFlightUI rewardFlight;
 
@@ -122,6 +124,7 @@ public class DashboardTasksUI : MonoBehaviour
             quickAddInput.onSubmit.AddListener(SubmitTask);
             quickAddInput.onEndEdit.AddListener(EndTaskInput);
             quickAddInput.onDeselect.AddListener(LeaveTaskInput);
+            TaskContextTarget.Bind(quickAddInput.gameObject, OpenQuickAddContext);
         }
         service = GameDataManager.EnsureInstance().Service;
         if (rows == null) {
@@ -140,6 +143,7 @@ public class DashboardTasksUI : MonoBehaviour
     private void OnDisable()
     {
         pendingBlur = false;
+        restoreQuickFocus = false;
         if (addTaskButton) addTaskButton.onClick.RemoveListener(BeginAddTask);
         if (quickAddSaveButton) quickAddSaveButton.onClick.RemoveListener(SaveQuickTask);
         if (quickAddInput)
@@ -174,6 +178,15 @@ public class DashboardTasksUI : MonoBehaviour
         }
         if (pendingRefresh) Refresh();
         rows?.Update();
+        if (restoreQuickFocus)
+        {
+            restoreQuickFocus = false;
+            if (quickAddRoot.activeInHierarchy)
+            {
+                quickAddInput.Select();
+                quickAddInput.ActivateInputField();
+            }
+        }
     }
 
     public void Refresh()
@@ -277,12 +290,12 @@ public class DashboardTasksUI : MonoBehaviour
 
     private void EndTaskInput(string _)
     {
-        if (quickAddInput.wasCanceled) CancelAddTask();
+        if (!ContextOpen && quickAddRoot.activeSelf && quickAddInput.wasCanceled) CancelAddTask();
     }
 
     private void LeaveTaskInput(string _)
     {
-        if (!isActiveAndEnabled || !quickAddRoot.activeSelf || savingTask) return;
+        if (!isActiveAndEnabled || !quickAddRoot.activeSelf || savingTask || ContextOpen || restoreQuickFocus) return;
         if (quickAddInput.wasCanceled) CancelAddTask();
         // TMP may be inside EventSystem selection dispatch. Defer so an error
         // popup can safely take focus, and the clicked control handles its action.
@@ -311,13 +324,7 @@ public class DashboardTasksUI : MonoBehaviour
     {
         if (!isActiveAndEnabled || !quickAddRoot.activeSelf || savingTask) return false;
         if (string.IsNullOrWhiteSpace(quickAddInput.text)) return false;
-        var draft = new QuestTask
-        {
-            title = quickAddInput.text.Trim(),
-            difficulty = TaskDifficulty.Normal,
-            scheduled = true,
-            date = TaskService.DateKey(service.LocalNow)
-        };
+        var draft = ReadQuickDraft();
         savingTask = true;
         UpdateQuickSaveButton(quickAddInput.text);
         bool saved;
@@ -344,6 +351,9 @@ public class DashboardTasksUI : MonoBehaviour
     public void CancelAddTask()
     {
         pendingBlur = false;
+        if (ContextOpen && quickDraft != null) contextMenu.Dismiss();
+        restoreQuickFocus = false;
+        quickDraft = null;
         // Hide before clearing focus so TMP end-edit cannot submit the same draft.
         quickAddRoot.SetActive(false);
         quickAddInput.SetTextWithoutNotify("");
@@ -365,6 +375,63 @@ public class DashboardTasksUI : MonoBehaviour
     }
 
     private TaskContextMenu contextMenu;
+    private bool ContextOpen => contextMenu && contextMenu.gameObject.activeSelf;
+
+    private QuestTask ReadQuickDraft()
+    {
+        quickDraft ??= new QuestTask
+        {
+            difficulty = TaskDifficulty.Normal,
+            scheduled = true,
+            date = TaskService.DateKey(service.LocalNow)
+        };
+        quickDraft.title = quickAddInput.text.Trim();
+        return quickDraft;
+    }
+
+    private TaskContextMenu GetContextMenu()
+    {
+        if (!contextMenu)
+            contextMenu = Instantiate(Resources.Load<TaskContextMenu>("TaskContextMenu"),
+                GetComponentInParent<Canvas>().rootCanvas.transform);
+        return contextMenu;
+    }
+
+    private void OpenQuickAddContext(Vector2 point)
+    {
+        if (!isActiveAndEnabled || !quickAddRoot.activeSelf || savingTask || ContextOpen ||
+            service == null || !service.IsReady || (confirmation != null && confirmation.Root.activeSelf)) return;
+        pendingBlur = false;
+        restoreQuickFocus = false;
+        var draft = ReadQuickDraft();
+        GetContextMenu().Show(draft, service.TagCatalog, service.LocalNow, false, point,
+            _ => OpenQuickDraftEditor(),
+            change => change.ApplyTo(draft) ? null : "Choose a field to change.",
+            () => restoreQuickFocus = isActiveAndEnabled && quickAddRoot.activeSelf);
+    }
+
+    private void OpenQuickDraftEditor()
+    {
+        var draft = ReadQuickDraft();
+        // Navigation normally saves an active quick input. Hide it during the handoff.
+        pendingBlur = false;
+        quickAddRoot.SetActive(false);
+        if (!navigation.ShowPage(MainMenuPage.Tasks))
+        {
+            BeginAddTask();
+            return;
+        }
+        CancelAddTask();
+        navigation.StartCoroutine(OpenQuickDraftWhenReady(draft));
+    }
+
+    private IEnumerator OpenQuickDraftWhenReady(QuestTask draft)
+    {
+        yield return new WaitUntil(() => taskManager.Service != null || navigation.CurrentPage != MainMenuPage.Tasks);
+        if (navigation.CurrentPage != MainMenuPage.Tasks) yield break;
+        taskManager.SelectTab(draft.daily ? TaskTab.Daily : TaskTab.Todo);
+        taskManager.OpenQuickAddDraft(draft);
+    }
 
     private void ShowTaskNotice(string message, bool error = false)
     {
@@ -383,15 +450,12 @@ public class DashboardTasksUI : MonoBehaviour
         if (!PrepareToLeavePage()) return;
         var current = CurrentContextTask(view.task.id);
         if (current == null) return;
-        if (!contextMenu)
-            contextMenu = Instantiate(Resources.Load<TaskContextMenu>("TaskContextMenu"),
-                GetComponentInParent<Canvas>().rootCanvas.transform);
         string id = current.task.id;
         int version = service.ReadVersion;
         string day = TaskService.DateKey(service.LocalNow);
         bool IsCurrent() => isActiveAndEnabled && version == service.ReadVersion
             && day == TaskService.DateKey(service.LocalNow) && CurrentContextTask(id) != null;
-        contextMenu.ShowAsync(current.task, service.TagCatalog, service.LocalNow,
+        GetContextMenu().ShowAsync(current.task, service.TagCatalog, service.LocalNow,
             !current.Completed && service.Eligible(current.task), point, action =>
         {
             if (!IsCurrent()) { ShowTaskNotice("This task changed. Reopen it to continue.", true); return; }
@@ -418,15 +482,7 @@ public class DashboardTasksUI : MonoBehaviour
             if (!IsCurrent()) return "This task changed. Reopen the menu to continue.";
             var latest = CurrentContextTask(id);
             var draft = PlayerDataStore.Copy(latest.task);
-            if (change.field == TaskContextAction.Difficulty) draft.difficulty = change.difficulty;
-            else if (change.field == TaskContextAction.Tags) draft.tagIds = change.tagIds;
-            else if (change.field == TaskContextAction.ChooseDate)
-            {
-                draft.scheduled = change.scheduled;
-                if (change.scheduled) draft.date = TaskService.DateKey(change.date);
-                else draft.daily = false;
-            }
-            else return "Choose a field to change.";
+            if (!change.ApplyTo(draft)) return "Choose a field to change.";
             if (!(await service.UpsertAsync(draft, latest.occurrence.completedSubtaskIds)).Succeeded)
                 return service.LastError ?? "Could not save. Please try again.";
             if(this && isActiveAndEnabled)ShowTaskNotice("Task updated.");

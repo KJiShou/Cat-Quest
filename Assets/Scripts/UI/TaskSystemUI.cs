@@ -149,7 +149,7 @@ public partial class TaskSystemUI : MonoBehaviour
             EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position=Input.mousePosition },outsideClickHits);
             CaptureOutsideClick(outsideClickHits.Count>0 ? outsideClickHits[0].gameObject.transform : null);
         }
-        if(quickInput && Input.GetKeyDown(KeyCode.Escape)) CancelQuickAdd();
+        if(quickInput && !ContextOpen && !refocusQuick && Input.GetKeyDown(KeyCode.Escape)) CancelQuickAdd();
         if (Time.unscaledTime >= nextClockCheck)
         {
             nextClockCheck = Time.unscaledTime + 1;
@@ -556,10 +556,7 @@ public partial class TaskSystemUI : MonoBehaviour
         if(quickInput) { quickInput.Select(); quickInput.ActivateInputField(); return; }
         if(!PrepareToDiscardDraft(BeginAdd)) return;
         CancelDraft();
-        var now=Service.LocalNow;
-        quickDraft=new QuestTask { title="",difficulty=TaskDifficulty.Normal,
-            daily=CurrentTab==TaskTab.Daily,scheduled=CurrentTab==TaskTab.Today || CurrentTab==TaskTab.Daily,
-            date=TaskService.DateKey(now),tagIds=tagFilters.ToList() };
+        quickDraft=NewQuickDraft();
         var row=Instantiate(inlineTaskTemplate,listContent); row.name="QuickAddTask"; row.SetActive(true);
         TaskUIBuilder.Height(row.GetComponent<RectTransform>(),80); TaskUIBuilder.Flex(row.transform);
         quickInput=row.GetComponentInChildren<TMP_InputField>(true);
@@ -567,16 +564,16 @@ public partial class TaskSystemUI : MonoBehaviour
         quickInput.characterLimit=100; quickInput.lineType=TMP_InputField.LineType.SingleLine;
         TaskUIBuilder.BlueCaret(quickInput);
         quickInput.SetTextWithoutNotify("");
-        var date=row.transform.Find("Title/SecondRow/DateTime").GetComponent<TMP_Text>();
-        date.text=ScheduleText(new TaskView { task=quickDraft, occurrence=new TaskOccurrence() }); SpaceSchedule(date);
+        RefreshQuickSchedule();
         row.transform.Find("Title/SecondRow/Tags").gameObject.SetActive(false);
         quickInput.onSubmit.RemoveAllListeners(); quickInput.onDeselect.RemoveAllListeners();
         quickInput.onValueChanged.AddListener(UpdateQuickSaveButton);
         quickInput.onSubmit.AddListener(_=>SubmitQuickTask());
+        TaskContextTarget.Bind(quickInput.gameObject, OpenQuickAddContext);
         if (quickSaveButton) quickSaveButton.onClick.AddListener(SubmitQuickTask);
         UpdateQuickSaveButton(quickInput.text);
         quickInput.onDeselect.AddListener(_=> {
-            if(refocusQuick || TutorialOwnsInput) return;
+            if(refocusQuick || ContextOpen || TutorialOwnsInput) return;
             if(quickInput && quickInput.wasCanceled) CancelQuickAdd();
             else if(!PointerOverAdd())
             {
@@ -586,6 +583,21 @@ public partial class TaskSystemUI : MonoBehaviour
             }
         });
         Refresh(); quickInput.Select(); quickInput.ActivateInputField();
+    }
+    private QuestTask NewQuickDraft() => new QuestTask
+    {
+        title = "",
+        difficulty = TaskDifficulty.Normal,
+        daily = CurrentTab == TaskTab.Daily,
+        scheduled = CurrentTab == TaskTab.Today || CurrentTab == TaskTab.Daily,
+        date = TaskService.DateKey(Service.LocalNow),
+        tagIds = tagFilters.ToList()
+    };
+    private void RefreshQuickSchedule()
+    {
+        var date = quickInput.transform.parent.Find("Title/SecondRow/DateTime").GetComponent<TMP_Text>();
+        date.text = ScheduleText(new TaskView { task=quickDraft, occurrence=new TaskOccurrence() });
+        SpaceSchedule(date);
     }
     private void SubmitQuickTask()
     {
@@ -638,7 +650,8 @@ public partial class TaskSystemUI : MonoBehaviour
         if(!saved) { pendingRefresh=false; refocusQuick=continueAdding; Notify(Service.LastError,true); return false; }
         SelectedKey=id;
         if(continueAdding) {
-            quickDraft.id=null; quickDraft.title=""; quickInput.SetTextWithoutNotify("");
+            quickDraft=NewQuickDraft(); quickInput.SetTextWithoutNotify("");
+            RefreshQuickSchedule();
             UpdateQuickSaveButton(quickInput.text);
             pendingRefresh=true; refocusQuick=true;
         } else CancelQuickAdd();
@@ -647,6 +660,7 @@ public partial class TaskSystemUI : MonoBehaviour
     public void CancelQuickAdd()
     {
         if(!quickInput) return;
+        CloseTaskContext();
         var row=quickInput.transform.parent.gameObject;
         quickInput.onValueChanged.RemoveListener(UpdateQuickSaveButton);
         quickInput.onSubmit.RemoveAllListeners(); quickInput.onDeselect.RemoveAllListeners();

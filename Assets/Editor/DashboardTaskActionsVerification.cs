@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEngine;
@@ -13,6 +14,21 @@ public static class DashboardTaskActionsVerification
     static DashboardTaskRow Row(DashboardTasksUI owner, string title) => owner.GetComponentsInChildren<DashboardTaskRow>()
         .Single(r => r.taskTitle.text == title);
     static TaskContextMenu Menu => UnityEngine.Object.FindFirstObjectByType<TaskContextMenu>();
+    static void Click(Button button)
+    {
+        Canvas.ForceUpdateCanvases();
+        var rect = (RectTransform)button.transform;
+        var pointer = new PointerEventData(EventSystem.current)
+        {
+            button = PointerEventData.InputButton.Left,
+            position = RectTransformUtility.WorldToScreenPoint(null,rect.TransformPoint(rect.rect.center))
+        };
+        var hits = new System.Collections.Generic.List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointer,hits);
+        Check(hits.Count>0 && hits[0].gameObject.GetComponentInParent<Button>()==button,
+            "Dashboard pointer blocked for "+button.name);
+        ExecuteEvents.ExecuteHierarchy(hits[0].gameObject,pointer,ExecuteEvents.pointerClickHandler);
+    }
     static void RightClick(Component target)
     {
         Canvas.ForceUpdateCanvases();
@@ -22,8 +38,81 @@ public static class DashboardTaskActionsVerification
         var hits = new System.Collections.Generic.List<RaycastResult>();
         EventSystem.current.RaycastAll(pointer,hits);
         Check(hits.Count>0,"Dashboard right click has no hit");
+        if (target is TMPro.TMP_InputField input)
+            Check(hits[0].gameObject.GetComponentInParent<TMPro.TMP_InputField>()==input,
+                "Dashboard input right click was blocked by "+hits[0].gameObject.name);
         ExecuteEvents.ExecuteHierarchy(hits[0].gameObject,pointer,ExecuteEvents.pointerClickHandler);
         Check(Menu,"Dashboard right click did not open menu");
+    }
+    public static IEnumerable<double> QuickAdd(DashboardTasksUI owner, MainMenuNavigation nav, int width, Action<string> capture)
+    {
+        var service=GameDataManager.Instance.Service;
+        var title="Dashboard quick edit "+width;
+        owner.BeginAddTask();
+        owner.quickAddInput.text=title;
+        yield return .4;
+        capture("quick-edit-before-"+width);yield return .2;
+
+        RightClick(owner.quickAddInput);yield return .3;
+        Check(!Menu.complete.gameObject.activeInHierarchy && !Menu.delete.gameObject.activeInHierarchy,
+            "Unsaved Dashboard draft has saved-task actions");
+        Click(Menu.backdrop);yield return .3;
+        Check(owner.quickAddRoot.activeSelf && owner.quickAddInput.isFocused && owner.quickAddInput.text==title,
+            "Dismissal lost the Dashboard input");
+
+        RightClick(owner.quickAddInput);yield return .3;
+        var hint=Menu.difficulty.GetComponent<ControlHint>();
+        ExecuteEvents.Execute(Menu.difficulty.gameObject,new PointerEventData(EventSystem.current),ExecuteEvents.pointerEnterHandler);
+        yield return .35;
+        Check(hint.expansionLabel.alpha>.99f,"Dashboard difficulty label did not reveal");
+        capture("quick-edit-menu-"+width);yield return .2;
+        Click(Menu.difficulty);yield return .3;
+        Click(Menu.difficultyOptions[(int)TaskDifficulty.Hard]);yield return .2;
+        capture("quick-edit-difficulty-"+width);yield return .2;
+        Click(Menu.save);yield return .3;
+
+        RightClick(owner.quickAddInput);yield return .3;
+        Click(Menu.tags);yield return .3;
+        var tag=Menu.tagContent.GetComponentsInChildren<TaskContextTagRow>().First();
+        string tagId=tag.TagId;
+        Click(tag.button);yield return .2;
+        capture("quick-edit-tags-"+width);yield return .2;
+        Click(Menu.save);yield return .3;
+
+        RightClick(owner.quickAddInput);yield return .3;
+        Click(Menu.schedule);yield return .3;
+        Click(Menu.tomorrow);yield return .2;
+        string date=TaskService.DateKey(Menu.datePicker.SelectedDate);
+        capture("quick-edit-schedule-"+width);yield return .2;
+        Click(Menu.save);yield return .3;
+        Check(owner.quickAddInput.isFocused && !service.TaskSnapshot.tasks.Any(t=>t.title==title),
+            "Applying Dashboard fields saved the task or lost input focus");
+
+        if (width==1920)
+        {
+            RightClick(owner.quickAddInput);yield return .3;
+            Click(Menu.edit);yield return .5;
+            Check(!owner.quickAddRoot.activeSelf && nav.CurrentPage==MainMenuPage.Tasks && nav.taskSystem.IsEditing,
+                "Dashboard Edit info did not transfer to the task editor");
+            var draft=nav.taskSystem.editor.ReadDraft(out _);
+            Check(string.IsNullOrEmpty(draft.id) && draft.title==title && draft.difficulty==TaskDifficulty.Hard &&
+                draft.scheduled && draft.date==date && draft.tagIds.Contains(tagId), "Task editor lost Dashboard draft fields");
+            Check(!service.TaskSnapshot.tasks.Any(t=>t.title==title),"Dashboard editor handoff saved prematurely");
+            capture("quick-edit-form-"+width);yield return .2;
+            Click(nav.taskSystem.editor.transform.Find("Footer/Actions/SaveChangesButton").GetComponent<Button>());
+        }
+        else
+        {
+            Click(owner.quickAddRoot.GetComponentsInChildren<Button>().Single());
+        }
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync())) yield return wait;
+        yield return .3;
+        var saved=service.TaskSnapshot.tasks.SingleOrDefault(t=>t.title==title);
+        Check(saved!=null && saved.difficulty==TaskDifficulty.Hard && saved.scheduled &&
+            saved.date==date && saved.tagIds.Contains(tagId),"Dashboard draft did not save all edited fields exactly once");
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.DeleteAsync(saved.id))) yield return wait;
+        Check(nav.ShowPage(MainMenuPage.Dashboard),"Cannot return to Dashboard after draft handoff");
+        yield return .3;
     }
     public static IEnumerator Run(DashboardTasksUI owner, MainMenuNavigation nav, Action<int,int> resolution, Action<string> capture)
     {

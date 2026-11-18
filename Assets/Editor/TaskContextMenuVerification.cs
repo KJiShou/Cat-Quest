@@ -28,12 +28,26 @@ public static class TaskContextMenuVerification
     static void Click(Component target,PointerEventData.InputButton button = PointerEventData.InputButton.Left)
     {
         Canvas.ForceUpdateCanvases();
-        var pointer = new PointerEventData(EventSystem.current) { position=Center(target),button=button };
+        var input = target as TMP_InputField;
+        var point = Center(target);
+        if (input)
+        {
+            var text = input.textComponent.rectTransform;
+            var canvas = input.GetComponentInParent<Canvas>().rootCanvas;
+            var insideText = new Vector2(text.rect.xMin+12, text.rect.center.y);
+            point = RectTransformUtility.WorldToScreenPoint(canvas.renderMode==RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera,
+                text.TransformPoint(insideText));
+        }
+        var pointer = new PointerEventData(EventSystem.current) { position=point,button=button };
         var hits = new List<RaycastResult>(); EventSystem.current.RaycastAll(pointer,hits);
         Check(hits.Count>0,"No raycast for "+target.name);
         var expected = target.GetComponent<Button>();
-        if(expected) Check(hits[0].gameObject.GetComponentInParent<Button>()==expected,"Blocked raycast for "+target.name+" by "+hits[0].gameObject.name);
+        if(expected) Check(hits[0].gameObject.GetComponentInParent<Button>()==expected,
+            "Blocked raycast for "+target.name+" by "+string.Join(", ", hits.Take(5).Select(hit=>hit.gameObject.name)));
+        if(input) Check(hits[0].gameObject.GetComponentInParent<TMP_InputField>()==input,
+            "Quick input raycast was blocked by "+hits[0].gameObject.name);
         ExecuteEvents.ExecuteHierarchy(hits[0].gameObject,pointer,ExecuteEvents.pointerClickHandler);
+        if(input && button==PointerEventData.InputButton.Right) Check(Menu,"Quick input right click did not open the menu");
     }
     static void Open(TaskSystemUI owner,string id)
     {
@@ -73,8 +87,13 @@ public static class TaskContextMenuVerification
             {
                 expander.isOn=expanded;owner.SelectTab(TaskTab.Todo);yield return .5;
                 string suffix=size.x+"x"+size.y+(expanded?"-expanded":"-collapsed");
+                if (expanded && (size.x==1920 || size.x==1280))
+                    foreach (var wait in QuickAddInfo(owner,capture,suffix,tag)) yield return wait;
                 capture.Begin(Path.GetFullPath(Folder+"/before-"+suffix+".png"));while(capture.Pending)yield return .1;
                 owner.SelectTab(TaskTab.Todo);yield return .3;Open(owner,id);yield return .2;yield return .4;Bounds(Menu);
+                Check(Menu.difficulty.gameObject.activeInHierarchy &&
+                    Menu.edit.GetComponent<ControlHint>().expansionLabel.GetComponent<TMP_Text>().text=="Edit task",
+                    "Saved-task menu retained quick-add actions");
                 Check(EventSystem.current.currentSelectedGameObject==null,"Pointer-opened menu forced keyboard selection");
                 Check(Vector2.Distance(Menu.edit.GetComponent<JuicyButton>().DrawScale,Vector2.one)<.01f,"First menu action stayed highlighted without hover");
                 capture.Begin(Path.GetFullPath(Folder+"/menu-"+suffix+".png"));while(capture.Pending)yield return .1;
@@ -344,5 +363,99 @@ public static class TaskContextMenuVerification
         capture.Begin(Path.GetFullPath(Folder+"/inline-empty-tags.png"));while(capture.Pending)yield return .1;
         Menu.Dismiss();
         File.WriteAllText(Folder+"/checks.txt",DateTime.UtcNow.ToString("O")+"\nPASS: right-click raycasts, menu/submenu bounds and captures at 1920x1080, 1280x720, 1024x768 and 2560x1080 with both sidebar states; one icon column, green Complete, rendered width/fade motion, six unclipped labels, rapid reversal, mid-animation dismissal, reduced motion, disabled Complete and expanded edge bounds; shared feedback hover/press/release and stable hit area; Shift+F10/Escape (embedded calendar) via temporary input device and keyboard submit; inline tag-row feedback; edge clamping; focus/page dismissal; inline cancellation; inline save failure/retry; difficulty/tags/schedule saved without full editor and reload; repeat-clear/progress preservation; subtask confirmation; exactly-once completion; History restriction/undo; stale refresh; future daily preview edit restrictions; confirmed delete.\n");
+    }
+    static IEnumerable<double> QuickAddInfo(TaskSystemUI owner, RewardScreenshotCapture capture, string suffix, string tag)
+    {
+        const string title = "Quick add details draft";
+        owner.SelectTab(TaskTab.Daily);
+        owner.BeginAdd();
+        var input = owner.QuickAddInput;
+        input.text = title;
+        yield return .3;
+        capture.Begin(Path.GetFullPath(Folder+"/quick-add-input-"+suffix+".png"));
+        while (capture.Pending) yield return .1;
+
+        Click(input,PointerEventData.InputButton.Right);
+        Check(Menu && !Menu.complete.gameObject.activeInHierarchy && !Menu.delete.gameObject.activeInHierarchy,
+            "Quick input did not open a draft-only context menu");
+        yield return .2;
+        Click(Menu.backdrop);
+        yield return .3;
+        Check(input.isFocused && input.text==title, "Dismissal lost quick-add text or focus");
+        Check(!owner.Service.Query(TaskTab.Daily).Any(v=>v.task.title==title), "Menu dismissal saved the draft");
+
+        Click(input,PointerEventData.InputButton.Right);
+        yield return .2;
+        Click(Menu.difficulty);
+        yield return .2;
+        Click(Menu.difficultyOptions[(int)TaskDifficulty.Hard]);
+        Bounds(Menu);
+        capture.Begin(Path.GetFullPath(Folder+"/quick-add-difficulty-"+suffix+".png"));
+        while (capture.Pending) yield return .1;
+        Click(Menu.save);
+        yield return .2;
+
+        Click(input,PointerEventData.InputButton.Right);
+        yield return .2;
+        Click(Menu.schedule);
+        yield return .2;
+        Click(Menu.tomorrow);
+        string selectedDate = TaskService.DateKey(Menu.datePicker.SelectedDate);
+        Bounds(Menu);
+        capture.Begin(Path.GetFullPath(Folder+"/quick-add-schedule-"+suffix+".png"));
+        while (capture.Pending) yield return .1;
+        Click(Menu.save);
+        yield return .2;
+
+        Click(input,PointerEventData.InputButton.Right);
+        yield return .2;
+        Click(Menu.tags);
+        yield return .2;
+        var tagOption = Menu.tagContent.GetComponentsInChildren<TaskContextTagRow>().Single(row=>row.TagId==tag);
+        tagOption.button.Select();
+        yield return .3;
+        Click(tagOption.button);
+        Bounds(Menu);
+        capture.Begin(Path.GetFullPath(Folder+"/quick-add-tags-"+suffix+".png"));
+        while (capture.Pending) yield return .1;
+        Click(Menu.save);
+        yield return .2;
+        Check(input.isFocused && input.text==title, "Applying draft options lost the quick input");
+        Check(!owner.Service.Query(TaskTab.Daily).Any(v=>v.task.title==title), "Applying draft options created a task");
+
+        Click(input,PointerEventData.InputButton.Right);
+        var hint = Menu.edit.GetComponent<ControlHint>();
+        ExecuteEvents.Execute(Menu.edit.gameObject,new PointerEventData(EventSystem.current),ExecuteEvents.pointerEnterHandler);
+        yield return .35;
+        Bounds(Menu);
+        var label = hint.expansionLabel.GetComponent<TMP_Text>();
+        label.ForceMeshUpdate();
+        Check(label.text=="Edit info" && !label.isTextOverflowing && hint.expansionLabel.alpha>.99f,
+            "Quick-add action label did not appear");
+        capture.Begin(Path.GetFullPath(Folder+"/quick-add-menu-"+suffix+".png"));
+        while (capture.Pending) yield return .1;
+        Click(label);
+        yield return .3;
+        Check(!owner.QuickAddInput && owner.IsEditing && owner.editor.taskTitle.text==title,
+            "Edit info did not transfer the quick-add title");
+        var draft = owner.editor.ReadDraft(out _);
+        Check(string.IsNullOrEmpty(draft.id) && draft.daily && draft.scheduled &&
+            draft.date==selectedDate && draft.difficulty==TaskDifficulty.Hard && draft.tagIds.Contains(tag),
+            "Draft lost its schedule, difficulty, or tags");
+        Check(!owner.Service.Query(TaskTab.Daily).Any(v=>v.task.title==title), "Edit info saved the draft before Add Task");
+        capture.Begin(Path.GetFullPath(Folder+"/quick-add-editor-"+suffix+".png"));
+        while (capture.Pending) yield return .1;
+
+        owner.editor.description.text = "Save with details";
+        Click(owner.editor.transform.Find("Footer/Actions/SaveChangesButton").GetComponent<Button>());
+        foreach (var wait in TaskCalendarPlayVerification.Await(owner.Service.FlushAsync())) yield return wait;
+        yield return .2;
+        var saved = owner.Service.Query(TaskTab.Daily).SingleOrDefault(v=>v.task.title==title);
+        Check(!owner.IsEditing && saved!=null && saved.task.description=="Save with details" &&
+            saved.task.difficulty==TaskDifficulty.Hard && saved.task.date==selectedDate && saved.task.tagIds.Contains(tag),
+            "Add Task did not save the transferred draft exactly once");
+        foreach (var wait in TaskCalendarPlayVerification.Await(owner.Service.DeleteAsync(saved.task.id))) yield return wait;
+        owner.SelectTab(TaskTab.Todo);
+        yield return .4;
     }
 }

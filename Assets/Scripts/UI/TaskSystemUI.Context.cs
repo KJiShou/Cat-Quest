@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Linq;
 using UnityEngine;
@@ -18,12 +19,7 @@ public partial class TaskSystemUI
         if (editing || TutorialOwnsInput || HasTaskModal || !CommitQuickAdd()) return;
         var view = CurrentContextTask(id);
         if (view == null) return;
-        if (!contextMenu)
-        {
-            var template = Resources.Load<TaskContextMenu>("TaskContextMenu");
-            if (!template) { Notify("Task menu is unavailable.", true); return; }
-            contextMenu = Instantiate(template, GetComponentInParent<Canvas>().rootCanvas.transform);
-        }
+        if (!EnsureTaskContextMenu()) return;
         int version = Service.ReadVersion;
         string day = TaskService.DateKey(Service.LocalNow);
         bool canComplete = !view.Completed && Service.Eligible(view.task)
@@ -52,15 +48,7 @@ public partial class TaskSystemUI
             if (current == null || version != Service.ReadVersion || day != TaskService.DateKey(Service.LocalNow))
                 return "This task changed. Reopen the menu to continue.";
             var draft = PlayerDataStore.Copy(current.task);
-            if (change.field == TaskContextAction.Difficulty) draft.difficulty = change.difficulty;
-            else if (change.field == TaskContextAction.Tags) draft.tagIds = change.tagIds;
-            else if (change.field == TaskContextAction.ChooseDate)
-            {
-                draft.scheduled = change.scheduled;
-                if (change.scheduled) draft.date = TaskService.DateKey(change.date);
-                else draft.daily = false;
-            }
-            else return "Choose a field to change.";
+            if (!change.ApplyTo(draft)) return "Choose a field to change.";
             // Reuse current progress, including when editing a future Daily preview.
             if (!(await Service.UpsertAsync(draft, current.occurrence.completedSubtaskIds)).Succeeded)
             {
@@ -72,6 +60,43 @@ public partial class TaskSystemUI
             if(this && isActiveAndEnabled)Notify("Task updated.");
             return null;
         });
+    }
+    bool EnsureTaskContextMenu()
+    {
+        if (contextMenu) return true;
+        var template = Resources.Load<TaskContextMenu>("TaskContextMenu");
+        if (!template) { Notify("Task menu is unavailable.", true); return false; }
+        contextMenu = Instantiate(template, GetComponentInParent<Canvas>().rootCanvas.transform);
+        return true;
+    }
+    void OpenQuickAddContext(Vector2 point)
+    {
+        if (!quickInput || committingQuick || editing || TutorialOwnsInput || HasTaskModal || !EnsureTaskContextMenu()) return;
+        pendingQuickBlur = false;
+        refocusQuick = false;
+        quickDraft.title = quickInput.text.Trim();
+        contextMenu.Show(quickDraft, Service.TagCatalog, Service.LocalNow, false, point,
+            _ => EditQuickAddInfo(), change =>
+            {
+                if (!change.ApplyTo(quickDraft)) return "Choose a field to change.";
+                RefreshQuickSchedule();
+                return null;
+            }, () => refocusQuick = quickInput && isActiveAndEnabled);
+    }
+    void EditQuickAddInfo()
+    {
+        if (!quickInput || committingQuick) return;
+        var draft = quickDraft;
+        draft.title = quickInput.text.Trim();
+        CancelQuickAdd();
+        OpenQuickAddDraft(draft);
+    }
+    internal void OpenQuickAddDraft(QuestTask draft)
+    {
+        if (calendar && calendar.Active) calendar.SetMode(TaskDisplayMode.List);
+        OpenDraft(draft, Array.Empty<string>(), "Add Task");
+        if (draft.title.Length > 0) savedDraftState = null;
+        contextFocus = StartCoroutine(FocusContextField());
     }
     TaskView CurrentContextTask(string id) => Service.Query(TaskTab.Todo).Concat(Service.Query(TaskTab.Daily))
         .FirstOrDefault(v => v.task.id == id && (!v.Completed || v.task.daily));

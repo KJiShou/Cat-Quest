@@ -26,6 +26,8 @@ Without a selection, the list fills the page. Selecting a row opens details, and
 
 The **+** action opens quick title input. Enter saves a nonempty title and allows another entry. Clicking elsewhere saves nonempty input and closes it. Empty input creates nothing and Escape cancels. Only **Save Changes** commits edits. Cancel/close discards them and blank subtask rows are excluded.
 
+Right-click the quick title input to change **Difficulty**, **Schedule**, or **Tags**. **Apply** keeps the changes in the draft and returns to the quick input. **Edit info** opens the full **Add Task** form with the title and draft options. The existing quick Save or **Add Task** creates the task. The Dashboard quick input supports the same menu. Its **Edit info** action opens the Tasks form with the unsaved draft.
+
 Today defaults to today's date, Todo to no schedule and Daily Tasks to daily repetition. Repetition requires a start date. Scheduling is date-only. History still shows actual completion date/time. Legacy `minuteOfDay` is retained when editing but does not control validation, ordering or overdue status. No save reset is needed.
 
 Subtask checkboxes save immediately. Completing a task with unfinished subtasks requires confirmation, then completes them together. The row checkbox completes without selecting its row. History and today's completed daily items allow eligible undo without confirmation. Older daily occurrences and deleted tasks cannot be restored. Undo keeps subtask progress and paid rewards. Recompletion restores/updates the original history receipt without paying again.

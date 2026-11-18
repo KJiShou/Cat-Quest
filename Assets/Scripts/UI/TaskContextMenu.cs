@@ -16,6 +16,26 @@ public sealed class TaskContextChange
     public List<string> tagIds;
     public bool scheduled;
     public DateTime date;
+
+    internal bool ApplyTo(QuestTask draft)
+    {
+        switch (field)
+        {
+            case TaskContextAction.Difficulty:
+                draft.difficulty = difficulty;
+                return true;
+            case TaskContextAction.Tags:
+                draft.tagIds = tagIds;
+                return true;
+            case TaskContextAction.ChooseDate:
+                draft.scheduled = scheduled;
+                if (scheduled) draft.date = TaskService.DateKey(date);
+                else draft.daily = false;
+                return true;
+            default:
+                return false;
+        }
+    }
 }
 
 // Owns only the popup draft. TaskSystemUI validates identity and persists through TaskService.
@@ -33,6 +53,7 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     public TaskDialogKeyboard keyboard, pickerKeyboard;
     public float iconPanelWidth=76, expandedActionWidth=220;
     Action<TaskContextAction> action;
+    Action quickAddDismissed;
     Func<TaskContextChange,string> apply;
     Func<TaskContextChange,System.Threading.Tasks.Task<string>> applyAsync;
     int openGeneration;
@@ -48,11 +69,15 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     RectTransform root;
     bool saving, tutorialPreview;
     float defaultPanelWidth;
+    TMP_Text editLabel;
+    string defaultEditLabel;
 
     void Awake()
     {
         canvas = GetComponentInParent<Canvas>().rootCanvas; root = (RectTransform)transform;
         defaultPanelWidth=panel.sizeDelta.x;
+        // The transparent backdrop must remain a raycast target outside the menu.
+        backdrop.targetGraphic.canvasRenderer.cullTransparentMesh = false;
         backdrop.onClick.AddListener(Dismiss); TaskContextTarget.Bind(backdrop.gameObject, _ => Dismiss());
         Bind(edit, TaskContextAction.Edit); Bind(complete, TaskContextAction.Complete); Bind(delete, TaskContextAction.Delete);
         difficulty.onClick.AddListener(() => ShowPanel(TaskContextAction.Difficulty));
@@ -79,12 +104,16 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
         var callback=action; Dismiss(); callback?.Invoke(choice);
     });
     public void Show(QuestTask task, List<QuestTag> catalog, DateTime now, bool canComplete, Vector2 point,
-        Action<TaskContextAction> callback, Func<TaskContextChange,string> onApply)
+        Action<TaskContextAction> callback, Func<TaskContextChange,string> onApply, Action onDraftDismiss = null)
     {
         tutorialPreview=false; applyAsync=null; openGeneration++;
-        returnFocus=EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
+        quickAddDismissed = onDraftDismiss;
+        bool quickAdd = onDraftDismiss != null;
+        SetQuickAddActions(quickAdd);
+        returnFocus=!quickAdd && EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
         original=PlayerDataStore.Copy(task); localToday=now.Date;
-        action=callback; apply=onApply; screenPoint=point; heading.text=task.title;
+        action=callback; apply=onApply; screenPoint=point;
+        heading.text=quickAdd && string.IsNullOrWhiteSpace(task.title) ? "Add Task" : task.title;
         complete.interactable=canComplete; tomorrow.interactable=localToday<DateTime.MaxValue.Date;
         clearDateLabel.text=task.daily ? "Clear date & stop repeating" : "Clear date";
         datePicker.noDateLabel.text=clearDateLabel.text;
@@ -100,7 +129,10 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
         }
         emptyTags.gameObject.SetActive(catalog.Count==0);
         tagScroll.gameObject.SetActive(catalog.Count>0);
-        gameObject.SetActive(true); transform.SetAsLastSibling(); ShowPanel(TaskContextAction.Edit);
+        gameObject.SetActive(true); transform.SetAsLastSibling();
+        // Let the quick input restore focus after handling the menu's Escape.
+        if (quickAdd && EventSystem.current) EventSystem.current.SetSelectedGameObject(null);
+        ShowPanel(TaskContextAction.Edit);
     }
     public void ShowAsync(QuestTask task, List<QuestTag> catalog, DateTime now, bool canComplete, Vector2 point,
         Action<TaskContextAction> callback, Func<TaskContextChange,System.Threading.Tasks.Task<string>> onApply)
@@ -108,12 +140,23 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
         Show(task,catalog,now,canComplete,point,callback,null);
         applyAsync=onApply;
     }
+    void SetQuickAddActions(bool quickAdd)
+    {
+        if (!editLabel)
+        {
+            editLabel = edit.GetComponent<ControlHint>().expansionLabel.GetComponent<TMP_Text>();
+            defaultEditLabel = editLabel.text;
+        }
+        editLabel.text = quickAdd ? "Edit info" : defaultEditLabel;
+        complete.gameObject.SetActive(!quickAdd);
+        delete.gameObject.SetActive(!quickAdd);
+    }
     void ShowPanel(TaskContextAction choice)
     {
         field=choice;
         panel.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,choice==TaskContextAction.Edit ? iconPanelWidth : choice==TaskContextAction.ChooseDate ? Mathf.Max(defaultPanelWidth,380) : defaultPanelWidth);
         heading.gameObject.SetActive(choice!=TaskContextAction.Edit);
-        save.GetComponentInChildren<TMP_Text>().text=choice==TaskContextAction.ChooseDate ? "Save schedule" : "Save";
+        save.GetComponentInChildren<TMP_Text>().text=quickAddDismissed!=null ? "Apply" : choice==TaskContextAction.ChooseDate ? "Save schedule" : "Save";
         selectedDifficulty=original.difficulty;
         selectedTags.Clear();selectedTags.UnionWith(original.tagIds);
         datePicker.LoadValue(TaskService.TryDate(original.date,out var date) ? date : localToday,original.scheduled || original.daily);
@@ -151,10 +194,22 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     }
     void RefreshDifficulty()
     {
-        for(int i=0;i<difficultyOptions.Length;i++) {
-            bool selected=i==(int)selectedDifficulty;
-            difficultyOptions[i].GetComponent<Image>().color=selected ? new Color32(97,113,164,255) : new Color32(231,239,250,255);
-            difficultyOptions[i].GetComponentInChildren<TMP_Text>().color=selected ? Color.white : TaskUIBuilder.Ink;
+        for (int i = 0; i < difficultyOptions.Length; i++)
+        {
+            var value = (TaskDifficulty)i;
+            bool selected = value == selectedDifficulty;
+            // Sample the fill of the existing SimpleCasual task badges.
+            Color32 accent = value switch
+            {
+                TaskDifficulty.Easy => new Color32(56, 221, 51, 255),
+                TaskDifficulty.Hard => new Color32(255, 84, 100, 255),
+                _ => new Color32(62, 172, 248, 255)
+            };
+            var option = difficultyOptions[i];
+            option.targetGraphic.color = Color.Lerp(Color.white, accent, selected ? .85f : .30f);
+            var label = option.GetComponentInChildren<TMP_Text>(true);
+            label.color = TaskUIBuilder.Ink;
+            label.fontStyle = selected ? label.fontStyle | FontStyles.Bold : label.fontStyle & ~FontStyles.Bold;
         }
     }
     void ClearError()
@@ -218,11 +273,14 @@ public sealed class TaskContextMenu : MonoBehaviour, IPointerClickHandler
     }
     public void Dismiss()
     {
+        var onDismiss = quickAddDismissed;
+        quickAddDismissed = null;
         action=null;apply=null; gameObject.SetActive(false);
         if (EventSystem.current && returnFocus && returnFocus.activeInHierarchy) EventSystem.current.SetSelectedGameObject(returnFocus);
         returnFocus=null;
+        onDismiss?.Invoke();
     }
     public void OnPointerClick(PointerEventData e) { if(e.button==PointerEventData.InputButton.Right) Dismiss(); }
     void OnApplicationFocus(bool focused) { if(!focused) Dismiss(); }
-    void OnDisable() { action=null;apply=null;if(datePicker)datePicker.overlay.SetActive(false); }
+    void OnDisable() { action=null;apply=null;quickAddDismissed=null;if(datePicker)datePicker.overlay.SetActive(false); }
 }

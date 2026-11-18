@@ -43,7 +43,7 @@ public static class DashboardAddVerification
             try
             {
                 if(run.MoveNext())next=EditorApplication.timeSinceStartup+Convert.ToDouble(run.Current);
-                else Finish("PASS: Dashboard inline input, pointer/keyboard activation, blank validation, duplicate submit, outside-blur auto-save/blank cancellation, page-switch save/failure blocking, save failure/retry, Escape cancellation, reload and Today defaults at 1920x1080 and 1280x720.");
+                else Finish("PASS: Dashboard quick-add draft right-click options, full editor handoff, quick save, and saved-task actions. Existing inline input, pointer/keyboard activation, validation, duplicate submit, blur, page navigation, save retry, Escape, reload and Today defaults passed.");
             }
             catch(Exception e){Finish("FAIL at "+context+": "+e);}
             return;
@@ -140,6 +140,8 @@ public static class DashboardAddVerification
         var service=manager.Service;
         foreach(var size in new[]{new Vector2Int(1920,1080),new Vector2Int(1280,720),new Vector2Int(2560,1080)}) {
             context=size.ToString(); Resolution(size.x,size.y); nav.ShowPage(MainMenuPage.Dashboard); yield return .7;
+            if (size.x==1920 || size.x==1280)
+                foreach(var wait in DashboardTaskActionsVerification.QuickAdd(owner,nav,size.x,Capture)) yield return wait;
             Capture("dashboard-"+size.x); yield return .2;
             var button=owner.addTaskButton;
             var pointer=new PointerEventData(EventSystem.current){button=PointerEventData.InputButton.Left};
