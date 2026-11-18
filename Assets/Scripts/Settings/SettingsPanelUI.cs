@@ -15,6 +15,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public Button importBackup, exportBackup;
     public Toggle notifications, upload;
     public Toggle reduceMotion;
+    [SerializeField] Toggle pauseMusicWhenUnfocused;
     public Slider sound, music;
     public Button soundMute, musicMute;
     public SettingsSliderCommit soundCommit, musicCommit;
@@ -77,6 +78,8 @@ public sealed class SettingsPanelUI : MonoBehaviour
         cancelDelete.onClick.AddListener(OpenTags);
         notifications.onValueChanged.AddListener(_ => { if (!refreshing) SaveSettings(); });
         if(reduceMotion)reduceMotion.onValueChanged.AddListener(_ => { if(!refreshing)SaveSettings(); });
+        if (pauseMusicWhenUnfocused)
+            pauseMusicWhenUnfocused.onValueChanged.AddListener(_ => { if (!refreshing) SaveSettings(); });
         sound.onValueChanged.AddListener(_ => PreviewVolumes(soundCommit));
         music.onValueChanged.AddListener(_ => PreviewVolumes(musicCommit));
         soundMute.onClick.AddListener(ToggleSoundMute);
@@ -233,6 +236,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         if(reduceMotion)draft.reduceMotion = reduceMotion.isOn;
         draft.soundVolume = sound.value;
         draft.musicVolume = music.value;
+        if (pauseMusicWhenUnfocused) draft.playMusicInBackground = !pauseMusicWhenUnfocused.isOn;
         draft.defaultTaskTab = selectedTaskTab;
         draft.dashboardRanking = selectedRanking.ToString();
         draft.hideDashboardRanking = !showDashboardRanking.isOn;
@@ -357,6 +361,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         showDashboardCharacter.SetIsOnWithoutNotify(!saved.hideDashboardCharacter);
         notifications.SetIsOnWithoutNotify(saved.notificationsEnabled);
         if(reduceMotion)reduceMotion.SetIsOnWithoutNotify(saved.reduceMotion);
+        if (pauseMusicWhenUnfocused) pauseMusicWhenUnfocused.SetIsOnWithoutNotify(!saved.playMusicInBackground);
         sound.SetValueWithoutNotify(saved.soundVolume); music.SetValueWithoutNotify(saved.musicVolume);
         RememberVolumes();
         // Native sliders do not notify visual adapters during programmatic initialization.

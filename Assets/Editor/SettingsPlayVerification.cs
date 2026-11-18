@@ -82,6 +82,11 @@ public static class SettingsPlayVerification
         EditorApplication.delayCall += RecoverAfterReload;
         Application.logMessageReceived += (message, stack, type) =>
         {
+            // The registry UI can report an editor-only error during Play Mode on this project.
+            if (SessionState.GetBool(Flag + ".backgroundMusic", false)
+                && message == "[Package Manager Window] The \"path\" argument must be of type string. Received undefined"
+                && stack.Contains("UnityEditor.EditorApplication:Internal_CallUpdateFunctions"))
+                return;
             if (SessionState.GetBool(Flag, false) && (type == LogType.Error || type == LogType.Exception))
                 loggedError = message + "\n" + stack;
         };
@@ -110,7 +115,9 @@ public static class SettingsPlayVerification
         {
             SessionState.SetBool(Flag + ".enteredPlay", true);
             evidence.Clear(); checks.Clear(); loggedError = null;
-            run = SessionState.GetBool(Flag + ".backupRepeat", false) ? RunBackupRepeat() : SessionState.GetBool(Flag + ".mute", false) ? RunMute() : SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run(); run = Flatten(ReadyFlow(Flatten(run))); next = EditorApplication.timeSinceStartup + 2;
+            run = SessionState.GetBool(Flag + ".backgroundMusic", false) ? RunBackgroundMusic()
+                : SessionState.GetBool(Flag + ".backupRepeat", false) ? RunBackupRepeat() : SessionState.GetBool(Flag + ".mute", false) ? RunMute() : SessionState.GetBool(Flag + ".appUpdates", false) ? AppUpdateVerification.Run(Resolution, Capture, Click) : SessionState.GetBool(Flag + ".quickUX", false) ? RunQuickUX() : SessionState.GetBool(Flag + ".taskDates", false) ? RunTaskDates() : Run();
+            run = Flatten(ReadyFlow(Flatten(run))); next = EditorApplication.timeSinceStartup + 2;
         }
         if (state == PlayModeStateChange.EnteredEditMode)
         {
@@ -149,13 +156,17 @@ public static class SettingsPlayVerification
                 else
                 {
                     Check(evidence.All(path => File.Exists(path) && new FileInfo(path).Length > 100), "A requested screenshot is missing or empty.");
-                    Finish(SessionState.GetBool(Flag + ".backupRepeat", false) ? "PASS: backup actions and custom repeat editor at both resolutions." : SessionState.GetBool(Flag + ".mute", false) ? "PASS: Sound/Music mute, unmute, independent channels, reopen, keyboard submit, rapid repeated clicks, immediate persistence/reload at both resolutions." : SessionState.GetBool(Flag + ".appUpdates", false) ? "PASS: App Update bindings, state views, modal dismissal/focus, download continuity, button motion/reset at 1920x1080 and 1280x720. Network/install are verified separately." : SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
+                    Finish(SessionState.GetBool(Flag + ".backgroundMusic", false) ? "PASS: background music Settings checks and captures."
+                        : SessionState.GetBool(Flag + ".backupRepeat", false) ? "PASS: backup actions and custom repeat editor at both resolutions." : SessionState.GetBool(Flag + ".mute", false) ? "PASS: Sound/Music mute, unmute, independent channels, reopen, keyboard submit, rapid repeated clicks, immediate persistence/reload at both resolutions." : SessionState.GetBool(Flag + ".appUpdates", false) ? "PASS: App Update bindings, state views, modal dismissal/focus, download continuity, button motion/reset at 1920x1080 and 1280x720. Network/install are verified separately." : SessionState.GetBool(Flag + ".quickUX", false) ? "PASS: targeted UX checks and captures; see checks below." : SessionState.GetBool(Flag + ".taskDates", false) ? "PASS: task date grouping/Settings focused flow; see checks and screenshots below. Visual comparison remains separate review." : "PASS: Settings, Tags, Tag Editor and missing-configuration Account; rendered reference and 1920x1080/1280x720 captures; modal routing/focus, deferred volume commits/reload, unscaled button/toggle motion, stable IDs and unsaved task drafts, tag deletion and empty/error states. Screenshot comparison and real Windows notification/login behavior remain separate manual review.");
                 }
             }
             catch (Exception e) { Finish("FAIL at " + context + ": " + e); }
             return;
         }
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists(Request)) return;
+        string requestedMode = File.ReadAllText(Request).Trim();
+        SessionState.SetBool(Flag + ".backgroundMusic", requestedMode.StartsWith("background-music", StringComparison.Ordinal));
+        SessionState.SetBool(Flag + ".backgroundMusicBefore", requestedMode == "background-music-before");
         SessionState.SetBool(Flag + ".backupRepeat", File.ReadAllText(Request).Trim() == "backup-repeat");
         SessionState.SetBool(Flag + ".mute", File.ReadAllText(Request).Trim() == "mute");
         SessionState.SetBool(Flag + ".taskDates", File.ReadAllText(Request).Trim().StartsWith("task-dates"));
@@ -716,6 +727,152 @@ public static class SettingsPlayVerification
             while (muteChecks.MoveNext()) yield return muteChecks.Current;
             Layout(ui, size); Capture("mute-restored-" + suffix); yield return .15;
             Click(ui.close); yield return .2;
+        }
+    }
+
+    static IEnumerator RunBackgroundMusic()
+    {
+        var manager = GameDataManager.EnsureInstance();
+        Check(Path.GetFullPath(manager.SavePath) == Path.GetFullPath(Folder + "/save.sqlite3"), "Expected isolated save.");
+        var service = manager.Service;
+        UnityEngine.Object.FindFirstObjectByType<TutorialController>()?.Skip();
+        yield return Wait(service.FlushAsync());
+        var launcher = UnityEngine.Object.FindFirstObjectByType<SettingsLauncher>();
+        bool before = SessionState.GetBool(Flag + ".backgroundMusicBefore", false);
+        var legacy = JsonUtility.FromJson<AppSettings>("{\"musicVolume\":0.4}");
+        Check(!legacy.playMusicInBackground && Mathf.Approximately(legacy.musicVolume, .4f),
+            "Older settings default to pausing and preserve music volume.");
+
+        foreach (var size in new[] { new Vector2Int(1920, 1080), new Vector2Int(1280, 720) })
+        {
+            string suffix = size.x + "x" + size.y;
+            context = "Background music " + suffix;
+            Resolution(size);
+            yield return .5;
+            if (before)
+            {
+                var canvas = launcher.GetComponentInParent<Canvas>().rootCanvas;
+                var reference = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(ReferencePath), canvas.transform);
+                reference.SetActive(true);
+                TaskUIBuilder.Stretch((RectTransform)reference.transform);
+                var panel = (RectTransform)reference.transform.Find("Popup");
+                panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(.5f, .5f);
+                panel.anchoredPosition = Vector2.zero;
+                var canvasRect = ((RectTransform)canvas.transform).rect;
+                panel.localScale = Vector3.one * Mathf.Min(1, (canvasRect.width - 100) / panel.rect.width,
+                    (canvasRect.height - 140) / (panel.rect.height + 120));
+                Capture("vendor-settings-reference-" + suffix);
+                yield return .15;
+                UnityEngine.Object.Destroy(reference);
+                yield return .15;
+            }
+
+            Click(launcher.GetComponent<Button>());
+            yield return .25;
+            var ui = UnityEngine.Object.FindFirstObjectByType<SettingsPanelUI>();
+            Check(ui && ui.CurrentView == "Settings", "Header opens Settings.");
+            if (before)
+            {
+                Capture("settings-before-" + suffix);
+                yield return .15;
+                Click(ui.close);
+                yield return .15;
+                continue;
+            }
+
+            var binding = new SerializedObject(ui).FindProperty("pauseMusicWhenUnfocused");
+            var toggle = (Toggle)binding.objectReferenceValue;
+            Check(toggle && toggle.isOn && !service.Settings.playMusicInBackground, "Pause defaults to on.");
+            var row = (RectTransform)toggle.transform.parent;
+            var motion = ui.reduceMotion;
+            var motionRow = (RectTransform)motion.transform.parent;
+            var label = row.GetComponentInChildren<TMP_Text>();
+            var popup = ui.settingsPage.transform.Find("Popup");
+            Layout(ui, size);
+            var leftRows = new[] { "Alarm_Group(Clone)", "Sound_Group(Clone)", "Music_Group(Clone)", "ReduceMotion", row.name }
+                .Select(name => Bounds((RectTransform)popup.Find(name))).ToArray();
+            for (int i = 1; i < leftRows.Length; i++)
+                Check(Mathf.Abs(leftRows[i].xMin - leftRows[0].xMin) < 1 && leftRows[i - 1].yMin > leftRows[i].yMax,
+                    "Notification, Sound, Music and both preference switches share one aligned left column.");
+            Check(label.text == "Pause music when unfocused" && !label.isTextOverflowing
+                && !Bounds(motionRow).Overlaps(Bounds(ui.musicValue.rectTransform))
+                && !Bounds(row).Overlaps(Bounds((RectTransform)popup.Find("DashboardRanking"))),
+                "Both switches clear the music percentage label and the ranking.");
+            Check(toggle.FindSelectableOnUp() == motion && motion.FindSelectableOnDown() == toggle,
+                "Keyboard navigation follows the visual order of both switches.");
+            var visual = toggle.GetComponent<SettingsToggleVisual>();
+            var bounds = Bounds((RectTransform)toggle.transform);
+            var motionBounds = Bounds((RectTransform)motion.transform);
+            Click(motion);
+            yield return WaitSettings(ui);
+            Check(motion.isOn && service.Settings.reduceMotion && toggle.isOn, "Moved Reduce motion switch still saves on click.");
+            EventSystem.current.SetSelectedGameObject(motion.gameObject);
+            ExecuteEvents.Execute(motion.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+            yield return WaitSettings(ui);
+            Check(!motion.isOn && !service.Settings.reduceMotion && toggle.isOn, "Keyboard submit restores Reduce motion independently of music.");
+            Stable(motionBounds, motion);
+            var audio = SettingsAudio.Instance;
+            void Focus(bool focused) => audio.SendMessage("OnApplicationFocus", focused, SendMessageOptions.RequireReceiver);
+            Focus(true);
+            yield return .3;
+            Focus(false);
+            Check(!audio.musicSource.isPlaying, "Default switch pauses BGM on focus loss.");
+            Capture("settings-pause-on-" + suffix);
+            yield return .15;
+
+            float volume = service.Settings.musicVolume;
+            float priorTimeScale = Time.timeScale;
+            Time.timeScale = 0;
+            Click(toggle);
+            yield return .04;
+            Capture("switch-moving-" + suffix);
+            yield return WaitSettings(ui);
+            yield return .4;
+            Time.timeScale = priorTimeScale;
+            Check(!toggle.isOn && service.Settings.playMusicInBackground && audio.musicSource.isPlaying
+                && audio.musicSource.volume == volume && ReadSettingsOnDisk(manager.SavePath).playMusicInBackground,
+                "Turning pause off resumes background BGM and persists the choice without changing volume.");
+            Check(Mathf.Abs(visual.handle.anchoredPosition.x + visual.travel) < .5f, "Switch settles using unscaled time.");
+            Stable(bounds, toggle);
+            Capture("settings-pause-off-" + suffix);
+            yield return .15;
+            Focus(true);
+            Focus(false);
+            Check(audio.musicSource.isPlaying, "BGM keeps playing on subsequent focus loss.");
+
+            ui.Close();
+            ui.Open(launcher.gameObject);
+            Check(!toggle.isOn, "Reopening Settings reads the saved switch state.");
+            EventSystem.current.SetSelectedGameObject(toggle.gameObject);
+            toggle.interactable = false;
+            ExecuteEvents.Execute(toggle.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+            Check(!toggle.isOn, "Disabled switch rejects keyboard submit.");
+            Capture("switch-disabled-" + suffix);
+            yield return .15;
+            toggle.interactable = true;
+            using (TaskCalendarPlayVerification.FailSqliteWrites())
+            {
+                ExecuteEvents.Execute(toggle.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+                var failed = ui.FlushPendingSettingsAsync();
+                foreach (var delay in SqlitePlayVerificationSupport.Wait(failed)) yield return delay;
+                Check(!failed.Result && !toggle.isOn && audio.musicSource.isPlaying && !string.IsNullOrEmpty(ui.settingsStatus.text),
+                    "Failed write restores committed control and playback, with an error.");
+            }
+            ExecuteEvents.Execute(toggle.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+            yield return WaitSettings(ui);
+            Check(toggle.isOn && !audio.musicSource.isPlaying && !ReadSettingsOnDisk(manager.SavePath).playMusicInBackground,
+                "Keyboard retry restores foreground-only playback and commits.");
+            for (int i = 0; i < 4; i++) Click(toggle);
+            yield return WaitSettings(ui);
+            yield return .3;
+            Check(toggle.isOn && !service.Settings.playMusicInBackground && !audio.musicSource.isPlaying,
+                "Rapid repeated toggles settle on the final selection.");
+            Stable(bounds, toggle);
+            Focus(Application.isFocused);
+            Backdrop(ui);
+            Check(!ui.gameObject.activeSelf && EventSystem.current.currentSelectedGameObject == launcher.gameObject,
+                "Backdrop dismisses Settings and restores opener focus.");
+            checks.Add("Background music persistence, rollback, playback, layout, navigation and input checks passed at " + suffix + ".");
         }
     }
 

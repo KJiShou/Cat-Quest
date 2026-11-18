@@ -212,7 +212,7 @@ public static class RemainingPresentationVerificationChecks
             check(settings.reduceMotion&&settings.reduceMotion.gameObject.activeInHierarchy&&!settings.reduceMotion.isOn,"Reduce motion is authored, bound and initialized from saved settings");
             var motionRow=(RectTransform)settings.reduceMotion.transform.parent;
             check(motionRow.name=="ReduceMotion"&&motionRow.parent==settings.settingsPage.transform.Find("Popup")
-                && motionRow.sizeDelta==new Vector2(330,48)&&motionRow.anchoredPosition==new Vector2(350,30),"Motion setting occupies the dedicated right-column row");
+                && motionRow.anchoredPosition.x<0&&motionRow.rect.width>(motionRow.rect.height*2),"Motion setting occupies a full row in the left column");
             check(settings.settingsPage.GetComponentsInChildren<TMP_Text>().Any(text=>text.text=="Show on Dashboard"),"Existing dashboard visibility heading is retained");
             foreach(int width in new[]{1920,1280}) {
                 RemainingFixesVerification.Resolution(width,width==1920?1080:720);yield return .3;

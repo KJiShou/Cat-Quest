@@ -8,6 +8,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using static SqlitePlayVerificationSupport;
 
 // Bounded verification only: no asset generation or authored-scene saves.
 [InitializeOnLoad]
@@ -15,6 +16,7 @@ public static class DialogueAudioVerification
 {
     const string Flag = "CatQuest.DialogueAudioVerification";
     const string Request = "Temp/verify-dialogue-audio.request";
+    const string MusicRequest = "Temp/verify-background-music.request";
     static IEnumerator flow;
     static double next;
     static string Folder => SessionState.GetString(Flag + ".folder", "");
@@ -24,7 +26,11 @@ public static class DialogueAudioVerification
         EditorApplication.update += Poll;
         EditorApplication.playModeStateChanged += state => {
             if (!SessionState.GetBool(Flag, false)) return;
-            if (state == PlayModeStateChange.EnteredPlayMode) { flow = Run(); next = EditorApplication.timeSinceStartup + 3; }
+            if (state == PlayModeStateChange.EnteredPlayMode)
+            {
+                flow = Flatten(SessionState.GetBool(Flag + ".musicOnly", false) ? RunBackgroundMusic() : Run());
+                next = EditorApplication.timeSinceStartup + 3;
+            }
             if (state == PlayModeStateChange.EnteredEditMode) Restore();
         };
     }
@@ -39,8 +45,11 @@ public static class DialogueAudioVerification
             catch (Exception e) { Finish("FAIL: " + e); }
             return;
         }
-        if (EditorApplication.isPlayingOrWillChangePlaymode || !File.Exists(Request)) return;
-        File.Delete(Request);
+        if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+        var request = File.Exists(MusicRequest) ? MusicRequest : Request;
+        if (!File.Exists(request)) return;
+        File.Delete(request);
+        SessionState.SetBool(Flag + ".musicOnly", request == MusicRequest);
         string folder = "Library/DialogueAudioVerification/" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
         Directory.CreateDirectory(folder); SessionState.SetString(Flag + ".folder", folder);
         var store = Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");
@@ -79,6 +88,8 @@ public static class DialogueAudioVerification
     }
     static AudioSource Voice(SettingsAudio audio) => (AudioSource)typeof(SettingsAudio).GetField("dialogueSource", Private).GetValue(audio);
     static void Invoke(object instance, string method) => instance.GetType().GetMethod(method, Private).Invoke(instance, null);
+    static void SetApplicationFocus(SettingsAudio audio, bool focused) =>
+        typeof(SettingsAudio).GetMethod("OnApplicationFocus", Private).Invoke(audio, new object[] { focused });
     static void ClickSkipControl(StorySkipUI owner, string field)
     {
         var button = (Button)typeof(StorySkipUI).GetField(field, Private).GetValue(owner);
@@ -95,21 +106,56 @@ public static class DialogueAudioVerification
             field + " raycast; first hit: " + (hits.Count > 0 ? hits[0].gameObject.name : "none"));
         ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
     }
+    static IEnumerator RunBackgroundMusic()
+    {
+        Check(GameDataManager.Instance.SavePath.Contains("DialogueAudioVerification"), "Isolated save path");
+        while (!GameDataManager.Instance.Ready.IsCompleted) yield return .1;
+        Check(GameDataManager.Instance.Ready.Result.Succeeded, "Isolated SQLite storage ready");
+        var initialAudio = SettingsAudio.Instance;
+        var music = initialAudio.musicSource;
+        SetApplicationFocus(initialAudio, true);
+        yield return .5;
+        Check(music.isPlaying && music.timeSamples > 0, "Foreground menu music advances");
+        SetApplicationFocus(initialAudio, false);
+        int pausedSample = music.timeSamples;
+        initialAudio.SetFocusPhase(FocusPhase.Ready);
+        yield return .3;
+        Check(!music.isPlaying && music.timeSamples == pausedSample, "Background menu music stays paused after refresh");
+        SetApplicationFocus(initialAudio, true);
+        yield return .3;
+        Check(music.isPlaying && music.timeSamples > pausedSample, "Foreground resumes menu music from its paused position");
+        initialAudio.SetFocusPhase(FocusPhase.Focusing);
+        SetApplicationFocus(initialAudio, false);
+        initialAudio.SetFocusPhase(FocusPhase.Resting);
+        Check(!music.isPlaying && music.clip == initialAudio.restMusic, "Background Focus-to-Rest switch stays silent");
+        SetApplicationFocus(initialAudio, true);
+        Check(music.isPlaying && music.clip == initialAudio.restMusic, "Foreground plays the current Rest track");
+        initialAudio.SetFocusPhase(FocusPhase.Ready);
+        SetApplicationFocus(initialAudio, Application.isFocused);
+    }
     static IEnumerator Run()
     {
         Check(GameDataManager.Instance.SavePath.Contains("DialogueAudioVerification"), "Isolated save path");
-        var service = GameDataManager.Instance.Tasks;
+        var manager = GameDataManager.Instance;
+        var repository = (SqlitePlayerRepository)Repository();
+        foreach (var delay in Wait(manager.Ready)) yield return delay;
+        Check(manager.Ready.Result.Succeeded, "Isolated SQLite storage ready: " + manager.Ready.Result.Message
+            + (manager.Ready.Result.Succeeded ? "" : "\n" + repository.LastVerificationDiagnostic));
+        var service = manager.Service;
         var defaults = service.Settings;
         var initialAudio = SettingsAudio.Instance;
         Check(defaults.soundVolume == 1f && defaults.musicVolume == 1f
             && initialAudio.soundSource.volume == 1f && initialAudio.musicSource.volume == 1f,
             "New user music and SFX start at 100 percent");
         var muted = service.Settings; muted.soundVolume = 0; muted.musicVolume = 0;
-        Check(service.SaveSettings(muted), "Save explicit mute in isolated store");
-        var reloaded = new PlayerDataStore(GameDataManager.Instance.SavePath);
-        Check(reloaded.Data.settings.soundVolume == 0 && reloaded.Data.settings.musicVolume == 0,
+        yield return Command(service.SaveSettingsAsync(muted));
+        var reloaded = ReloadAsync();
+        foreach (var delay in Wait(reloaded)) yield return delay;
+        Check(reloaded.Result.settings.soundVolume == 0 && reloaded.Result.settings.musicVolume == 0,
             "Existing saved music/SFX mute survives reload");
-        Check(service.SaveSettings(defaults), "Restore isolated default volumes");
+        yield return Command(service.SaveSettingsAsync(defaults));
+        Check(initialAudio.soundSource.volume == 1f && initialAudio.musicSource.volume == 1f,
+            "Restore isolated default volumes");
         var story = UnityEngine.Object.FindFirstObjectByType<StoryController>();
         Check(story, "Story scene loaded");
         var serialized = new SerializedObject(story);
@@ -129,10 +175,12 @@ public static class DialogueAudioVerification
         Check(DialogueAudioLibrary.Find("Disk full Your tasks are safe. Try again.", false) != null, "Dynamic save error matches template");
         var input = UnityEngine.Object.FindFirstObjectByType<UsernameInputController>();
         ((TMP_InputField)typeof(UsernameInputController).GetField("usernameInput", Private).GetValue(input)).text = "Audio Apprentice";
-        // The first line is only 0.425 s. Observe startup in the same Editor tick;
-        // an Editor update delayed by asset/UI work may miss the entire short clip.
+        // Username confirmation commits asynchronously before starting the short first line.
         input.ConfirmUsername();
         var audio = SettingsAudio.Instance;
+        double voiceDeadline = EditorApplication.timeSinceStartup + 10;
+        while (!(Voice(audio) && Voice(audio).clip) && EditorApplication.timeSinceStartup < voiceDeadline)
+            yield return 0;
         Check(Voice(audio) && Voice(audio).isPlaying && Voice(audio).clip && Voice(audio).clip.name.StartsWith("player-"),
             "Story starts approved B voice; clip="+(Voice(audio)&&Voice(audio).clip?Voice(audio).clip.name:"none")
             +"; playing="+(Voice(audio)&&Voice(audio).isPlaying)+"; focused="+Application.isFocused);
@@ -171,8 +219,9 @@ public static class DialogueAudioVerification
         Check(Voice(audio).volume == 0 && Mathf.Approximately(audio.musicSource.volume, .2f), "Sound mute and Music volumes stay independent");
         audio.Preview(new AppSettings { soundVolume = .4f, musicVolume = .2f });
         Check(Mathf.Approximately(Voice(audio).volume, .4f), "Live Sound volume applies to voice");
-        typeof(SettingsAudio).GetMethod("OnApplicationFocus", Private).Invoke(audio, new object[] { false });
+        SetApplicationFocus(audio, false);
         Check(!Voice(audio).clip, "Focus loss stops voice");
+        SetApplicationFocus(audio, Application.isFocused);
         tutorial.CompleteTyping(); tutorial.OpenTopic(0); yield return .5;
         tutorial.enabled = false; Check(!Voice(audio).clip, "Disabling tutorial stops voice");
         tutorial.enabled = true; tutorial.OpenTopic(0); yield return .5;
@@ -180,7 +229,8 @@ public static class DialogueAudioVerification
         UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>().ShowPage(MainMenuPage.Tasks);
         Check(!Voice(audio).clip, "Page change immediately stops current voice");
         yield return .5;
-        tutorial.Skip(); Check(!Voice(audio).clip, "Skip tutorial stops voice");
+        tutorial.Skip(); yield return Ui(service);
+        Check(service.Tutorial.dismissed && !Voice(audio).clip, "Skip tutorial stops voice");
         tutorial.SendMessage("OnApplicationFocus", true);
         tutorial.OpenTopic(5);
         for(int step = 0; step < 9; step++) {
@@ -200,8 +250,9 @@ public static class DialogueAudioVerification
         Check(Voice(audio).isPlaying, "Reopening Settings guide restarts voice");
         tutorial.CompleteTyping();tutorial.Continue();yield return .2;tutorial.GoBack();yield return .2;
         Check(tutorial.CurrentTopic=="help-settings-0" && !tutorial.back.gameObject.activeSelf && Voice(audio).isPlaying,"Settings Back restores the preceding spoken step and hides at first step");
-        tutorial.Skip(); Check(!Voice(audio).clip, "Skipping Settings guide stops voice");
-        GameDataManager.Instance.PlayerData.equipmentUnlocked=true;GameDataManager.Instance.SaveData();
+        tutorial.Skip(); yield return Ui(service);
+        Check(!tutorial.panel.activeSelf && !Voice(audio).clip, "Skipping Settings guide stops voice");
+        yield return Command(FixtureAsync(data => data.equipmentUnlocked = true));
         tutorial.OpenHelp();tutorial.OpenTopic(2);yield return .2;tutorial.CompleteTyping();tutorial.Continue();yield return .2;
         if(tutorial.CurrentTopic=="equipment-open") {
             Check(Voice(audio).isPlaying,"Equipment navigation explanation has a voice");
@@ -221,9 +272,10 @@ public static class DialogueAudioVerification
             tutorial.Continue();yield return .2;
         }
         Check(!tutorial.panel.activeSelf && !Voice(audio).clip,"Equipment completion releases dialogue voice");
-        GameDataManager.Instance.PlayerData.experience=550;GameDataManager.Instance.SaveData();
-        var progress=GameDataManager.Instance.Tasks.Tutorial;progress.announcedLevel=5;
-        Check(GameDataManager.Instance.Tasks.SaveTutorial(progress),"Seed Boss level in isolated tutorial state");
+        yield return Command(FixtureAsync(data => data.experience = 550));
+        var progress = service.Tutorial;
+        progress.announcedLevel = 5;
+        yield return Command(service.SaveTutorialAsync(progress));
         Check(UnityEngine.Object.FindFirstObjectByType<MainMenuNavigation>().ShowPage(MainMenuPage.Boss),"Boss available for mastery voice check");
         yield return 1;
         // The fixture's EXP jump raises normal reward feedback on Changed. Respect
@@ -241,7 +293,8 @@ public static class DialogueAudioVerification
         Check(tutorial.CurrentTopic=="boss-step-4" && mastery!=null
             && Voice(audio).clip==Resources.Load<AudioClip>(mastery.clip) && Voice(audio).isPlaying,
             "Fixed-order Boss mastery explanation plays its matching mentor voice");
-        tutorial.Skip();Check(!Voice(audio).clip,"Skipping mastery explanation releases voice");
+        tutorial.Skip(); yield return Ui(service);
+        Check(!tutorial.panel.activeSelf && !Voice(audio).clip, "Skipping mastery explanation releases voice");
         var focus = FocusRunner.EnsureInstance().Controller;
         var focusPhase = focus.Phase; string focusSession = focus.SessionId;
         tutorial.OpenTopic(1); yield return .2;
@@ -260,7 +313,7 @@ public static class DialogueAudioVerification
         tutorial.GoBack();yield return .2;tutorial.CompleteTyping();tutorial.Continue();yield return .2;
         Check(tutorial.CurrentTopic=="focus-step-5" && Voice(audio).clip==Resources.Load<AudioClip>(ticketRule.clip)
             && Voice(audio).isPlaying,"Revisiting the Focus rule restarts its matching voice");
-        tutorial.Skip();
+        tutorial.Skip(); yield return Ui(service);
         Check(!Voice(audio).clip && focus.Phase==focusPhase && focus.SessionId==focusSession,
             "Skipping the Focus rule stops voice without starting or ending a real session");
         Check(audio.PlayDialogue(tutorial, "Uncatalogued future text", false) == 0 && !Voice(audio).clip, "Unknown text remains silent and clears previous voice");

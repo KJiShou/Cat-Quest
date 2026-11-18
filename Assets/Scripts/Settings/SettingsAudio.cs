@@ -24,6 +24,7 @@ public sealed class SettingsAudio : MonoBehaviour
     SqlitePlayerService service;
     FocusPhase focusPhase;
     bool battling;
+    bool hasApplicationFocus, musicPaused, playMusicInBackground;
     AudioSource dialogueSource;
     Object dialogueOwner;
     AudioClip dialogueClip;
@@ -46,6 +47,7 @@ public sealed class SettingsAudio : MonoBehaviour
     void OnEnable()
     {
         if (Instance != this) return;
+        hasApplicationFocus = Application.isFocused;
         service = GameDataManager.EnsureInstance().Service;
         service.Changed += ApplySaved;
         service.LevelUp += OnLevelUp;
@@ -60,6 +62,7 @@ public sealed class SettingsAudio : MonoBehaviour
         SceneManager.sceneLoaded -= OnSceneLoaded;
         if (fallbackListener) fallbackListener.enabled = false;
         if (musicSource) musicSource.Stop();
+        musicPaused = false;
         if (soundSource) soundSource.Stop();
         StopDialogue();
     }
@@ -74,7 +77,15 @@ public sealed class SettingsAudio : MonoBehaviour
         fallbackListener.enabled = !hasSceneListener;
     }
     void OnDestroy() { if (Instance == this) Instance = null; }
-    public void ApplySaved() { if (service != null) Preview(service.Settings); }
+    public void ApplySaved()
+    {
+        if (service == null) return;
+        var settings = service.Settings;
+        Preview(settings);
+        if (playMusicInBackground == settings.playMusicInBackground) return;
+        playMusicInBackground = settings.playMusicInBackground;
+        RefreshMusic();
+    }
     public void Preview(AppSettings settings)
     {
         if (settings == null) return;
@@ -111,7 +122,12 @@ public sealed class SettingsAudio : MonoBehaviour
         dialogueOwner = null;
         if (dialogueClip) { Resources.UnloadAsset(dialogueClip); dialogueClip = null; }
     }
-    void OnApplicationFocus(bool focused) { if (!focused) StopDialogue(); }
+    void OnApplicationFocus(bool focused)
+    {
+        hasApplicationFocus = focused;
+        if (!focused) StopDialogue();
+        RefreshMusic();
+    }
     public void PlaySound(AudioClip clip)
     {
         if (isActiveAndEnabled && soundSource && soundSource.isActiveAndEnabled && clip)
@@ -143,10 +159,33 @@ public sealed class SettingsAudio : MonoBehaviour
         AudioClip clip = battling ? battleMusic
             : focusPhase == FocusPhase.Focusing || focusPhase == FocusPhase.Saving ? focusMusic
             : focusPhase == FocusPhase.Resting ? restMusic : musicClip;
-        if (musicSource.clip == clip && (!clip || musicSource.isPlaying)) return;
-        musicSource.Stop();
-        musicSource.clip = clip;
+        if (musicSource.clip != clip)
+        {
+            musicSource.Stop();
+            musicPaused = false;
+            musicSource.clip = clip;
+        }
+
+        if (!hasApplicationFocus && !playMusicInBackground)
+        {
+            if (musicSource.isPlaying)
+            {
+                musicSource.Pause();
+                musicPaused = true;
+            }
+            return;
+        }
+
+        if (!clip || musicSource.isPlaying) return;
         musicSource.loop = true;
-        if (clip) musicSource.Play();
+        if (musicPaused)
+        {
+            musicSource.UnPause();
+            musicPaused = false;
+        }
+        else
+        {
+            musicSource.Play();
+        }
     }
 }

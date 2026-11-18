@@ -8,6 +8,7 @@ public sealed class AppSettings
     public bool reduceMotion;
     public float soundVolume = 1f;
     public float musicVolume = 1f;
+    public bool playMusicInBackground;
     public TaskTab defaultTaskTab = TaskTab.Today;
     public TaskTab DefaultTaskTab => defaultTaskTab == TaskTab.Daily || defaultTaskTab == TaskTab.Todo ? defaultTaskTab : TaskTab.Today;
     public string dashboardRanking = nameof(LeaderboardKind.FocusMinutes);
