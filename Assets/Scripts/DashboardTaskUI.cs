@@ -2,6 +2,7 @@ using System.Collections;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public class DashboardTasksUI : MonoBehaviour
@@ -22,6 +23,7 @@ public class DashboardTasksUI : MonoBehaviour
     public Button addTaskButton;
     public GameObject quickAddRoot;
     public TMP_InputField quickAddInput;
+    [SerializeField] private Button quickAddSaveButton;
     private bool savingTask;
     private bool pendingRefresh;
     private bool pendingBlur;
@@ -113,8 +115,10 @@ public class DashboardTasksUI : MonoBehaviour
     private void OnEnable()
     {
         if (addTaskButton) addTaskButton.onClick.AddListener(BeginAddTask);
+        if (quickAddSaveButton) quickAddSaveButton.onClick.AddListener(SaveQuickTask);
         if (quickAddInput)
         {
+            quickAddInput.onValueChanged.AddListener(UpdateQuickSaveButton);
             quickAddInput.onSubmit.AddListener(SubmitTask);
             quickAddInput.onEndEdit.AddListener(EndTaskInput);
             quickAddInput.onDeselect.AddListener(LeaveTaskInput);
@@ -137,8 +141,10 @@ public class DashboardTasksUI : MonoBehaviour
     {
         pendingBlur = false;
         if (addTaskButton) addTaskButton.onClick.RemoveListener(BeginAddTask);
+        if (quickAddSaveButton) quickAddSaveButton.onClick.RemoveListener(SaveQuickTask);
         if (quickAddInput)
         {
+            quickAddInput.onValueChanged.RemoveListener(UpdateQuickSaveButton);
             quickAddInput.onSubmit.RemoveListener(SubmitTask);
             quickAddInput.onEndEdit.RemoveListener(EndTaskInput);
             quickAddInput.onDeselect.RemoveListener(LeaveTaskInput);
@@ -154,8 +160,17 @@ public class DashboardTasksUI : MonoBehaviour
     {
         if (pendingBlur)
         {
-            pendingBlur = false;
-            if (!quickAddInput.isFocused) PrepareToLeavePage();
+            var selected = EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
+            bool saveSelected = quickAddSaveButton && selected == quickAddSaveButton.gameObject;
+            if (saveSelected)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape)) CancelAddTask();
+            }
+            else
+            {
+                pendingBlur = false;
+                if (!quickAddInput.isFocused && selected != quickAddInput.gameObject) PrepareToLeavePage();
+            }
         }
         if (pendingRefresh) Refresh();
         rows?.Update();
@@ -240,12 +255,26 @@ public class DashboardTasksUI : MonoBehaviour
         if (!isActiveAndEnabled || !quickAddRoot || !quickAddInput) return;
         addTaskButton.gameObject.SetActive(false);
         quickAddRoot.SetActive(true);
+        UpdateQuickSaveButton(quickAddInput.text);
         TaskUIBuilder.BlueCaret(quickAddInput);
         quickAddInput.Select();
         quickAddInput.ActivateInputField();
     }
 
     private void SubmitTask(string _) => CommitAddTask();
+
+    private void SaveQuickTask()
+    {
+        pendingBlur = false;
+        CommitAddTask();
+    }
+
+    private void UpdateQuickSaveButton(string title)
+    {
+        if (quickAddSaveButton)
+            quickAddSaveButton.interactable = !savingTask && !string.IsNullOrWhiteSpace(title);
+    }
+
     private void EndTaskInput(string _)
     {
         if (quickAddInput.wasCanceled) CancelAddTask();
@@ -290,9 +319,14 @@ public class DashboardTasksUI : MonoBehaviour
             date = TaskService.DateKey(service.LocalNow)
         };
         savingTask = true;
+        UpdateQuickSaveButton(quickAddInput.text);
         bool saved;
         try { saved = (await service.UpsertAsync(draft, System.Array.Empty<string>())).Succeeded; }
-        finally { savingTask = false; }
+        finally
+        {
+            savingTask = false;
+            if (this) UpdateQuickSaveButton(quickAddInput.text);
+        }
         if (!this || !isActiveAndEnabled || !quickAddRoot.activeSelf) return saved;
         if (!saved)
         {
@@ -313,6 +347,7 @@ public class DashboardTasksUI : MonoBehaviour
         // Hide before clearing focus so TMP end-edit cannot submit the same draft.
         quickAddRoot.SetActive(false);
         quickAddInput.SetTextWithoutNotify("");
+        UpdateQuickSaveButton(quickAddInput.text);
         addTaskButton.gameObject.SetActive(true);
     }
 

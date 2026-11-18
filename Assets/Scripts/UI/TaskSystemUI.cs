@@ -69,8 +69,10 @@ public partial class TaskSystemUI : MonoBehaviour
     private List<TaskView> visible = new List<TaskView>();
     private TaskDetailsPresenter details;
     private TMP_InputField quickInput;
+    private Button quickSaveButton;
     private QuestTask quickDraft;
     private bool committingQuick;
+    private bool pendingQuickBlur;
     private bool pendingRefresh;
     private bool refocusQuick;
     private TaskConfirmDialog confirmation;
@@ -196,6 +198,16 @@ public partial class TaskSystemUI : MonoBehaviour
     }
     private void LateUpdate()
     {
+        if (pendingQuickBlur)
+        {
+            var selected = EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
+            if (!quickSaveButton || selected != quickSaveButton.gameObject)
+            {
+                pendingQuickBlur = false;
+                if (quickInput && !refocusQuick && selected != quickInput.gameObject)
+                    CommitQuickAdd();
+            }
+        }
         // Let the clicked control handle its event before expanding the list underneath it.
         if (calendar == null || !calendar.Active) rows?.Update();
         if(outsideClickSelection!=null)
@@ -217,6 +229,7 @@ public partial class TaskSystemUI : MonoBehaviour
         if(target && calendar && ((calendar.listMode && target.IsChildOf(calendar.listMode.transform))
             || (calendar.calendarMode && target.IsChildOf(calendar.calendarMode.transform)))) return;
         if(target && target.IsChildOf(detailsRoot)) return;
+        if(target && quickSaveButton && target.IsChildOf(quickSaveButton.transform)) return;
         for(var current=target; current && current.IsChildOf(listContent); current=current.parent)
             if(current.name.StartsWith("Task_",StringComparison.Ordinal)) return;
         outsideClickSelection=SelectedKey;
@@ -236,7 +249,7 @@ public partial class TaskSystemUI : MonoBehaviour
         else resultNotice.Show(message);
     }
     private void CloseModal() { CloseTaskContext(); if(filters) filters.Dismiss(); }
-    private void OnDisable() { refreshGeneration++; outsideClickSelection=null; RememberBrowseState(); StopContextFocus(); if (Service != null) Service.RecordsChanged -= RefreshRecords; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
+    private void OnDisable() { refreshGeneration++; pendingQuickBlur=false; outsideClickSelection=null; RememberBrowseState(); StopContextFocus(); if (Service != null) Service.RecordsChanged -= RefreshRecords; CloseModal(); confirmation?.Dismiss(); if(resultNotice)resultNotice.Dismiss(); }
     private void Confirm(string title,string message,Action accepted,string confirmLabel="Confirm")
     {
         CloseModal(); confirmation.Show(title,message,accepted,confirmLabel);
@@ -550,6 +563,7 @@ public partial class TaskSystemUI : MonoBehaviour
         var row=Instantiate(inlineTaskTemplate,listContent); row.name="QuickAddTask"; row.SetActive(true);
         TaskUIBuilder.Height(row.GetComponent<RectTransform>(),80); TaskUIBuilder.Flex(row.transform);
         quickInput=row.GetComponentInChildren<TMP_InputField>(true);
+        quickSaveButton=row.transform.Find("QuickAddSaveButton")?.GetComponent<Button>();
         quickInput.characterLimit=100; quickInput.lineType=TMP_InputField.LineType.SingleLine;
         TaskUIBuilder.BlueCaret(quickInput);
         quickInput.SetTextWithoutNotify("");
@@ -557,14 +571,34 @@ public partial class TaskSystemUI : MonoBehaviour
         date.text=ScheduleText(new TaskView { task=quickDraft, occurrence=new TaskOccurrence() }); SpaceSchedule(date);
         row.transform.Find("Title/SecondRow/Tags").gameObject.SetActive(false);
         quickInput.onSubmit.RemoveAllListeners(); quickInput.onDeselect.RemoveAllListeners();
-        quickInput.onSubmit.AddListener(_=>CommitQuickAdd(true));
+        quickInput.onValueChanged.AddListener(UpdateQuickSaveButton);
+        quickInput.onSubmit.AddListener(_=>SubmitQuickTask());
+        if (quickSaveButton) quickSaveButton.onClick.AddListener(SubmitQuickTask);
+        UpdateQuickSaveButton(quickInput.text);
         quickInput.onDeselect.AddListener(_=> {
             if(refocusQuick || TutorialOwnsInput) return;
             if(quickInput && quickInput.wasCanceled) CancelQuickAdd();
-            else if(!PointerOverAdd()) CommitQuickAdd();
+            else if(!PointerOverAdd())
+            {
+                // Selection is updated after TMP's deselect event. Give Save its own submit.
+                if (EventSystem.current && EventSystem.current.alreadySelecting) pendingQuickBlur = true;
+                else CommitQuickAdd();
+            }
         });
         Refresh(); quickInput.Select(); quickInput.ActivateInputField();
     }
+    private void SubmitQuickTask()
+    {
+        pendingQuickBlur = false;
+        CommitQuickAdd(true);
+    }
+
+    private void UpdateQuickSaveButton(string title)
+    {
+        if (quickSaveButton)
+            quickSaveButton.interactable = !committingQuick && !string.IsNullOrWhiteSpace(title);
+    }
+
     private bool PointerOverAdd()
     {
         if(!EventSystem.current) return false;
@@ -585,24 +619,27 @@ public partial class TaskSystemUI : MonoBehaviour
     private async System.Threading.Tasks.Task<bool> CommitQuickAddAsync(bool continueAdding, Action afterSaved)
     {
         // Reviewing guide steps can move keyboard focus or revisit tabs. Only
-        // explicit Enter submits the draft while the tutorial owns input.
+        // explicit submission saves the draft while the tutorial owns input.
         if(TutorialOwnsInput && !continueAdding) return true;
         if(!quickInput || committingQuick) return true;
         if(string.IsNullOrWhiteSpace(quickInput.text)) {
             if(continueAdding) refocusQuick=true; else CancelQuickAdd(); return true;
         }
         quickDraft.title=quickInput.text.Trim(); committingQuick=true;
+        UpdateQuickSaveButton(quickInput.text);
         var input=quickInput; input.interactable=false;
         var result=await Service.UpsertAsync(quickDraft,Array.Empty<string>());
         bool saved=result.Succeeded; string id=result.Value;
         if (!this) return saved;
         committingQuick=false;
         if(input)input.interactable=true;
+        if(input && input==quickInput) UpdateQuickSaveButton(input.text);
         if(!isActiveAndEnabled || input!=quickInput) return saved;
         if(!saved) { pendingRefresh=false; refocusQuick=continueAdding; Notify(Service.LastError,true); return false; }
         SelectedKey=id;
         if(continueAdding) {
             quickDraft.id=null; quickDraft.title=""; quickInput.SetTextWithoutNotify("");
+            UpdateQuickSaveButton(quickInput.text);
             pendingRefresh=true; refocusQuick=true;
         } else CancelQuickAdd();
         Notify("Task saved."); afterSaved?.Invoke(); return true;
@@ -611,8 +648,11 @@ public partial class TaskSystemUI : MonoBehaviour
     {
         if(!quickInput) return;
         var row=quickInput.transform.parent.gameObject;
+        quickInput.onValueChanged.RemoveListener(UpdateQuickSaveButton);
         quickInput.onSubmit.RemoveAllListeners(); quickInput.onDeselect.RemoveAllListeners();
-        quickInput=null; quickDraft=null; refocusQuick=false; row.SetActive(false); Destroy(row); pendingRefresh=true;
+        if (quickSaveButton) quickSaveButton.onClick.RemoveListener(SubmitQuickTask);
+        quickInput=null; quickSaveButton=null; quickDraft=null; pendingQuickBlur=false; refocusQuick=false;
+        row.SetActive(false); Destroy(row); pendingRefresh=true;
     }
     private void BeginEdit(TaskView view) => OpenDraft(view.task,view.occurrence.completedSubtaskIds,"Edit Task");
     private void OpenDraft(QuestTask task,IEnumerable<string> done,string title)
