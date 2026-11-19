@@ -62,6 +62,23 @@ public sealed partial class SqlitePlayerRepository
         if (legacyPath != null && Path.GetFullPath(path).StartsWith(legacyPath, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Choose a file outside the original JSON save.");
     }
+    sealed class SavedMailState
+    {
+        public string id { get; set; }
+        public int state { get; set; }
+    }
+
+    static System.Collections.Generic.IEnumerable<SavedMailState> ReadSavedMail(SQLiteConnection source)
+        => source.ExecuteScalar<int>("PRAGMA user_version") < 3
+            ? Array.Empty<SavedMailState>()
+            : source.DeferredQuery<SavedMailState>("SELECT id,state FROM cq_mail_state");
+
+    static void CopySavedMail(SQLiteConnection destination, System.Collections.Generic.IEnumerable<SavedMailState> records)
+    {
+        foreach (var record in records)
+            destination.Execute("INSERT INTO cq_mail_state VALUES(?,?)", record.id, record.state);
+    }
+
     void CheckNoActiveSession()
     {
         if (database.ExecuteScalar<long>("SELECT count(*) FROM cq_FocusSessions WHERE state=?", (int)FocusSessionStatus.Running) != 0
@@ -88,6 +105,7 @@ public sealed partial class SqlitePlayerRepository
                             foreach (var row in database.DeferredQuery<SqlitePlayerSchema.Row>("SELECT * FROM " + SqlitePlayerSchema.Table(map.Kind) + " ORDER BY sequence"))
                                 SqlitePlayerSchema.Put(output, map, UnityEngine.JsonUtility.FromJson(row.payload, map.Type), row.sequence);
                         }
+                        CopySavedMail(output, ReadSavedMail(database));
                         var profile = Query<PlayerData>(database, new PlayerRecordQuery { Kind = PlayerRecordKind.Profile, Limit = 1 }).Single();
                         SqlitePlayerSchema.Put(output, SqlitePlayerSchema.Get(PlayerRecordKind.Account), new AccountPreferences { playerName = profile.username });
                         SqlitePlayerSchema.SetMeta(output, "purpose", "portable-backup");
@@ -107,6 +125,7 @@ public sealed partial class SqlitePlayerRepository
         return Queue(() => {
             CheckNoActiveSession();
             PlayerData imported;
+            SavedMailState[] mail = Array.Empty<SavedMailState>();
             if (Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase)) imported = ReadLegacy(path, false);
             else {
                 using (var input = Open(path, true)) {
@@ -115,6 +134,7 @@ public sealed partial class SqlitePlayerRepository
                     if (SqlitePlayerSchema.MetaValue(input, "purpose") != "portable-backup") throw new ArgumentException("Choose an exported Cat Quest backup.");
                     FaultPoint?.Invoke("import-source-validated");
                     imported = SqlitePlayerSchema.ReadAll(input);
+                    mail = ReadSavedMail(input).ToArray();
                 }
             }
             ValidateData(imported);
@@ -130,6 +150,8 @@ public sealed partial class SqlitePlayerRepository
                 foreach (var map in SqlitePlayerSchema.Mappings) database.Execute("DELETE FROM " + SqlitePlayerSchema.Table(map.Kind));
                 database.Execute("UPDATE cq_totals SET taskCount=0,focusSeconds=0");
                 SqlitePlayerSchema.WriteAll(database, imported);
+                database.Execute("DELETE FROM cq_mail_state");
+                CopySavedMail(database, mail);
                 SqlitePlayerSchema.SetMeta(database, "revision", checked(revision + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
                 SqlitePlayerSchema.SetMeta(database, "importCommitId", importCommitId);
                 FaultPoint?.Invoke("import-before-commit");

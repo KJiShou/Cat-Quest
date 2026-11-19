@@ -149,11 +149,18 @@ public sealed partial class SqlitePlayerService
         DateTime local = clock.LocalNow; string today = TaskService.DateKey(local);
         return ExecuteCommandAsync(tx => {
             var profile = tx.Read<PlayerData>(PlayerRecordKind.Profile, "profile");
-            if (!profile.tagsInitialized) {
+            var accountName = string.IsNullOrWhiteSpace(profile.username)
+                ? tx.Read<AccountPreferences>(PlayerRecordKind.Account, "account")?.playerName
+                : null;
+            bool restoreName = !string.IsNullOrWhiteSpace(accountName);
+            bool seedTags = !profile.tagsInitialized;
+            if (restoreName) profile.username = accountName;
+            if (seedTags) {
                 if (tx.Tags().Count == 0) foreach (string name in TaskService.DefaultTags)
                     tx.Put(PlayerRecordKind.Tags, new QuestTag { id = Guid.NewGuid().ToString("N"), name = name });
-                profile.tagsInitialized = true; tx.Put(PlayerRecordKind.Profile, profile);
+                profile.tagsInitialized = true;
             }
+            if (restoreName || seedTags) tx.Put(PlayerRecordKind.Profile, profile);
             while (true) {
                 var running = tx.Query<FocusSession>(new PlayerRecordQuery { Kind = PlayerRecordKind.FocusSessions, State = (int)FocusSessionStatus.Running });
                 if (running.Count == 0) break;

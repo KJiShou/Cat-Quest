@@ -75,7 +75,7 @@ public static class SqlitePlayVerificationSupport
         try { return await Bounded(service.ApplyVerificationFixtureAsync(tx=>{
             tx.Put(PlayerRecordKind.Profile,after);
             foreach(PlayerRecordKind kind in Enum.GetValues(typeof(PlayerRecordKind))) {
-                if(kind==PlayerRecordKind.Profile)continue;
+                if(kind==PlayerRecordKind.Profile || kind==PlayerRecordKind.Mail)continue;
                 string name=kind.ToString();var field=typeof(PlayerData).GetField(char.ToLowerInvariant(name[0])+name.Substring(1));
                 object previous=field.GetValue(before),current=field.GetValue(after);
                 if(current is IList list) {
@@ -98,7 +98,7 @@ public static class SqlitePlayVerificationSupport
             db.Execute("BEGIN");
             var data=UnityEngine.JsonUtility.FromJson<PlayerData>(db.ExecuteScalar<string>("SELECT payload FROM cq_Profile WHERE id='profile'"));
             foreach(PlayerRecordKind kind in Enum.GetValues(typeof(PlayerRecordKind))) {
-                if(kind==PlayerRecordKind.Profile)continue;
+                if(kind==PlayerRecordKind.Profile || kind==PlayerRecordKind.Mail)continue;
                 string name=kind.ToString();var field=typeof(PlayerData).GetField(char.ToLowerInvariant(name[0])+name.Substring(1));
                 var rows=db.Query<Payload>("SELECT payload FROM cq_"+kind+" ORDER BY sequence");
                 if(typeof(IList).IsAssignableFrom(field.FieldType)) {

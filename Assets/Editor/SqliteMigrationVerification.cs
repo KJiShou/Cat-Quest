@@ -12,6 +12,7 @@ public static class SqliteMigrationVerification
 {
     const string Request = "Temp/verify-sqlite-migration.request";
     const string PerformanceRequest = "Temp/verify-sqlite-performance.request";
+    const string LateLegacyRequest = "Temp/verify-late-legacy.request";
     const string SafetyRequest = "Temp/verify-sqlite-safety.request";
     static Task running;
     static readonly List<string> checks = new List<string>();
@@ -20,6 +21,7 @@ public static class SqliteMigrationVerification
     {
         if (running != null) { EditorApplication.QueuePlayerLoopUpdate(); return; }
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode) return;
+        if (File.Exists(LateLegacyRequest)) { File.Delete(LateLegacyRequest); running = RunSafety(lateLegacyOnly: true); return; }
         if (File.Exists(SafetyRequest)) { File.Delete(SafetyRequest); running = RunSafety(); return; }
         if (File.Exists(PerformanceRequest)) { File.Delete(PerformanceRequest); running = RunPerformance(); return; }
         if (!File.Exists(Request)) return;
@@ -27,17 +29,20 @@ public static class SqliteMigrationVerification
         running = Run();
     }
     static void Check(bool success, string text) { if (!success) throw new Exception(text); checks.Add(text); }
-    static async Task RunSafety()
+    static async Task RunSafety(bool lateLegacyOnly = false)
     {
-        string folder = Path.GetFullPath("Temp/SQLiteMigrationVerification/" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-safety");
+        string mode = lateLegacyOnly ? "late-legacy" : "sqlite-safety";
+        string resultPath = "Temp/verify-" + mode + ".result";
+        string folder = Path.GetFullPath("Temp/SQLiteMigrationVerification/" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + mode);
         Directory.CreateDirectory(folder); checks.Clear();
-        File.WriteAllText("Temp/verify-sqlite-safety.result", "RUNNING " + folder);
+        File.WriteAllText(resultPath, "RUNNING " + folder);
         try {
-            await SqliteMigrationSafetyVerification.Run(folder, Check);
-            File.WriteAllText("Temp/verify-sqlite-safety.result", "PASS " + folder);
+            if (lateLegacyOnly) await SqliteMigrationSafetyVerification.VerifyLateLegacy(folder, Check);
+            else await SqliteMigrationSafetyVerification.Run(folder, Check);
+            File.WriteAllText(resultPath, "PASS " + folder);
         } catch (Exception error) {
             File.WriteAllText(folder + "/result.txt", "FAIL " + error);
-            File.WriteAllText("Temp/verify-sqlite-safety.result", "FAIL " + folder);
+            File.WriteAllText(resultPath, "FAIL " + folder);
         } finally { File.WriteAllLines(folder + "/checks.txt", checks); running = null; }
     }
     static async Task RunPerformance()
@@ -72,14 +77,14 @@ public static class SqliteMigrationVerification
             string expected=JsonUtility.ToJson(Success(await repo.ReadAllForVerificationAsync()));
             Success(await repo.ExportBackupAsync(portable)); await repo.CloseAsync();
             foreach(string source in new[]{path,portable})using(var db=new SQLite.SQLiteConnection(source)) {
-                db.Execute("DROP TABLE cq_history_search");db.Execute("DROP TABLE cq_history_tags");db.Execute("PRAGMA user_version=1");
+                db.Execute("DROP TABLE cq_history_search");db.Execute("DROP TABLE cq_history_tags");db.Execute("DROP TABLE cq_mail_state");db.Execute("PRAGMA user_version=1");
             }
             repo=new SqlitePlayerRepository(path);
             repo.FaultPoint=stage=>{if(stage=="schema-upgrade-rows")throw new IOException("Injected schema upgrade interruption");};
             Check(!(await repo.InitializeAsync()).Succeeded,"Schema upgrade interruption fails closed");await repo.CloseAsync();
             using(var db=new SQLite.SQLiteConnection(path))Check(db.ExecuteScalar<int>("PRAGMA user_version")==1&&db.GetTableInfo("cq_history_search").Count==0,"Schema DDL rows and version roll back together");
-            Check(Directory.GetFiles(folder,"schema-upgrade.sqlite3.before-schema-1-to-2-*.sqlite3").Length>0,"Pre-upgrade snapshot retained");
-            foreach(string backup in Directory.GetFiles(folder,"schema-upgrade.sqlite3.before-schema-1-to-2-*.sqlite3"))using(var db=new SQLite.SQLiteConnection(backup))
+            Check(Directory.GetFiles(folder,"schema-upgrade.sqlite3.before-schema-1-to-3-*.sqlite3").Length>0,"Pre-upgrade snapshot retained");
+            foreach(string backup in Directory.GetFiles(folder,"schema-upgrade.sqlite3.before-schema-1-to-3-*.sqlite3"))using(var db=new SQLite.SQLiteConnection(backup))
                 Check(db.ExecuteScalar<string>("PRAGMA integrity_check")=="ok"&&db.ExecuteScalar<int>("PRAGMA user_version")==1&&db.ExecuteScalar<int>("SELECT COUNT(*) FROM cq_History")==205,"Pre-upgrade backup is a complete schema-one snapshot");
             repo=new SqlitePlayerRepository(path);Success(await repo.InitializeAsync());
             Check(JsonUtility.ToJson(Success(await repo.ReadAllForVerificationAsync()))==expected,"Schema retry preserves every field");

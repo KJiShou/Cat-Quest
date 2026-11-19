@@ -2,6 +2,12 @@
 
 Windows storage uses `catquest-data.sqlite3` beside the previous JSON file. The JSON is a migration source only; after migration, it is neither read as current progress nor dual-written. Downgrading to an older JSON-only application does not preserve new progress. Keep the migration archive and use a new-version SQLite backup for device transfer.
 
+If a previous startup created SQLite before the old JSON was restored, place the old `catquest-data.json` in the same save folder with Cat Quest closed. On the next startup, a database that still contains only startup defaults is backed up as `catquest-data.sqlite3.before-late-legacy-*.sqlite3` and the named legacy profile is migrated. SQLite saves with their own progress keep their data. The source JSON and migration archive are retained.
+
+## Mailbox storage
+
+SQLite schema 3 adds a mail read and claim table. The upgrade retains a standalone pre-upgrade SQLite snapshot. Portable backups transfer the mail records with the balances, and legacy JSON imports start with no mail records. The separate mail cache files hold public message content for offline reading and never act as claim receipts.
+
 ## Dependency and licenses
 
 - Unity: 6000.3.10f1, unchanged.

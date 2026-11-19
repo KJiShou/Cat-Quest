@@ -8,6 +8,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using static SqlitePlayVerificationSupport;
 
 // Bounded verification only: no asset generation or authored-scene saves.
@@ -16,11 +17,16 @@ public static class DialogueAudioVerification
 {
     const string Flag = "CatQuest.DialogueAudioVerification";
     const string Request = "Temp/verify-dialogue-audio.request";
+    const string ReturningRequest = "Temp/verify-intro-returning.request";
     const string MusicRequest = "Temp/verify-background-music.request";
     static IEnumerator flow;
     static double next;
     static string Folder => SessionState.GetString(Flag + ".folder", "");
     static readonly BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
+    const BindingFlags StaticPrivate = BindingFlags.Static | BindingFlags.NonPublic;
+    static MethodInfo GameViewResolution => typeof(SettingsPlayVerification).GetMethod("Resolution", StaticPrivate);
+    static PropertyInfo GameViewSize => (PropertyInfo)typeof(SettingsPlayVerification).GetProperty("SizeProperty", StaticPrivate).GetValue(null);
+    static EditorWindow GameView => (EditorWindow)typeof(SettingsPlayVerification).GetProperty("GameView", StaticPrivate).GetValue(null);
     static DialogueAudioVerification()
     {
         EditorApplication.update += Poll;
@@ -28,7 +34,8 @@ public static class DialogueAudioVerification
             if (!SessionState.GetBool(Flag, false)) return;
             if (state == PlayModeStateChange.EnteredPlayMode)
             {
-                flow = Flatten(SessionState.GetBool(Flag + ".musicOnly", false) ? RunBackgroundMusic() : Run());
+                flow = Flatten(SessionState.GetBool(Flag + ".returning", false) ? RunReturning()
+                    : SessionState.GetBool(Flag + ".musicOnly", false) ? RunBackgroundMusic() : Run());
                 next = EditorApplication.timeSinceStartup + 3;
             }
             if (state == PlayModeStateChange.EnteredEditMode) Restore();
@@ -46,21 +53,32 @@ public static class DialogueAudioVerification
             return;
         }
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-        var request = File.Exists(MusicRequest) ? MusicRequest : Request;
+        var request = File.Exists(ReturningRequest) ? ReturningRequest : File.Exists(MusicRequest) ? MusicRequest : Request;
         if (!File.Exists(request)) return;
         File.Delete(request);
         SessionState.SetBool(Flag + ".musicOnly", request == MusicRequest);
+        SessionState.SetBool(Flag + ".returning", request == ReturningRequest);
+        bool priorPaused = EditorApplication.isPaused;
+        SessionState.SetBool(Flag + ".capturing", request == Request);
+        if (request == Request)
+        {
+            SessionState.SetInt(Flag + ".size", (int)GameViewSize.GetValue(GameView));
+            RememberCustomSizes(Flag);
+        }
         string folder = "Library/DialogueAudioVerification/" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
         Directory.CreateDirectory(folder); SessionState.SetString(Flag + ".folder", folder);
         var store = Environment.GetEnvironmentVariable("CATQUEST_TASK_TEST_STORE");
         SessionState.SetBool(Flag + ".hadStore", store != null); SessionState.SetString(Flag + ".store", store ?? "");
         SessionState.SetString(Flag + ".scene", AssetDatabase.GetAssetPath(EditorSceneManager.playModeStartScene));
-        SessionState.SetBool(Flag + ".paused", EditorApplication.isPaused);
+        SessionState.SetBool(Flag + ".paused", priorPaused);
         SessionState.SetString(Flag + ".deadline", DateTime.UtcNow.AddSeconds(120).Ticks.ToString());
         SessionState.SetBool(Flag, true);
         File.WriteAllText(folder + "/result.txt", DateTime.UtcNow.ToString("O") + " RUNNING");
         try {
-            Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", Path.GetFullPath(folder + "/save.json"));
+            string savePath = Path.GetFullPath(folder + "/save.json");
+            if (request == ReturningRequest)
+                File.WriteAllText(savePath, "{\"version\":6,\"experience\":550,\"fishCoins\":123,\"account\":{\"playerName\":\"Returning cat\"}}");
+            Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", savePath);
             EditorSceneManager.playModeStartScene = AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/IntroStory.unity");
             EditorApplication.isPaused = false; EditorApplication.isPlaying = true;
         } catch (Exception e) { Finish("FAIL: " + e); }
@@ -71,9 +89,14 @@ public static class DialogueAudioVerification
         Environment.SetEnvironmentVariable("CATQUEST_TASK_TEST_STORE", SessionState.GetBool(Flag + ".hadStore", false) ? SessionState.GetString(Flag + ".store", "") : null);
         string scene = SessionState.GetString(Flag + ".scene", "");
         EditorSceneManager.playModeStartScene = string.IsNullOrEmpty(scene) ? null : AssetDatabase.LoadAssetAtPath<SceneAsset>(scene);
+        if (SessionState.GetBool(Flag + ".capturing", false))
+        {
+            GameViewSize.SetValue(GameView, SessionState.GetInt(Flag + ".size", 0));
+            RestoreCustomSizes(Flag);
+        }
         EditorApplication.isPaused = SessionState.GetBool(Flag + ".paused", false);
         SessionState.SetBool(Flag, false);
-        File.WriteAllText(Folder + "/restored.txt", DateTime.UtcNow.ToString("O") + " Restored isolated save environment, Play Mode start scene and pause state. Game View unchanged.");
+        File.WriteAllText(Folder + "/restored.txt", DateTime.UtcNow.ToString("O") + " Restored isolated save environment, Play Mode start scene and pause state. Game View size restored if changed.");
     }
     static void Finish(string result)
     {
@@ -93,6 +116,16 @@ public static class DialogueAudioVerification
     static void ClickSkipControl(StorySkipUI owner, string field)
     {
         var button = (Button)typeof(StorySkipUI).GetField(field, Private).GetValue(owner);
+        ClickControl(button, field);
+    }
+
+    static void ClickControl(Button button, string field)
+    {
+        ExecuteEvents.Execute(button.gameObject, PointerForControl(button, field), ExecuteEvents.pointerClickHandler);
+    }
+
+    static PointerEventData PointerForControl(Button button, string field)
+    {
         Check(button && button.IsActive() && button.IsInteractable(), field + " is available: " + (button ? button.name + " active=" + button.gameObject.activeInHierarchy + " enabled=" + button.enabled + " interactable=" + button.IsInteractable() : "missing binding"));
         Canvas.ForceUpdateCanvases();
         var rect = (RectTransform)button.transform;
@@ -104,8 +137,53 @@ public static class DialogueAudioVerification
         EventSystem.current.RaycastAll(pointer, hits);
         Check(hits.Count > 0 && ExecuteEvents.GetEventHandler<IPointerClickHandler>(hits[0].gameObject) == button.gameObject,
             field + " raycast; first hit: " + (hits.Count > 0 ? hits[0].gameObject.name : "none"));
-        ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+        return pointer;
     }
+    static IEnumerator CaptureIntro(GameObject popup, Button button)
+    {
+        const string source = "Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_DemoScene_Panels/Light/Popup_NameChange.prefab";
+        var reference = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(source), popup.transform.parent, false);
+        reference.SetActive(false);
+        var capture = popup.AddComponent<RewardScreenshotCapture>();
+        try
+        {
+            foreach (var size in new[] { new Vector2Int(1920, 1080), new Vector2Int(1280, 720) })
+            {
+                GameViewResolution.Invoke(null, new object[] { size });
+                yield return .35;
+                Check(Screen.width == size.x && Screen.height == size.y, "Intro Game View resolution " + size);
+                PointerForControl(button, "Username OK " + size);
+                capture.Begin(Folder + $"/intro-{size.x}x{size.y}.png");
+                while (capture.Pending) { EditorApplication.QueuePlayerLoopUpdate(); GameView.Repaint(); yield return .05; }
+            }
+            reference.SetActive(true);
+            capture.Begin(Folder + "/simplecasual-reference-1280x720.png");
+            while (capture.Pending) { EditorApplication.QueuePlayerLoopUpdate(); GameView.Repaint(); yield return .05; }
+        }
+        finally
+        {
+            if (reference) UnityEngine.Object.DestroyImmediate(reference);
+            if (capture) UnityEngine.Object.DestroyImmediate(capture);
+        }
+    }
+
+    static IEnumerator RunReturning()
+    {
+        var manager = GameDataManager.Instance;
+        Check(manager && manager.SavePath.Contains("DialogueAudioVerification"), "Returning player uses isolated storage");
+        while (!manager.Ready.IsCompleted) yield return .1;
+        var repo = (SqlitePlayerRepository)typeof(GameDataManager).GetField("repository", Private).GetValue(manager);
+        Check(manager.Ready.Result.Succeeded, "Returning JSON save opened: " + manager.Ready.Result.Message
+            + (manager.Ready.Result.Succeeded ? "" : "\n" + repo.LastVerificationDiagnostic));
+        Check(manager.GetUsername() == "Returning cat"
+            && manager.Service.Experience == 550 && manager.Service.FishCoins == 123, "Returning JSON player name and progress load");
+        double deadline = EditorApplication.timeSinceStartup + 10;
+        while (SceneManager.GetActiveScene().name != "CharacterHome" && EditorApplication.timeSinceStartup < deadline)
+            yield return .1;
+        Check(SceneManager.GetActiveScene().name == "CharacterHome" && !UnityEngine.Object.FindFirstObjectByType<StoryController>(),
+            "Returning JSON player reaches CharacterHome without starting the intro");
+    }
+
     static IEnumerator RunBackgroundMusic()
     {
         Check(GameDataManager.Instance.SavePath.Contains("DialogueAudioVerification"), "Isolated save path");
@@ -174,8 +252,29 @@ public static class DialogueAudioVerification
         Check(DialogueAudioLibrary.Find("Well done. This task earned 7 EXP and 3 Fish Coins. EXP grows your cat. Fish Coins can upgrade equipment.", false) != null, "Dynamic reward amounts match template");
         Check(DialogueAudioLibrary.Find("Disk full Your tasks are safe. Try again.", false) != null, "Dynamic save error matches template");
         var input = UnityEngine.Object.FindFirstObjectByType<UsernameInputController>();
-        ((TMP_InputField)typeof(UsernameInputController).GetField("usernameInput", Private).GetValue(input)).text = "Audio Apprentice";
-        // Username confirmation commits asynchronously before starting the short first line.
+        var field = (TMP_InputField)typeof(UsernameInputController).GetField("usernameInput", Private).GetValue(input);
+        var button = input.GetComponentInChildren<Button>();
+        var error = (TMP_Text)typeof(UsernameInputController).GetField("errorText", Private).GetValue(input);
+        var early = UnityEngine.Object.Instantiate(input);
+        try
+        {
+            var earlyField = (TMP_InputField)typeof(UsernameInputController).GetField("usernameInput", Private).GetValue(early);
+            earlyField.text = "Too soon";
+            early.ConfirmUsername();
+            Check(!earlyField.interactable && !early.GetComponentInChildren<Button>().interactable
+                && string.IsNullOrEmpty(service.PlayerName), "Confirmation before Start cannot accept input");
+        }
+        finally { UnityEngine.Object.DestroyImmediate(early.gameObject); }
+        yield return CaptureIntro(input.gameObject, button);
+
+        field.text = "<Invalid>";
+        ClickControl(button, "Username OK with invalid name");
+        yield return Ui(service);
+        Check(button.interactable && field.interactable && !string.IsNullOrEmpty(error.text)
+            && string.IsNullOrEmpty(service.PlayerName), "Rejected username gives feedback and permits retry");
+        field.text = "Audio Apprentice";
+        ClickControl(button, "Username OK after retry");
+        Check(!button.interactable && !field.interactable, "Confirmation disables repeat input while saving");
         input.ConfirmUsername();
         var audio = SettingsAudio.Instance;
         double voiceDeadline = EditorApplication.timeSinceStartup + 10;
@@ -184,6 +283,7 @@ public static class DialogueAudioVerification
         Check(Voice(audio) && Voice(audio).isPlaying && Voice(audio).clip && Voice(audio).clip.name.StartsWith("player-"),
             "Story starts approved B voice; clip="+(Voice(audio)&&Voice(audio).clip?Voice(audio).clip.name:"none")
             +"; playing="+(Voice(audio)&&Voice(audio).isPlaying)+"; focused="+Application.isFocused);
+        Check(service.PlayerName == "Audio Apprentice", "Only the valid username is committed before story");
         Check(audio.musicSource.clip == audio.musicClip && audio.musicSource.loop, "Story reuses menu BGM loop");
         yield return Voice(audio).clip.length + .3;
         Check(!Voice(audio).clip, "Natural Story completion stops and releases voice");

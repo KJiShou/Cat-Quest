@@ -10,7 +10,7 @@ using UnityEngine;
 // columns are derived from that entity by this class, never supplied by a caller.
 internal static class SqlitePlayerSchema
 {
-    internal const int Version = 2, ApplicationId = 0x43515154;
+    internal const int Version = 3, ApplicationId = 0x43515154;
     internal sealed class Row
     {
         public string id { get; set; }
@@ -93,6 +93,7 @@ internal static class SqlitePlayerSchema
         db.Execute("CREATE TABLE cq_totals (id INTEGER PRIMARY KEY CHECK(id=1), taskCount INTEGER NOT NULL, focusSeconds REAL NOT NULL)");
         db.Execute("INSERT INTO cq_totals VALUES(1,0,0)");
         CreateHistoryIndex(db);
+        CreateMailTable(db);
         SetMeta(db, "revision", "0");
         SetMeta(db, "format", "CatQuest");
         SetMeta(db, "sortCulture", System.Globalization.CultureInfo.CurrentCulture.Name);
@@ -103,7 +104,7 @@ internal static class SqlitePlayerSchema
             throw new PlayerRepositoryException(PlayerStorageError.InvalidData, "Choose a Cat Quest database.");
         int version = db.ExecuteScalar<int>("PRAGMA user_version");
         if (version > Version) throw new PlayerRepositoryException(PlayerStorageError.NewerVersion, "Open this save with a newer version of Cat Quest.");
-        if (version != Version && !(allowPrevious && version == 1)) throw new PlayerRepositoryException(PlayerStorageError.InvalidData, "The database schema is unsupported.");
+        if (version != Version && !(allowPrevious && (version == 1 || version == 2))) throw new PlayerRepositoryException(PlayerStorageError.InvalidData, "The database schema is unsupported.");
         if (db.ExecuteScalar<string>(full ? "PRAGMA integrity_check" : "PRAGMA quick_check") != "ok" || db.ExecuteScalar<string>("PRAGMA foreign_key_check") != null)
             throw new PlayerRepositoryException(PlayerStorageError.Corrupt, "The database needs recovery from a verified backup.");
         foreach (var m in Mappings) {
@@ -128,6 +129,8 @@ internal static class SqlitePlayerSchema
         if (MetaValue(db, "format") != "CatQuest") throw new PlayerRepositoryException(PlayerStorageError.InvalidData, "Invalid save identity.");
         if (version >= 2 && (db.GetTableInfo("cq_history_search").Count == 0 || db.GetTableInfo("cq_history_tags").Count == 0))
             throw new PlayerRepositoryException(PlayerStorageError.Corrupt, "History indexes are missing.");
+        if (version >= 3 && db.GetTableInfo("cq_mail_state").Count != 2)
+            throw new PlayerRepositoryException(PlayerStorageError.Corrupt, "Mail records are missing. Restore a verified backup.");
         if (!full) return;
         ValidateHistoryIndex(db, version >= 2);
         long taskCount = db.ExecuteScalar<long>("SELECT count(*) FROM cq_History WHERE state=0");
@@ -194,14 +197,21 @@ internal static class SqlitePlayerSchema
         db.Execute("DELETE FROM cq_history_tags WHERE historyId=?", receipt.id);
         foreach (string tag in receipt.snapshot.tagIds.Distinct(StringComparer.Ordinal)) db.Execute("INSERT INTO cq_history_tags VALUES(?,?)", receipt.id, tag);
     }
+    static void CreateMailTable(SQLiteConnection db)
+        => db.Execute("CREATE TABLE cq_mail_state (id TEXT PRIMARY KEY NOT NULL, state INTEGER NOT NULL CHECK(state IN (1,2)))");
+
     internal static void UpgradePrevious(SQLiteConnection db, Action fault)
     {
         ValidateDatabase(db, true, true);
-        if (db.ExecuteScalar<int>("PRAGMA user_version") == Version) return;
+        int version = db.ExecuteScalar<int>("PRAGMA user_version");
+        if (version == Version) return;
         db.RunInTransaction(() => {
-            CreateHistoryIndex(db);
-            foreach (var row in db.Query<Row>("SELECT id,payload,sequence,sortKey FROM cq_History ORDER BY sequence"))
-                PutHistoryIndex(db, JsonUtility.FromJson<TaskCompletion>(row.payload), row.sequence, row.sortKey);
+            if (version == 1) {
+                CreateHistoryIndex(db);
+                foreach (var row in db.Query<Row>("SELECT id,payload,sequence,sortKey FROM cq_History ORDER BY sequence"))
+                    PutHistoryIndex(db, JsonUtility.FromJson<TaskCompletion>(row.payload), row.sequence, row.sortKey);
+            }
+            CreateMailTable(db);
             fault?.Invoke();
             db.Execute("PRAGMA user_version=" + Version);
             ValidateDatabase(db, true);

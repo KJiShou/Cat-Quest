@@ -21,7 +21,7 @@ public sealed class OperationResult<T>
 public enum PlayerRecordKind
 {
     Profile, Settings, Account, Tutorial, Tasks, Tags, Occurrences, History,
-    RewardDays, FocusSessions, Equipment, EquipmentUpgrades, LootReceipts, Battles, BossProgress
+    RewardDays, FocusSessions, Equipment, EquipmentUpgrades, LootReceipts, Battles, BossProgress, Mail
 }
 
 public sealed class PlayerRecordQuery
@@ -47,6 +47,9 @@ public interface IPlayerTransaction
     IReadOnlyList<string> UndoableCompletions(string today, IEnumerable<string> receiptIds);
     IReadOnlyList<EquipmentItem> Equipment();
     IReadOnlyList<QuestTag> Tags();
+    int ReadMailState(string id);
+    IReadOnlyList<string> ReadMailKeys(string prefix);
+    void SetMailState(string id, int state);
 }
 
 public sealed class PlayerDayTotals

@@ -20,7 +20,23 @@ public sealed partial class SqlitePlayerRepository
         string temporary = path + ".tmp";
         byte[] bytes = Encoding.UTF8.GetBytes(value);
         using (var file = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None)) { file.Write(bytes, 0, bytes.Length); file.Flush(true); }
-        if (File.Exists(path)) File.Replace(temporary, path, null); else File.Move(temporary, path);
+        if (!File.Exists(path)) {
+            File.Move(temporary, path);
+            return;
+        }
+
+        byte[] previous = File.ReadAllBytes(path);
+        for (int attempt = 0; ; attempt++) {
+            try {
+                File.Replace(temporary, path, null);
+                return;
+            } catch (IOException) when (attempt < 3 && File.Exists(temporary) && File.Exists(path)) {
+                // A short lock from antivirus or indexing can interrupt the atomic rename.
+                System.Threading.Thread.Sleep(25 << attempt);
+                if (!File.ReadAllBytes(path).SequenceEqual(previous) || !File.ReadAllBytes(temporary).SequenceEqual(bytes))
+                    throw;
+            }
+        }
     }
     void Mark(MigrationState state) => AtomicText(Marker, JsonUtility.ToJson(state));
     void InitializeStorage()
@@ -42,11 +58,8 @@ public sealed partial class SqlitePlayerRepository
         if (File.Exists(DatabasePath)) {
             using (var existing = Open(DatabasePath)) {
                 SqlitePlayerSchema.ValidateDatabase(existing, false, true);
-                if (existing.ExecuteScalar<int>("PRAGMA user_version") < SqlitePlayerSchema.Version) {
-                    CreateConsistentBackup(existing, DatabasePath + ".before-schema-1-to-2-" + Guid.NewGuid().ToString("N") + ".sqlite3", System.Threading.CancellationToken.None);
-                    FaultPoint?.Invoke("schema-backup");
-                    SqlitePlayerSchema.UpgradePrevious(existing, () => FaultPoint?.Invoke("schema-upgrade-rows"));
-                }
+                UpgradeStorage(existing);
+                ImportLegacyIntoEmptyDatabase(existing, state);
             }
             Mark(new MigrationState { phase = "complete", sourceHash = state?.sourceHash, expectedHash = state?.expectedHash });
             return;
@@ -95,6 +108,86 @@ public sealed partial class SqlitePlayerRepository
         FaultPoint?.Invoke("migration-ready");
         Publish(state);
     }
+    // An earlier release may have started before the old JSON was restored to this folder.
+    // Only the database created without a source and containing startup defaults can be replaced.
+    void ImportLegacyIntoEmptyDatabase(SQLiteConnection existing, MigrationState state)
+    {
+        if (state?.sourceHash != "new" || legacyPath == null) return;
+
+        string importedDataHash = SqlitePlayerSchema.MetaValue(existing, "lateLegacyDataHash");
+        if (importedDataHash != null) {
+            state.sourceHash = SqlitePlayerSchema.MetaValue(existing, "sourceHash");
+            state.expectedHash = importedDataHash;
+            return;
+        }
+
+        string frozen = DatabasePath + ".pre-sqlite.json";
+        if (!File.Exists(legacyPath) && !File.Exists(legacyPath + ".bak")
+            && !File.Exists(frozen) && !File.Exists(frozen + ".bak")) return;
+        if (SqlitePlayerSchema.MetaValue(existing, "sourceHash") != "new") return;
+
+        var profile = Query<PlayerData>(existing, new PlayerRecordQuery { Kind = PlayerRecordKind.Profile, Limit = 1 }).Single();
+        if (!string.IsNullOrWhiteSpace(profile.username)) return;
+
+        var current = SqlitePlayerSchema.ReadAll(existing);
+        long revision = long.Parse(SqlitePlayerSchema.MetaValue(existing, "revision"), System.Globalization.CultureInfo.InvariantCulture);
+        if (!IsStartupOnly(current)) return;
+
+        string source = File.Exists(frozen) || File.Exists(frozen + ".bak") ? frozen : legacyPath;
+        if (!HasLegacyName(ReadLegacy(source, allowMissing: false))) return;
+        FreezeLegacy(legacyPath, frozen);
+        FreezeLegacy(legacyPath + ".bak", frozen + ".bak");
+        var imported = ReadLegacy(frozen, allowMissing: false);
+        if (!HasLegacyName(imported)) return;
+
+        string sourceHash = FrozenDigest(frozen);
+        string expectedHash = DataDigest(imported);
+        CreateConsistentBackup(existing, DatabasePath + ".before-late-legacy-" + Guid.NewGuid().ToString("N") + ".sqlite3",
+            System.Threading.CancellationToken.None);
+        existing.RunInTransaction(() => {
+            if (SqlitePlayerSchema.MetaValue(existing, "revision") != revision.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                || !IsStartupOnly(SqlitePlayerSchema.ReadAll(existing)))
+                throw new PlayerRepositoryException(PlayerStorageError.Busy, "The save changed during migration. Restart Cat Quest to retry.");
+
+            foreach (var map in SqlitePlayerSchema.Mappings) existing.Execute("DELETE FROM " + SqlitePlayerSchema.Table(map.Kind));
+            SqlitePlayerSchema.WriteAll(existing, imported);
+            if (DataDigest(SqlitePlayerSchema.ReadAll(existing)) != expectedHash)
+                throw new PlayerRepositoryException(PlayerStorageError.Migration, "Migration changed player data. The original save has been kept.");
+
+            SqlitePlayerSchema.SetMeta(existing, "revision", checked(revision + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            SqlitePlayerSchema.SetMeta(existing, "sourceHash", sourceHash);
+            SqlitePlayerSchema.SetMeta(existing, "lateLegacyDataHash", expectedHash);
+            FaultPoint?.Invoke("late-legacy-before-commit");
+        });
+        state.sourceHash = sourceHash;
+        state.expectedHash = expectedHash;
+    }
+
+    static bool IsStartupOnly(PlayerData current)
+    {
+        var fresh = Fresh();
+        // Startup may seed the stock tags. All other data must still match a fresh profile.
+        if (current.tagsInitialized && current.tags.Select(tag => tag.name).SequenceEqual(TaskService.DefaultTags)
+            && current.tags.All(tag => tag.colorHex == TagColors.DefaultHex)) {
+            fresh.tagsInitialized = true;
+            fresh.tags = current.tags;
+        }
+        return DataDigest(current) == DataDigest(fresh);
+    }
+
+    static bool HasLegacyName(PlayerData data) => !string.IsNullOrWhiteSpace(data.username)
+        || !string.IsNullOrWhiteSpace(data.account?.playerName);
+
+    void UpgradeStorage(SQLiteConnection connection)
+    {
+        int version = connection.ExecuteScalar<int>("PRAGMA user_version");
+        if (version >= SqlitePlayerSchema.Version) return;
+        CreateConsistentBackup(connection, DatabasePath + $".before-schema-{version}-to-{SqlitePlayerSchema.Version}-"
+            + Guid.NewGuid().ToString("N") + ".sqlite3", System.Threading.CancellationToken.None);
+        FaultPoint?.Invoke("schema-backup");
+        SqlitePlayerSchema.UpgradePrevious(connection, () => FaultPoint?.Invoke("schema-upgrade-rows"));
+    }
+
     static string FrozenDigest(string primary)
     {
         bool main = File.Exists(primary), backup = File.Exists(primary + ".bak");

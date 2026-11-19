@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "letters": [
+    {
+      "id": "community-thanks-001",
+      "title": "Thanks for playing!",
+      "body": "Here are a few supplies for your next quest.",
+      "publishedUtc": "2026-12-01T00:00:00Z",
+      "fishCoins": 100,
+      "experience": 25,
+      "bossTickets": 1
+    }
+  ]
+}

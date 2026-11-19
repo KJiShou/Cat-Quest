@@ -109,11 +109,7 @@ public sealed partial class SqlitePlayerRepository : IPlayerRepository
             }
             InitializeStorage();
             database ??= Open(DatabasePath);
-            if (database.ExecuteScalar<int>("PRAGMA user_version") == 1) {
-                CreateConsistentBackup(database, DatabasePath + ".before-schema-1-to-2-" + Guid.NewGuid().ToString("N") + ".sqlite3", System.Threading.CancellationToken.None);
-                FaultPoint?.Invoke("schema-backup");
-                SqlitePlayerSchema.UpgradePrevious(database, () => FaultPoint?.Invoke("schema-upgrade-rows"));
-            }
+            UpgradeStorage(database);
             SqlitePlayerSchema.ValidateDatabase(database, false);
             if (DatabasePath != ":memory:") database.ExecuteScalar<string>("PRAGMA journal_mode=WAL");
             initialized = true;
@@ -261,6 +257,27 @@ public sealed partial class SqlitePlayerRepository : IPlayerRepository
             return result;
         }
         public IReadOnlyList<EquipmentItem> Equipment() { Check();return db.Query<SqlitePlayerSchema.Row>("SELECT payload FROM cq_Equipment ORDER BY sequence").Select(r=>JsonUtility.FromJson<EquipmentItem>(r.payload)).ToArray(); }
+        public int ReadMailState(string id)
+        {
+            Check();
+            return db.ExecuteScalar<int>("SELECT state FROM cq_mail_state WHERE id=?", id);
+        }
+
+        public IReadOnlyList<string> ReadMailKeys(string prefix)
+        {
+            Check();
+            return db.Query<SavedMailState>("SELECT id FROM cq_mail_state WHERE id GLOB ?", prefix + "*")
+                .Select(row => row.id.Substring(prefix.Length)).ToArray();
+        }
+
+        public void SetMailState(string id, int state)
+        {
+            Check();
+            if (readOnly) throw new InvalidOperationException("Read-only query.");
+            if (db.Execute("INSERT INTO cq_mail_state VALUES(?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state WHERE cq_mail_state.state<excluded.state", id, state) > 0)
+                Changed.Add(PlayerRecordKind.Mail);
+        }
+
         public IReadOnlyList<QuestTag> Tags() { Check(); return db.Query<SqlitePlayerSchema.Row>("SELECT payload FROM cq_Tags ORDER BY sequence").Select(r => JsonUtility.FromJson<QuestTag>(r.payload)).ToArray(); }
     }
     public Task<OperationResult<bool>> FlushAsync() => Queue(() => true);

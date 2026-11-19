@@ -160,6 +160,80 @@ public static class SqliteMigrationSafetyVerification
             await VerifyDerivedIndexes(folder,check);
         } finally { foreach (var repo in owned) await repo.CloseAsync(); }
     }
+    internal static async Task VerifyLateLegacy(string folder, Action<bool, string> check)
+    {
+        string source = Path.Combine(folder, "late-legacy.json");
+        string database = Path.ChangeExtension(source, ".sqlite3");
+        var service = new SqlitePlayerService(new SqlitePlayerRepository(database, source), new SystemTaskClock());
+        try {
+            check((await service.InitializeAsync()).Succeeded && string.IsNullOrEmpty(service.PlayerName)
+                && service.TagCatalog.Count == TaskService.DefaultTags.Length, "Missing JSON initially creates a blank profile with startup tags");
+        } finally { await service.CloseAsync(); }
+
+        var legacy = new PlayerData { experience = 550, fishCoins = 123, account = new AccountPreferences { playerName = "Returning player" } };
+        legacy.tasks.Add(new QuestTask { id = "legacy-task", title = "Keep this task" });
+        string original = JsonUtility.ToJson(legacy);
+        File.WriteAllText(source, original);
+
+        var interrupted = new SqlitePlayerRepository(database, source);
+        try {
+            interrupted.FaultPoint = phase => {
+                if (phase == "late-legacy-before-commit") throw new IOException("Injected late migration rollback");
+            };
+            check(!(await interrupted.InitializeAsync()).Succeeded, "Late JSON migration interruption reports failure");
+        } finally { await interrupted.CloseAsync(); }
+
+        string snapshot = Directory.GetFiles(folder, "late-legacy.sqlite3.before-late-legacy-*.sqlite3").Single();
+        using (var backup = new SQLite.SQLiteConnection(snapshot, SQLite.SQLiteOpenFlags.ReadOnly))
+            check(backup.ExecuteScalar<string>("PRAGMA integrity_check") == "ok"
+                && backup.ExecuteScalar<int>("SELECT COUNT(*) FROM cq_Tags") == TaskService.DefaultTags.Length
+                && backup.ExecuteScalar<int>("SELECT COUNT(*) FROM cq_Tasks") == 0, "Late migration backs up the original blank database");
+
+        using (var rolledBack = new SQLite.SQLiteConnection(database, SQLite.SQLiteOpenFlags.ReadOnly))
+            check(rolledBack.ExecuteScalar<int>("SELECT COUNT(*) FROM cq_Tasks") == 0, "Interrupted late migration leaves SQLite unchanged");
+
+        var repository = new SqlitePlayerRepository(database, source);
+        service = new SqlitePlayerService(repository, new SystemTaskClock());
+        try {
+            check((await service.InitializeAsync()).Succeeded && service.PlayerName == "Returning player"
+                && service.Experience == 550 && service.FishCoins == 123
+                && service.TaskSnapshot.tasks.Any(task => task.id == "legacy-task"), "Late retry imports JSON progress and restores an account-only name");
+            var saved = await repository.ReadAllForVerificationAsync();
+            check(saved.Succeeded && saved.Value.username == "Returning player"
+                && File.ReadAllText(source) == original
+                && File.ReadAllText(database + ".pre-sqlite.json") == original, "Restored name is durable and both JSON copies retain their original contents");
+        } finally { await service.CloseAsync(); }
+
+        File.WriteAllText(source, "{\"username\":\"Stale JSON\",\"fishCoins\":900}");
+        repository = new SqlitePlayerRepository(database, source);
+        try {
+            check((await repository.InitializeAsync()).Succeeded, "Late migration can be reopened without replay");
+            var saved = await repository.ReadAllForVerificationAsync();
+            check(saved.Succeeded && saved.Value.username == "Returning player"
+                && saved.Value.fishCoins == 123 && saved.Value.tasks.Count == 1, "Reopening keeps SQLite authoritative over stale JSON");
+        } finally { await repository.CloseAsync(); }
+
+        string usedSource = Path.Combine(folder, "used-sqlite.json");
+        database = Path.ChangeExtension(usedSource, ".sqlite3");
+        repository = new SqlitePlayerRepository(database, usedSource);
+        try {
+            check((await repository.InitializeAsync()).Succeeded, "Independent unnamed SQLite fixture initializes");
+            check((await repository.ExecuteAsync(tx => {
+                tx.Put(PlayerRecordKind.Tasks, new QuestTask { id = "sqlite-task", title = "Keep this SQLite task" });
+                return true;
+            })).Succeeded, "Unnamed SQLite fixture gains its own task");
+        } finally { await repository.CloseAsync(); }
+
+        File.WriteAllText(usedSource, original);
+        repository = new SqlitePlayerRepository(database, usedSource);
+        try {
+            check((await repository.InitializeAsync()).Succeeded, "SQLite with its own progress opens alongside JSON");
+            var saved = await repository.ReadAllForVerificationAsync();
+            check(saved.Succeeded && saved.Value.tasks.Single().id == "sqlite-task"
+                && saved.Value.fishCoins == 0 && File.ReadAllText(usedSource) == original, "Late JSON never replaces existing SQLite progress");
+        } finally { await repository.CloseAsync(); }
+    }
+
     static async Task VerifyDerivedIndexes(string folder,Action<bool,string> check)
     {
         var source=new SqlitePlayerRepository(Path.Combine(folder,"derived-source.sqlite3"));
