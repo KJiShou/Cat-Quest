@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 public sealed class MailRowView : MonoBehaviour
 {
-    [SerializeField] Button button, primary;
+    [SerializeField] Button button, primary, delete;
     [SerializeField] TMP_Text title, label, primaryLabel;
     [SerializeField] MailRewardIcons rewards;
     [SerializeField] Image letterIcon;
@@ -22,6 +22,8 @@ public sealed class MailRowView : MonoBehaviour
     internal Button Control => button;
 
     internal Button Primary => primary;
+
+    internal Button Delete => delete;
 
     internal void Display(string heading, string preview, RewardAmounts attachments, string action, bool unread, bool available, bool update)
     {

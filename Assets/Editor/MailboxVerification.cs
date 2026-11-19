@@ -223,8 +223,42 @@ public static class MailboxVerification
                 yield return Capture(capture, "inbox-" + suffix);
                 var rowView = reward.GetComponent<MailRowView>();
                 var icons = Field<MailRewardIcons>(rowView, "rewards");
+                var rowDelete = Field<Button>(rowView, "delete");
+                Check(rowDelete && rowDelete.GetComponent<JuicyButton>()
+                    && rowDelete.transform.Find("Icon").GetComponent<Image>().sprite.name.Contains("PictoIcon_Delete"),
+                    "List delete uses the authored SimpleCasual control");
+                ButtonPointer(rowDelete);
+                Check(Field<Button>(rowView, "primary").navigation.selectOnDown == rowDelete && rowDelete.navigation.selectOnDown == close,
+                    "List delete is included in keyboard navigation");
                 Check(icons && icons.GetComponentsInChildren<Image>().Count(image => image.sprite && !image.raycastTarget) == 3,
                     "The reward row shows the Fish Coin, EXP and Boss Ticket sprites");
+                if (size.x == 1920 && expanded)
+                {
+                    var feedback = rowDelete.GetComponent<JuicyButton>();
+                    var pointer = ButtonPointer(rowDelete);
+                    ExecuteEvents.Execute(rowDelete.gameObject, pointer, ExecuteEvents.pointerEnterHandler);
+                    yield return .2;
+                    Check(feedback.DrawScale.x > 1.01f, "List delete grows on hover");
+                    ExecuteEvents.Execute(rowDelete.gameObject, pointer, ExecuteEvents.pointerDownHandler);
+                    yield return .2;
+                    Check(feedback.DrawScale.x < .99f, "List delete responds to press");
+                    ExecuteEvents.Execute(rowDelete.gameObject, pointer, ExecuteEvents.pointerUpHandler);
+                    ExecuteEvents.Execute(rowDelete.gameObject, pointer, ExecuteEvents.pointerExitHandler);
+                    yield return .35;
+                    Check(Vector2.Distance(feedback.DrawScale, Vector2.one) < .015f, "List delete feedback settles after release");
+                    EventSystem.current.SetSelectedGameObject(rowDelete.gameObject);
+                    ExecuteEvents.Execute(rowDelete.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+                    yield return .15;
+                    Check(status.text == "Delete this letter and its unclaimed reward?" && action.IsInteractable()
+                        && EventSystem.current.currentSelectedGameObject == delete.gameObject,
+                        "Unclaimed list delete warns and defaults to keeping the letter");
+                    yield return Capture(capture, "list-delete-unclaimed");
+                    Click(delete);
+                    yield return .15;
+                    Check(rows.gameObject.activeInHierarchy && badge.activeSelf
+                        && EventSystem.current.currentSelectedGameObject == rowDelete.gameObject,
+                        "Cancelled list delete restores the original row and unread badge");
+                }
                 ButtonPointer(Field<Button>(rowView, "primary"));
                 Click(reward);
                 yield return WaitFor(() => action.IsInteractable(), "Reward shows its claim action");
@@ -303,14 +337,21 @@ public static class MailboxVerification
         yield return Capture(capture, "inbox-update-gift");
         var baseline = manager.Service.Experience;
 
-        Click(rows.GetChild(2).GetComponent<Button>());
+        var claimedRowDelete = Field<Button>(rows.GetChild(2).GetComponent<MailRowView>(), "delete");
+        Check(!Field<Button>(rows.GetChild(2).GetComponent<MailRowView>(), "primary").IsInteractable(),
+            "Claimed row keeps Claim disabled while Delete stays available");
+        ButtonPointer(claimedRowDelete);
+        yield return Capture(capture, "claimed-row-delete");
+        Click(claimedRowDelete);
         yield return .15;
-        Click(delete);
         Check(status.text == "Delete this letter?" && action.IsInteractable(), "Delete requires an explicit confirmation");
         yield return Capture(capture, "confirm-delete-claimed");
         Click(delete);
-        Check(!action.IsInteractable() && rows.childCount == 3, "Keep mail restores the claimed view without deleting");
-        Click(delete);
+        yield return .15;
+        Check(rows.gameObject.activeInHierarchy && rows.childCount == 3
+            && EventSystem.current.currentSelectedGameObject == claimedRowDelete.gameObject,
+            "Keep mail restores claimed row without deleting");
+        Click(claimedRowDelete);
         yield return .15;
         Click(action);
         action.onClick.Invoke();

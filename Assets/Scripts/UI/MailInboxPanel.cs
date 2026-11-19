@@ -56,7 +56,7 @@ public sealed class MailInboxPanel : MonoBehaviour
     Sprite actionSprite, deleteSprite;
     Color actionColor, deleteColor;
     string selected, notice;
-    bool refreshing, claiming, confirmingDelete, deleting;
+    bool refreshing, claiming, confirmingDelete, deleting, deleteFromList;
     int loadVersion;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -138,7 +138,7 @@ public sealed class MailInboxPanel : MonoBehaviour
 
     void OnDisable()
     {
-        confirmingDelete = false;
+        confirmingDelete = deleteFromList = false;
         if (modal) modal.SetActive(false);
     }
 
@@ -162,7 +162,7 @@ public sealed class MailInboxPanel : MonoBehaviour
     void Open()
     {
         selected = null;
-        confirmingDelete = false;
+        confirmingDelete = deleteFromList = false;
         modal.SetActive(true);
         transform.SetAsLastSibling();
         notice = null;
@@ -173,7 +173,7 @@ public sealed class MailInboxPanel : MonoBehaviour
 
     void Close()
     {
-        confirmingDelete = false;
+        confirmingDelete = deleteFromList = false;
         modal.SetActive(false);
         if (EventSystem.current) EventSystem.current.SetSelectedGameObject(entry.gameObject);
     }
@@ -221,19 +221,25 @@ public sealed class MailInboxPanel : MonoBehaviour
         if (selected != null && !letters.Any(letter => letter.Key == selected))
         {
             selected = null;
-            confirmingDelete = false;
+            confirmingDelete = deleteFromList = false;
         }
         Render();
     }
 
-    async void Select(string key)
+    async void Select(string key, bool confirmFromList = false)
     {
         if (!letters.Any(letter => letter.Key == key)) return;
+        if (confirmFromList && (selected != null || claiming || deleting)) return;
         selected = key;
-        confirmingDelete = false;
+        confirmingDelete = deleteFromList = confirmFromList;
         notice = null;
         detailScroll.verticalNormalizedPosition = 1;
         Render();
+        if (confirmFromList)
+        {
+            if (EventSystem.current) EventSystem.current.SetSelectedGameObject(delete.gameObject);
+            return;
+        }
         if (State(key) != 0) return;
         var read = await service.ReadLetterAsync(key);
         if (!this || read.Succeeded || key != selected) return;
@@ -255,16 +261,21 @@ public sealed class MailInboxPanel : MonoBehaviour
     void ToggleDelete()
     {
         if (selected == null || claiming || deleting) return;
+        string returnToRow = confirmingDelete && deleteFromList ? selected : null;
+        if (returnToRow != null) selected = null;
+        deleteFromList = false;
         confirmingDelete = !confirmingDelete;
         notice = null;
         Render();
+        if (returnToRow != null && EventSystem.current && views.TryGetValue(returnToRow, out var row))
+            EventSystem.current.SetSelectedGameObject(row.Delete.gameObject);
     }
 
     async void DeleteSelected()
     {
         string key = selected;
         if (!confirmingDelete || key == null || claiming || deleting) return;
-        confirmingDelete = false;
+        confirmingDelete = deleteFromList = false;
         deleting = true;
         Render();
         try
@@ -345,12 +356,14 @@ public sealed class MailInboxPanel : MonoBehaviour
                 views.Add(letter.Key, row);
                 row.Control.onClick.AddListener(() => Select(letter.Key));
                 row.Primary.onClick.AddListener(() => Activate(letter.Key));
+                row.Delete.onClick.AddListener(() => Select(letter.Key, confirmFromList: true));
             }
             row.transform.SetSiblingIndex(i);
             int state = State(letter.Key);
             row.Display(letter.Title, letter.Body, letter.Reward,
                 letter.IsUpdate ? "Update" : state == 2 ? "Claimed" : "Claim", state == 0,
                 !claiming && !deleting && (letter.IsUpdate || state < 2 && (letter.BonusVersion != null || !refreshing)), letter.IsUpdate);
+            row.Delete.interactable = !claiming && !deleting;
         }
 
         var shown = letters.FirstOrDefault(letter => letter.Key == selected);
@@ -388,6 +401,7 @@ public sealed class MailInboxPanel : MonoBehaviour
             var row = views[letter.Key];
             buttons.Add(row.Control);
             if (row.Primary.IsInteractable()) buttons.Add(row.Primary);
+            if (row.Delete.IsInteractable()) buttons.Add(row.Delete);
         }
         if (delete.IsActive() && delete.IsInteractable()) buttons.Add(delete);
         if (action.IsActive() && action.IsInteractable()) buttons.Add(action);
