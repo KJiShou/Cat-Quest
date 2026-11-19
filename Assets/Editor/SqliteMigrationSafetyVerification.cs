@@ -157,6 +157,7 @@ public static class SqliteMigrationSafetyVerification
             var reloadedReward = (await rewardReload.ReadAllForVerificationAsync()).Value;
             check(reloadedReward.history.Count == 1 && reloadedReward.experience == savedReward.experience && reloadedReward.fishCoins == savedReward.fishCoins,
                 "Restart preserves the single committed reward and balances");
+            await VerifyLegacyFocusPrecision(folder, check);
             await VerifyDerivedIndexes(folder,check);
         } finally { foreach (var repo in owned) await repo.CloseAsync(); }
     }
@@ -234,6 +235,67 @@ public static class SqliteMigrationSafetyVerification
         } finally { await repository.CloseAsync(); }
     }
 
+    static async Task VerifyLegacyFocusPrecision(string folder, Action<bool, string> check)
+    {
+        const string focusId = "legacy-fractional-focus";
+        const string completedUtc = "2026-11-16T04:00:00Z";
+        string filename = "legacy-focus-precision.sqlite3";
+        string path = Path.Combine(folder, filename);
+        string expected;
+        var original = new SqlitePlayerRepository(path);
+        try {
+            check((await original.InitializeAsync()).Succeeded, "Fractional Focus fixture initializes");
+            check((await original.ExecuteAsync(tx => {
+                tx.Put(PlayerRecordKind.FocusSessions, new FocusSession {
+                    id = focusId, status = FocusSessionStatus.Completed, rewardDay = "2026-11-16",
+                    completedUtc = completedUtc, elapsedSeconds = 1000.0005, eligibleSeconds = 941.3170427797909
+                });
+                return true;
+            })).Succeeded, "Fractional Focus fixture saves a completed session");
+            var saved = await original.ReadAllForVerificationAsync();
+            check(saved.Succeeded, "Fractional Focus fixture can be read");
+            expected = JsonUtility.ToJson(saved.Value);
+        } finally { await original.CloseAsync(); }
+
+        using (var db = new SQLite.SQLiteConnection(path)) {
+            var payload = db.ExecuteScalar<string>("SELECT payload FROM cq_FocusSessions WHERE id=?", focusId);
+            var session = JsonUtility.FromJson<FocusSession>(payload);
+            double legacySeconds = BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(session.eligibleSeconds) - 1);
+            long indexedBegin = db.ExecuteScalar<long>("SELECT beginTicks FROM cq_FocusSessions WHERE id=?", focusId);
+            long end = db.ExecuteScalar<long>("SELECT endTicks FROM cq_FocusSessions WHERE id=?", focusId);
+            // A legacy index could round a half-millisecond boundary in either direction.
+            long earlierBegin = end - 1000001 * TimeSpan.TicksPerMillisecond;
+            long laterBegin = end - 1000000 * TimeSpan.TicksPerMillisecond;
+            check(indexedBegin == earlierBegin || indexedBegin == laterBegin, "Focus fixture straddles a millisecond rounding boundary");
+            db.Execute("UPDATE cq_FocusSessions SET eligibleSeconds=?,beginTicks=? WHERE id=?", legacySeconds,
+                indexedBegin == earlierBegin ? laterBegin : earlierBegin, focusId);
+            db.Execute("UPDATE cq_totals SET focusSeconds=? WHERE id=1", legacySeconds);
+            db.Execute("DROP TABLE cq_mail_state");
+            db.Execute("PRAGMA user_version=2");
+        }
+
+        var upgraded = new SqlitePlayerRepository(path);
+        try {
+            var initialized = await upgraded.InitializeAsync();
+            check(initialized.Succeeded, "Schema-two save with Focus rounding differences upgrades: " + initialized.Message);
+            var saved = await upgraded.ReadAllForVerificationAsync();
+            check(saved.Succeeded && JsonUtility.ToJson(saved.Value) == expected, "Focus precision upgrade preserves all saved records");
+            check((await upgraded.ExportBackupAsync(Path.Combine(folder, "fractional-focus.catquestbackup"))).Succeeded,
+                "Upgraded fractional Focus save passes full backup validation");
+        } finally { await upgraded.CloseAsync(); }
+
+        string backup = Directory.GetFiles(folder, filename + ".before-schema-2-to-3-*.sqlite3").Single();
+        using (var db = new SQLite.SQLiteConnection(backup, SQLite.SQLiteOpenFlags.ReadOnly))
+            check(db.ExecuteScalar<int>("PRAGMA user_version") == 2 && db.ExecuteScalar<string>("PRAGMA integrity_check") == "ok",
+                "Pre-upgrade fractional Focus snapshot remains a healthy schema-two backup");
+        var reopened = new SqlitePlayerRepository(path);
+        try {
+            check((await reopened.InitializeAsync()).Succeeded, "Upgraded fractional Focus save reopens after closing");
+            var saved = await reopened.ReadAllForVerificationAsync();
+            check(saved.Succeeded && JsonUtility.ToJson(saved.Value) == expected, "Reopened Focus save preserves the original player records");
+        } finally { await reopened.CloseAsync(); }
+    }
+
     static async Task VerifyDerivedIndexes(string folder,Action<bool,string> check)
     {
         var source=new SqlitePlayerRepository(Path.Combine(folder,"derived-source.sqlite3"));
@@ -270,6 +332,7 @@ public static class SqliteMigrationSafetyVerification
                 "UPDATE cq_FocusSessions SET day='2020-01-01' WHERE id='derived-focus-120'",
                 "UPDATE cq_FocusSessions SET parentId='wrong' WHERE id='derived-focus-120'",
                 "UPDATE cq_FocusSessions SET beginTicks=beginTicks+1 WHERE id='derived-focus-120'",
+                "UPDATE cq_FocusSessions SET beginTicks=beginTicks+10000 WHERE id='derived-focus-120'",
                 "UPDATE cq_FocusSessions SET endTicks=NULL WHERE id='derived-focus-120'",
                 "DELETE FROM cq_focus_tags WHERE sessionId='derived-focus-120'"
             };

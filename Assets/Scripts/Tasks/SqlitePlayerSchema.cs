@@ -142,10 +142,37 @@ internal static class SqlitePlayerSchema
         ValidateFocusIndex(db);
     }
     static bool SameText(string a, string b) => (a ?? "") == (b ?? "");
+    static double FocusEligibleSeconds(FocusSession session) =>
+        session.eligibleSeconds > 0 ? session.eligibleSeconds : session.eligibleMinutes * 60d;
+    static double FocusElapsedSeconds(FocusSession session) =>
+        session.elapsedSeconds > 0 ? session.elapsedSeconds : FocusEligibleSeconds(session);
+
+    static bool FocusSecondsMatch(double stored, double expected)
+    {
+        // Unity's JSON round trip can move a double by a few representable steps.
+        const double relativeRoundoff = 4 * 2.2204460492503131e-16;
+        return !double.IsInfinity(expected) && Math.Abs(stored - expected) <= Math.Abs(expected) * relativeRoundoff;
+    }
+
+    static bool FocusBeginMatches(long? storedBegin, long? expectedBegin, long? end, FocusSession session)
+    {
+        if (storedBegin == expectedBegin) return true;
+        if (!storedBegin.HasValue || !expectedBegin.HasValue || !end.HasValue
+            || storedBegin.Value < DateTime.MinValue.Ticks || storedBegin.Value > end.Value
+            || Math.Abs(storedBegin.Value - expectedBegin.Value) != TimeSpan.TicksPerMillisecond)
+            return false;
+
+        // Mono's DateTime.AddSeconds rounds to milliseconds. Only accept the
+        // adjacent millisecond when the original duration was at their midpoint.
+        long earlierBegin = Math.Min(storedBegin.Value, expectedBegin.Value);
+        double boundarySeconds = (end.Value - earlierBegin - TimeSpan.TicksPerMillisecond / 2) / (double)TimeSpan.TicksPerSecond;
+        return FocusSecondsMatch(FocusElapsedSeconds(session), boundarySeconds);
+    }
+
     static void FocusInterval(FocusSession session, out long? beginTicks, out long? endTicks)
     {
         beginTicks = endTicks = null;
-        double seconds = session.elapsedSeconds > 0 ? session.elapsedSeconds : session.eligibleSeconds > 0 ? session.eligibleSeconds : session.eligibleMinutes * 60d;
+        double seconds = FocusElapsedSeconds(session);
         if (DateTime.TryParse(session.completedUtc, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var end)
             && !double.IsNaN(seconds) && !double.IsInfinity(seconds) && seconds >= 0 && seconds <= (end - DateTime.MinValue).TotalSeconds) {
             beginTicks = end.AddSeconds(-seconds).Ticks; endTicks = end.Ticks;
@@ -163,10 +190,11 @@ internal static class SqlitePlayerSchema
                 var session = JsonUtility.FromJson<FocusSession>(row.payload);
                 if(session==null)throw new PlayerRepositoryException(PlayerStorageError.Corrupt,"A Focus record is invalid.");
                 FocusInterval(session,out var begin,out var end);
-                double eligible = session.eligibleSeconds > 0 ? session.eligibleSeconds : session.eligibleMinutes * 60d;
+                double eligible = FocusEligibleSeconds(session);
                 var expected = new HashSet<string>((session.tagIds ?? new List<string>()).Where(t=>!string.IsNullOrEmpty(t)),StringComparer.Ordinal);
                 if(row.id!=session.id||!SameText(row.parentId,session.questId)||!SameText(row.day,session.rewardDay)||!SameText(row.rewardDay,session.rewardDay)
-                    ||row.state!=(int)session.status||row.eligibleSeconds!=eligible||row.beginTicks!=begin||row.endTicks!=end||!expected.SetEquals(tags[row.id]))
+                    ||row.state!=(int)session.status||!FocusSecondsMatch(row.eligibleSeconds,eligible)
+                    ||row.endTicks!=end||!FocusBeginMatches(row.beginTicks,begin,end,session)||!expected.SetEquals(tags[row.id]))
                     throw new PlayerRepositoryException(PlayerStorageError.Corrupt,"The saved Focus indexes do not match the records. Restore a verified backup.");
             }
             after=batch[batch.Count-1].sequence;
@@ -290,14 +318,14 @@ internal static class SqlitePlayerSchema
                     (int)receipt.snapshot.difficulty, JsonUtility.ToJson(new CalendarTagIds { ids = receipt.snapshot.tagIds }), row.sequence);
         }
         if (value is FocusSession session) {
-            double eligible = session.eligibleSeconds > 0 ? session.eligibleSeconds : session.eligibleMinutes * 60d;
+            double eligible = FocusEligibleSeconds(session);
             bool successful = session.status == FocusSessionStatus.Completed || session.status == FocusSessionStatus.EndedEarly;
             bool wasSuccessful = existing != null && (existing.state == (int)FocusSessionStatus.Completed || existing.state == (int)FocusSessionStatus.EndedEarly);
             db.Execute("UPDATE cq_totals SET focusSeconds=focusSeconds+? WHERE id=1", (successful ? eligible : 0) - (wasSuccessful ? existing.eligibleSeconds : 0));
             db.Execute("DELETE FROM cq_focus_tags WHERE sessionId=?", session.id);
             foreach (string tag in (session.tagIds ?? new List<string>()).Where(t => !string.IsNullOrEmpty(t)).Distinct())
                 db.Execute("INSERT INTO cq_focus_tags VALUES(?,?)", session.id, tag);
-            db.Execute("UPDATE " + table + " SET rewardDay=?,eligibleSeconds=? WHERE id=?", session.rewardDay, session.eligibleSeconds > 0 ? session.eligibleSeconds : session.eligibleMinutes * 60d, row.id);
+            db.Execute("UPDATE " + table + " SET rewardDay=?,eligibleSeconds=? WHERE id=?", session.rewardDay, eligible, row.id);
             FocusInterval(session,out var beginTicks,out var endTicks);
             db.Execute("UPDATE " + table + " SET beginTicks=?,endTicks=? WHERE id=?", beginTicks, endTicks, row.id);
         }

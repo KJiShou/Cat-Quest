@@ -1,4 +1,14 @@
 {
   "format": 1,
-  "letters": []
+  "letters": [
+    {
+      "id": "v145-update-compensation",
+      "title": "Cat Quest 1.4.5 Gift",
+      "body": "Thanks for playing Cat Quest! To celebrate the launch of the Inbox, here is a gift for your next quest.",
+      "publishedUtc": "2026-11-19T10:00:00Z",
+      "fishCoins": 888,
+      "experience": 888,
+      "bossTickets": 8
+    }
+  ]
 }
