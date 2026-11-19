@@ -6,7 +6,7 @@ If a previous startup created SQLite before the old JSON was restored, place the
 
 ## Mailbox storage
 
-SQLite schema 3 adds a mail read and claim table. The upgrade retains a standalone pre-upgrade SQLite snapshot. Portable backups transfer the mail records with the balances, and legacy JSON imports start with no mail records. The separate mail cache files hold public message content for offline reading and never act as claim receipts.
+SQLite schema 3 adds a mail read and claim table. The upgrade retains a standalone pre-upgrade SQLite snapshot. Portable backups transfer the mail records with the balances, and legacy JSON imports start with no mail records. The separate mail cache files hold public message content for offline reading and never act as claim receipts. Deletion is a separate marker in the mail table. Portable backups retain the marker and any original claim receipt.
 
 ## Dependency and licenses
 

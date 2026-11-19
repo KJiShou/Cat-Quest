@@ -148,7 +148,6 @@ public sealed partial class SqlitePlayerService
                 var amount = SqlTaskAllowance(task.difficulty, rewardDay, level);
                 SqlAddRewards(profile, amount);
                 rewardDay.firstTaskSettled = true;
-                rewardDay.taskTickets = checked(rewardDay.taskTickets + amount.tickets);
                 rewardDay.taskExperience = checked(rewardDay.taskExperience + amount.experience);
                 rewardDay.taskFishCoins = checked(rewardDay.taskFishCoins + amount.fishCoins);
                 occurrence.rewardGranted = true;

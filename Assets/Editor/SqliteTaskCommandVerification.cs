@@ -94,15 +94,26 @@ public static class SqliteTaskCommandVerification
             string newReceipt = snapshot.history.Single(h => h.taskId == "todo").id;
             check(old.UndoCompletion(oldReceipt) && (await service.UndoCompletionAsync(newReceipt)).Succeeded, "Undo completion"); await Same("Undo retains paid allowance");
             check(old.Complete("todo") && (await service.CompleteAsync("todo")).Succeeded, "Recomplete once-paid occurrence"); await Same("Recomplete cannot pay twice");
+            int ticketsBeforeFirstMission = service.Tickets;
             check(old.ClaimDailyGoal(DailyRewardGoal.FirstQuest) && (await service.ClaimDailyGoalAsync(DailyRewardGoal.FirstQuest)).Succeeded, "Claim first quest reward"); await Same("First goal");
+            check(service.Tickets == ticketsBeforeFirstMission + 1 && service.TodayRewards.taskTickets == 1, "First mission awards one Ticket on claim");
             for (int i = 0; i < 18; i++) {
                 var task = new QuestTask { id = "cap-" + i, title = "Cap " + i, difficulty = (TaskDifficulty)(i % 3) };
                 check(old.Upsert(task, null, out _) && (await service.UpsertAsync(task, null)).Succeeded, "Create cap fixture " + i);
                 check(old.Complete(task.id) && (await service.CompleteAsync(task.id)).Succeeded, "Complete at cap " + i);
             }
             await Same("All difficulties, cap boundary, level-up settlement");
-            check(old.ClaimDailyGoal(DailyRewardGoal.ThreeQuests) && (await service.ClaimDailyGoalAsync(DailyRewardGoal.ThreeQuests)).Succeeded, "Claim three quests"); await Same("Three-quest goal");
-            check(old.ClaimDailyGoal(DailyRewardGoal.ThreeQuests) && (await service.ClaimDailyGoalAsync(DailyRewardGoal.ThreeQuests)).Succeeded, "Duplicate goal"); await Same("Goal duplicate");
+            int ticketsBeforeThirdMission = service.Tickets;
+            repository.FaultPoint = stage => { if (stage == "before-commit") throw new IOException("Injected mission claim failure"); };
+            check(!(await service.ClaimDailyGoalAsync(DailyRewardGoal.ThreeQuests)).Succeeded
+                && service.Tickets == ticketsBeforeThirdMission && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests),
+                "Failed third mission claim awards nothing");
+            repository.FaultPoint = null;
+            var claims = await Task.WhenAll(service.ClaimDailyGoalAsync(DailyRewardGoal.ThreeQuests), service.ClaimDailyGoalAsync(DailyRewardGoal.ThreeQuests));
+            check(old.ClaimDailyGoal(DailyRewardGoal.ThreeQuests) && claims.All(result => result.Succeeded)
+                && service.Tickets == ticketsBeforeThirdMission + 3 && service.TodayRewards.questsTickets == 3,
+                "Concurrent third mission claims award exactly three Tickets");
+            await Same("Three-quest goal and concurrent duplicate");
             check(old.Complete("daily") && (await service.CompleteAsync("daily")).Succeeded, "Complete recurring occurrence");
             clock.Now = clock.Now.AddDays(1);
             check(old.RefreshDate() && (await service.RefreshDateAsync()).Succeeded, "Date rollover"); await Same("New Daily occurrence and retained history");
@@ -127,14 +138,21 @@ public static class SqliteTaskCommandVerification
                 check(old.CancelFocus(oldId, mode == FocusTimerMode.Countdown) && (await service.CancelFocusAsync(start.Value, mode == FocusTimerMode.Countdown)).Succeeded, "Cancel/interruption " + mode);
                 await Same("No cancelled Focus reward " + mode);
             }
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 4; i++) {
                 var options = new FocusSessionOptions { mode = FocusTimerMode.Stopwatch };
                 check(old.BeginFocus(options, out string oldId), "Legacy long Focus");
                 var start = await service.BeginFocusAsync(options); check(start.Succeeded, "SQLite long Focus");
-                double duration = i == 0 ? 1499 : 14400;
+                double duration = i == 0 ? 1499 : 18000;
                 check(old.FinishFocus(oldId, duration, false) && (await service.FinishFocusAsync(start.Value, duration, false)).Succeeded, "Focus ticket/daily cap boundary");
             }
-            await Same("Focus 25-minute ticket floor, 180-minute session cap, 240-minute daily cap");
+            var savedFocus = await repository.ReadAllForVerificationAsync();
+            check(savedFocus.Succeeded, "Read SQLite Focus receipts at the new limits");
+            var longSessions = savedFocus.Value.focusSessions.Skip(savedFocus.Value.focusSessions.Count - 4).ToArray();
+            check(longSessions[0].rawTickets == 0 && longSessions[1].rewardedMinutes == 240 && longSessions[1].tickets == 9
+                && longSessions[2].eligibleMinutes == 240 && longSessions[2].tickets == 1
+                && longSessions[3].rewardedMinutes == 0 && longSessions[3].tickets == 0
+                && service.TodayRewards.focusMinutes == 480 && service.TodayRewards.focusTickets == 10, "SQLite Focus reward limits");
+            await Same("Focus 25-minute ticket floor, 240-minute session cap, 480-minute daily cap and 10-ticket allowance");
             check(old.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes) && (await service.ClaimDailyGoalAsync(DailyRewardGoal.Focus25Minutes)).Succeeded, "Claim Focus goal"); await Same("Focus goal amount");
             await repository.CloseAsync();
             repository = new SqlitePlayerRepository(Path.Combine(folder, "commands.sqlite3"), json);

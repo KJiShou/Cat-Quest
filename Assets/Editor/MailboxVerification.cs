@@ -70,6 +70,7 @@ public static class MailboxVerification
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
         if (File.Exists(StorageRequest)) { File.Delete(StorageRequest); RunStorage(); return; }
         if (!File.Exists(PlayRequest)) return;
+        SessionState.SetBool(Key + ".standardSizes", File.ReadAllText(PlayRequest).Trim() == "standard");
         File.Delete(PlayRequest);
         string folder = NewFolder("play");
         SessionState.SetString(Key + ".folder", folder);
@@ -184,15 +185,19 @@ public static class MailboxVerification
         var modal = Field<GameObject>(panel, "modal");
         var rows = Field<RectTransform>(panel, "rows");
         var action = Field<Button>(panel, "action");
+        var delete = Field<Button>(panel, "delete");
         var close = Field<Button>(panel, "close");
         var status = Field<TMP_Text>(panel, "status");
-        Check(Field<GameObject>(panel, "listFade") && Field<MailRewardIcons>(panel, "attachments"), "Inbox detail and scroll artwork are bound");
+        Check(Field<GameObject>(panel, "listFade") && Field<MailRewardIcons>(panel, "attachments") && delete && delete.GetComponent<JuicyButton>(),
+            "Inbox detail, delete control, and scroll artwork are bound");
         var capture = panel.gameObject.AddComponent<RewardScreenshotCapture>();
         var sidebar = UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
         var expander = Field<Toggle>(sidebar, "expander");
         yield return WaitFor(() => badge.activeSelf, "Published reward shows the envelope badge");
 
-        var resolutions = new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720), new Vector2Int(1024,768), new Vector2Int(2560,1080) };
+        var resolutions = SessionState.GetBool(Key + ".standardSizes", false)
+            ? new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720) }
+            : new[] { new Vector2Int(1920,1080), new Vector2Int(1280,720), new Vector2Int(1024,768), new Vector2Int(2560,1080) };
         foreach (var size in resolutions)
         {
             SettingsVerifier.GetMethod("Resolution", StaticHidden).Invoke(null, new object[] { size });
@@ -226,8 +231,10 @@ public static class MailboxVerification
                 yield return .2;
                 yield return Capture(capture, "mailbox-" + suffix);
                 ButtonPointer(action);
+                ButtonPointer(delete);
                 ButtonPointer(close);
-                Check(close.navigation.mode == Navigation.Mode.Explicit && action.navigation.selectOnDown == close,
+                Check(close.navigation.mode == Navigation.Mode.Explicit && delete.navigation.selectOnDown == action
+                    && action.navigation.selectOnDown == close,
                     "Keyboard focus stays inside the modal");
                 Click(close);
                 Check(!modal.activeSelf && EventSystem.current.currentSelectedGameObject == entry.gameObject, "Closing restores envelope focus");
@@ -295,7 +302,27 @@ public static class MailboxVerification
         Check(values.SequenceEqual(new[] { "888", "888", "8" }), "Installed gift row shows 888 Fish Coins, 888 EXP, and 8 Boss Tickets");
         yield return Capture(capture, "inbox-update-gift");
         var baseline = manager.Service.Experience;
-        Click(Field<Button>(updateGift, "primary"));
+
+        Click(rows.GetChild(2).GetComponent<Button>());
+        yield return .15;
+        Click(delete);
+        Check(status.text == "Delete this letter?" && action.IsInteractable(), "Delete requires an explicit confirmation");
+        yield return Capture(capture, "confirm-delete-claimed");
+        Click(delete);
+        Check(!action.IsInteractable() && rows.childCount == 3, "Keep mail restores the claimed view without deleting");
+        Click(delete);
+        yield return .15;
+        Click(action);
+        action.onClick.Invoke();
+        yield return WaitFor(() => rows.childCount == 2 && status.text == "Mail deleted.", "Claimed mail is removed once, even offline");
+        Check(manager.Service.Experience == baseline && manager.Service.FishCoins == 45, "Deleting mail leaves claimed rewards intact");
+        offline = false;
+        Click(close);
+        yield return .15;
+        Click(entry);
+        yield return WaitFor(() => !Field<bool>(panel, "refreshing") && rows.childCount == 2, "Refreshing does not reintroduce deleted mail");
+        offline = true;
+        Click(Field<Button>(rows.GetChild(1).GetComponent<MailRowView>(), "primary"));
         yield return WaitFor(() => manager.Service.Experience == baseline + 888 && !badge.activeSelf, "Installed update gift claims offline and clears the red dot");
     }
 

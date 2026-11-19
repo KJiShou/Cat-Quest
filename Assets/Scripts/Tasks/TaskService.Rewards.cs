@@ -4,9 +4,9 @@ using System.Linq;
 
 public sealed partial class TaskService
 {
-    public const int TaskExperienceCap = 150, TaskFishCap = 60, FocusMinuteCap = 240, FocusTicketCap = 3;
-    public const int TaskTicketCap = 1;
-    public const int FocusSessionMinuteCap = 180;
+    public const int TaskExperienceCap = 150, TaskFishCap = 60, FocusMinuteCap = 480, FocusTicketCap = 10;
+    public const int FirstQuestTickets = 1, ThreeQuestTickets = 3;
+    public const int FocusSessionMinuteCap = 240;
     public const int FocusDurationSeconds = 25 * 60, RestDurationSeconds = 5 * 60;
     public static readonly RewardAmounts GoalReward = new RewardAmounts(20, 10);
     public static readonly RewardAmounts SmallGoalReward = new RewardAmounts(10, 5);
@@ -58,8 +58,7 @@ public sealed partial class TaskService
     {
         var amount = BaseReward(difficulty);
         return new RewardAmounts(Math.Max(0, Math.Min(ScaleRewardAmount(amount.experience, level), ScaleRewardAmount(TaskExperienceCap, level) - day.taskExperience)),
-            Math.Max(0, Math.Min(ScaleRewardAmount(amount.fishCoins, level), ScaleRewardAmount(TaskFishCap, level) - day.taskFishCoins)),
-            day.firstTaskSettled ? 0 : TaskTicketCap);
+            Math.Max(0, Math.Min(ScaleRewardAmount(amount.fishCoins, level), ScaleRewardAmount(TaskFishCap, level) - day.taskFishCoins)));
     }
     private static void AddRewards(PlayerData data, RewardAmounts amount)
     {
@@ -122,31 +121,39 @@ public sealed partial class TaskService
                 throw new ArgumentException("Complete this goal before claiming its reward.");
             var day = GetRewardDay(data, Today);
             CatLevel(data.experience,out int level,out _,out _);
-            var basis = goal == DailyRewardGoal.ThreeQuests ? GoalReward : SmallGoalReward;
-            var reward=new RewardAmounts(ScaleRewardAmount(basis.experience,level),ScaleRewardAmount(basis.fishCoins,level));
+            var reward = DailyGoalReward(goal, day, level);
             AddRewards(data, reward);
             data.equipmentUnlocked = true;
             if (goal == DailyRewardGoal.ThreeQuests) {
                 day.questsClaimed=true; day.questsExperience=reward.experience; day.questsFishCoins=reward.fishCoins;
+                day.questsTickets = reward.tickets;
             } else if (goal == DailyRewardGoal.FirstQuest) {
                 day.firstQuestClaimed=true; day.firstQuestExperience=reward.experience; day.firstQuestFishCoins=reward.fishCoins;
+                day.taskTickets += reward.tickets;
             } else {
                 day.focusClaimed=true; day.focusGoalExperience=reward.experience; day.focusGoalFishCoins=reward.fishCoins;
             }
         });
+    }
+    internal static RewardAmounts DailyGoalReward(DailyRewardGoal goal, RewardDay day, int level)
+    {
+        var basis = goal == DailyRewardGoal.ThreeQuests ? GoalReward : SmallGoalReward;
+        // Older builds could pay the first ticket before the mission was claimed.
+        int tickets = goal == DailyRewardGoal.ThreeQuests ? ThreeQuestTickets
+            : goal == DailyRewardGoal.FirstQuest && day.taskTickets == 0 ? FirstQuestTickets : 0;
+        return new RewardAmounts(ScaleRewardAmount(basis.experience, level), ScaleRewardAmount(basis.fishCoins, level), tickets);
     }
     public RewardAmounts PreviewDailyGoal(DailyRewardGoal goal)
     {
         var day=CurrentRewardDay;
         bool quests=goal==DailyRewardGoal.ThreeQuests;
         if (goal == DailyRewardGoal.FirstQuest && day.firstQuestClaimed)
-            return new RewardAmounts(day.firstQuestExperience, day.firstQuestFishCoins);
+            return new RewardAmounts(day.firstQuestExperience, day.firstQuestFishCoins, day.taskTickets);
         if(goal != DailyRewardGoal.FirstQuest && (quests?day.questsClaimed:day.focusClaimed)) {
             int xp=quests?day.questsExperience:day.focusGoalExperience;
-            return xp>0 ? new RewardAmounts(xp,quests?day.questsFishCoins:day.focusGoalFishCoins) : GoalReward;
+            return xp>0 ? new RewardAmounts(xp,quests?day.questsFishCoins:day.focusGoalFishCoins, quests?day.questsTickets:0) : GoalReward;
         }
-        var basis = quests ? GoalReward : SmallGoalReward;
-        return new RewardAmounts(ScaleRewardAmount(basis.experience,RewardLevel),ScaleRewardAmount(basis.fishCoins,RewardLevel));
+        return DailyGoalReward(goal, day, RewardLevel);
     }
     public bool BeginFocus(out string sessionId)
         => BeginFocus(new FocusSessionOptions(), out sessionId);

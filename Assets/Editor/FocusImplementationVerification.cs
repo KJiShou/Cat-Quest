@@ -90,8 +90,8 @@ using UnityEngine;
         }
         {
             var store=new Store();var service=Service(store);
-            for(int i=0;i<7;i++){service.BeginFocus(new FocusSessionOptions{focusMinutes=60},out var id);service.FinishFocus(id,3600,false);}
-            Check(store.Data.experience==232 && store.Data.fishCoins==67 && store.Data.tickets==3 && service.TodayRewards.focusMinutes==240,"Level scaling changed the fixed daily time limit");
+            for(int i=0;i<9;i++){service.BeginFocus(new FocusSessionOptions{focusMinutes=60},out var id);service.FinishFocus(id,3600,false);}
+            Check(store.Data.experience==376 && store.Data.fishCoins==143 && store.Data.tickets==10 && service.TodayRewards.focusMinutes==480,"Level scaling changed the fixed daily time limit");
             var old=JsonUtility.FromJson<PlayerData>("{\"version\":3,\"fishCoins\":99,\"focusSessions\":[{\"id\":\"legacy\",\"fishCoins\":10}]}");PlayerDataStore.Normalize(old);
             Check(old.focusSessions[0].focusDurationSeconds==1500 && old.focusSessions[0].restDurationSeconds==300 && old.fishCoins==99,"Legacy data corrupted");
         }
@@ -146,11 +146,9 @@ using UnityEngine;
         int[] levels = { 2, 10, 20, 30, 50 };
         int[] rewards = { 13, 23, 36, 48, 73 };
         int[] fish = { 5, 9, 14, 19, 29 };
-        int[] daily = { 240, 240, 240, 240, 240 };
-        int[] single = { 180, 180, 180, 180, 180 };
         for (int i=0; i<levels.Length; i++) {
             var store=new Store(); store.Data.experience=xp[i]; var service=Service(store);
-            Check(service.FocusDailyMinuteLimit==daily[i] && service.FocusSessionMinuteLimit==single[i], "Scaled time limits");
+            Check(service.FocusDailyMinuteLimit==480 && service.FocusSessionMinuteLimit==240, "Scaled time limits");
             Check(service.BeginFocus(out var id), service.LastError);
             Check(store.Data.focusSessions.Last().rewardLevel==levels[i], "Level snapshot missing");
             var preview=service.PreviewFocusRewards(1500);
@@ -164,7 +162,7 @@ using UnityEngine;
             AdvanceFocus(focus, 359);
             // Level-up elsewhere while this session is running must not reprice it, even after a failed save.
             store.Data.experience=34300;
-            Check(service.FocusRewardLevel==30 && service.FocusDailyMinuteLimit==240 && service.PreviewFocusFish(359)==3, "Live level changed frozen preview");
+            Check(service.FocusRewardLevel==30 && service.FocusDailyMinuteLimit==480 && service.PreviewFocusFish(359)==3, "Live level changed frozen preview");
             store.fail=true; Check(!focus.EndEarly() && focus.Phase==FocusPhase.Saving && store.Data.fishCoins==0, "Early failure paid");
             store.fail=false; Check(focus.RetrySettlement(),service.LastError);
             Check(focus.LastResult.experience==9 && focus.LastResult.fishCoins==3 && focus.LastResult.tickets==0
@@ -172,7 +170,7 @@ using UnityEngine;
             Check(service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes)==5, "Early goal progress lost");
             int paid=store.Data.experience; focus.EndRest();
             Check(service.FinishFocus(focus.SessionId,359,true) && store.Data.experience==paid, "Early duplicate paid");
-            Check(focus.Start() && service.FocusRewardLevel==50 && service.FocusDailyMinuteLimit==240, "New session did not adopt new level");
+            Check(focus.Start() && service.FocusRewardLevel==50 && service.FocusDailyMinuteLimit==480, "New session did not adopt new level");
             focus.Cancel(); Check(store.Data.experience==paid, "High-level cancellation paid");
             focus.Start(); focus.Advance(11); Check(focus.Phase==FocusPhase.Interrupted && store.Data.experience==paid, "High-level interruption paid");
         }
@@ -180,25 +178,25 @@ using UnityEngine;
             var store=new Store(); store.Data.experience=13050; var service=Service(store);
             Check(service.BeginFocus(new FocusSessionOptions { mode=FocusTimerMode.Stopwatch },out var id),service.LastError);
             var preview=service.PreviewFocusRewards(703*60);
-            Check(preview.experience==351 && preview.fishCoins==140 && preview.tickets==3, "Session cap preview");
+            Check(preview.experience==468 && preview.fishCoins==187 && preview.tickets==9, "Session cap preview");
             Check(service.FinishFocus(id,703*60,true),service.LastError);
             var receipt=store.Data.focusSessions.Last();
-            Check(receipt.rewardedMinutes==180 && receipt.eligibleSeconds==180*60 && receipt.elapsedSeconds==703*60
-                && receipt.experience==351 && receipt.fishCoins==140 && receipt.tickets==3, "Scaled session cap settlement");
+            Check(receipt.rewardedMinutes==240 && receipt.eligibleSeconds==240*60 && receipt.elapsedSeconds==703*60
+                && receipt.experience==468 && receipt.fishCoins==187 && receipt.tickets==9, "Scaled session cap settlement");
             string folder="Library/FocusLevelVerification/"+Guid.NewGuid().ToString("N"); Directory.CreateDirectory(folder);
             var disk=new PlayerDataStore(folder+"/save.json"); Check(disk.TrySave(store.Data,out var error),error);
             var loaded=new PlayerDataStore(folder+"/save.json"); var reloaded=new TaskService(loaded,new Clock());
             Check(loaded.Data.focusSessions.Last().rewardLevel==30 && reloaded.FinishFocus(id,703*60,true)
-                && loaded.Data.experience==13401 && loaded.Data.fishCoins==140, "Reload changed snapshot or paid twice");
+                && loaded.Data.experience==13518 && loaded.Data.fishCoins==187, "Reload changed snapshot or paid twice");
         }
         foreach (int remaining in new[] { 0, 1, 4, 5, 10 }) {
             var store=new Store(); store.Data.experience=13050;
-            store.Data.rewardDays.Add(new RewardDay { day="2026-10-09", focusMinutes=240-remaining, focusTickets=3 });
+            store.Data.rewardDays.Add(new RewardDay { day="2026-10-09", focusMinutes=480-remaining, focusTickets=10 });
             var service=Service(store); var focus=new FocusController(service); focus.Start(); AdvanceFocus(focus, 600);
             int expectedXp=remaining==0?0:remaining==1?1:remaining==4?7:remaining==5?9:19;
             int expectedFish=remaining<5?0:remaining==5?3:7;
             Check(focus.EndEarly() && focus.LastResult.experience==expectedXp && focus.LastResult.fishCoins==expectedFish
-                && focus.LastResult.tickets==0 && service.TodayRewards.focusMinutes==240 && focus.Phase==FocusPhase.Resting,
+                && focus.LastResult.tickets==0 && service.TodayRewards.focusMinutes==480 && focus.Phase==FocusPhase.Resting,
                 "Early daily boundary "+remaining);
             int paid=store.Data.experience; focus.Advance(300); Check(store.Data.experience==paid, "Rest paid at cap");
         }
@@ -279,7 +277,7 @@ using UnityEngine;
         }
         {
             var store=new Store();var service=Service(store);
-            store.Data.rewardDays.Add(new RewardDay { day="2026-10-09", focusMinutes=240, focusTickets=3 });
+            store.Data.rewardDays.Add(new RewardDay { day="2026-10-09", focusMinutes=480, focusTickets=10 });
             var focus=new FocusController(service);var sink=new NotificationSink();
             using(var notifications=new FocusNotificationCoordinator(focus,()=>true,sink)) {
                 focus.Start(ShortSession());AdvanceFocus(focus);
@@ -310,24 +308,28 @@ using UnityEngine;
                 && !focus.Start(new FocusSessionOptions { mode=(FocusTimerMode)99 }), "Invalid mode/duration accepted");
             Check(focus.Start(new FocusSessionOptions { mode=FocusTimerMode.Stopwatch, restMinutes=0 }), "Stopwatch rejected");
             AdvanceFocus(focus, 4*3600);
-            Check(focus.Phase==FocusPhase.Focusing && focus.ElapsedSeconds==14400 && focus.SpectatorFishCount==39, "Stopwatch stopped or preview exceeded session limit");
+            Check(focus.Phase==FocusPhase.Focusing && focus.ElapsedSeconds==14400 && focus.SpectatorFishCount==52, "Stopwatch stopped or preview exceeded session limit");
             Check(!focus.Configure(new FocusSessionOptions()) && !focus.Start(), "Running mode replaced");
             store.fail=true; Check(!focus.EndEarly() && focus.Phase==FocusPhase.Saving && store.Data.experience==100, "Failed stopwatch save paid or finished");
             focus.Advance(5); Check(focus.ElapsedSeconds==14400, "Saving accumulated time");
             store.fail=false; Check(focus.RetrySettlement(), "Stopwatch retry failed");
             Check(focus.Phase==FocusPhase.Finished && focus.LastResult.status==FocusSessionStatus.Completed
-                && focus.LastResult.elapsedSeconds==14400 && focus.LastResult.eligibleSeconds==10800
-                && focus.LastResult.experience==99 && focus.LastResult.fishCoins==39 && focus.LastResult.rawTickets==7 && focus.LastResult.tickets==3, "Stopwatch settlement wrong");
+                && focus.LastResult.elapsedSeconds==14400 && focus.LastResult.eligibleSeconds==14400
+                && focus.LastResult.experience==132 && focus.LastResult.fishCoins==52 && focus.LastResult.rawTickets==9 && focus.LastResult.tickets==9, "Stopwatch settlement wrong");
             Check(service.FinishFocus(focus.SessionId,14400,false) && !focus.EndEarly() && !focus.RetrySettlement()
-                && store.Data.experience==199, "Repeated stopwatch settlement paid twice");
+                && store.Data.experience==232, "Repeated stopwatch settlement paid twice");
             Check(focus.Start(new FocusSessionOptions { mode=FocusTimerMode.Countdown, focusMinutes=180 }), "Second three-hour session rejected");
             AdvanceFocus(focus,10800);
-            Check(store.Data.experience==232 && store.Data.fishCoins==67 && store.Data.tickets==3 && service.TodayRewards.focusMinutes==240, "Mixed modes did not use the new session level");
+            Check(store.Data.experience==340 && store.Data.fishCoins==110 && store.Data.tickets==10 && service.TodayRewards.focusMinutes==420, "Mixed modes did not use the new session level or remaining Ticket allowance");
+            Check(focus.Start(new FocusSessionOptions { mode=FocusTimerMode.Countdown, focusMinutes=75 }), "Partial-cap Countdown rejected");
+            AdvanceFocus(focus, 75*60);
+            Check(focus.LastResult.rewardedMinutes==60 && focus.LastResult.experience==36 && focus.LastResult.fishCoins==14
+                && focus.LastResult.tickets==0 && service.TodayRewards.focusMinutes==480, "Daily currency or Ticket cap failed");
             Check(focus.Start(new FocusSessionOptions()), "Capped session blocked"); AdvanceFocus(focus,1500);
             Check(focus.LastResult.experience==0 && focus.LastResult.fishCoins==0 && focus.LastResult.tickets==0 && focus.Phase==FocusPhase.Resting, "Capped session behavior wrong");
             Check(service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes)==25, "New modes lost daily goal");
             var data=JsonUtility.FromJson<PlayerData>(JsonUtility.ToJson(store.Data)); PlayerDataStore.Normalize(data);
-            Check(data.rewardDays.Single().focusMinutes==240 && data.focusSessions[0].elapsedSeconds==14400
+            Check(data.rewardDays.Single().focusMinutes==480 && data.focusSessions[0].elapsedSeconds==14400
                 && data.focusSessions[0].restDurationSeconds==0 && data.focusSessions[0].focusDurationSeconds==0, "Stopwatch reload corrupted receipt/allowance");
         }
         foreach (var mode in new[] { FocusTimerMode.Stopwatch, FocusTimerMode.Countdown })

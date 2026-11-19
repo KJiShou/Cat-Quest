@@ -247,11 +247,11 @@ public static class DashboardRewardPlayVerification
                 var controller = FocusRunner.EnsureInstance().Controller;
                 for (int i = 0; i < 1500 && controller.Phase == FocusPhase.Focusing; i++) controller.Advance(1);
                 await FocusIdle();
-                Check(controller.Phase == FocusPhase.Resting && service.Tickets == 1, "Focus completion did not settle/start Rest.");
+                Check(controller.Phase == FocusPhase.Resting && service.Tickets == 4, "Focus completion did not settle/start Rest.");
                 var goal = nav.pages[0].GetComponentsInChildren<DailyGoalUI>().Single(g => g.goal == DailyRewardGoal.Focus25Minutes);
                 Click(goal.claim);
                 await Command(service.FlushAsync()); await Task.Delay(20);
-                Check(service.Experience == 125 && service.FishCoins == 60 && nav.tickets.text == "1", "Focus claim or HUD wrong.");
+                Check(service.Experience == 125 && service.FishCoins == 60 && nav.tickets.text == "4", "Focus claim or HUD wrong.");
                 var cat = UnityEngine.Object.FindFirstObjectByType<CatStatusUI>();
                 Check(cat.level.text == "LV 2" && cat.experience.text == "25 / 125", "Cat status did not level up from rewards.");
                 Click(nav.buttons[2]); next = EditorApplication.timeSinceStartup + 1; step++; return;
@@ -279,7 +279,7 @@ public static class DashboardRewardPlayVerification
             {
                 ValidateLayout(nav); Capture("dashboard-claimed-1920x1080.png");
                 var disk = await AwaitBounded(SqlitePlayVerificationSupport.ReloadAsync());
-                Check(disk.rewardDays.Single().questsClaimed && disk.rewardDays.Single().focusClaimed && disk.tickets == 1, "Claims did not persist.");
+                Check(disk.rewardDays.Single().questsClaimed && disk.rewardDays.Single().focusClaimed && disk.tickets == 4, "Claims did not persist.");
                 next = EditorApplication.timeSinceStartup + 1; step++; return;
             }
             File.WriteAllText("Temp/dashboard-reward-play.verification", "ALL PASS: real Dashboard UI, independent Claims, Focus quick start, navigation continuity, Rest/cancel, level/HUD refresh, persistence, 1280x720/1920x1080 layout. Screenshots: " + folder);

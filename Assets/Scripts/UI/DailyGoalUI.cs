@@ -49,7 +49,11 @@ public sealed class DailyGoalUI : MonoBehaviour
         int value = service.DailyGoalProgress(displayed);
         bool claimed = service.DailyGoalClaimed(displayed);
         var reward=service.PreviewDailyGoal(displayed);
-        if (taskHeading) taskHeading.text = displayed == DailyRewardGoal.FirstQuest ? "Complete 1 task" : "Complete 3 tasks";
+        if (taskHeading)
+        {
+            string title = displayed == DailyRewardGoal.FirstQuest ? "Complete 1 task" : "Complete 3 tasks";
+            taskHeading.text = reward.tickets > 0 ? $"{title}  +{reward.tickets} {(reward.tickets == 1 ? "Ticket" : "Tickets")}" : title;
+        }
         if(experienceReward) experienceReward.text=reward.experience.ToString();
         if(fishReward) fishReward.text=reward.fishCoins.ToString();
         progress.text = $"{value} / {target}" + (goal == DailyRewardGoal.Focus25Minutes ? " min" : "");

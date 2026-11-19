@@ -11,9 +11,9 @@ using UnityEngine.UI;
 
 public sealed class MailInboxPanel : MonoBehaviour
 {
-    [SerializeField] Button entry, close, backdrop, action, back;
+    [SerializeField] Button entry, close, backdrop, action, back, delete;
     [SerializeField] GameObject badge, modal, entrySlot, detail, empty, listFade;
-    [SerializeField] TMP_Text title, body, status, actionLabel;
+    [SerializeField] TMP_Text title, body, status, actionLabel, deleteLabel;
     [SerializeField] MailRewardIcons attachments;
     [SerializeField] RectTransform rows;
     [SerializeField] ScrollRect detailScroll;
@@ -53,8 +53,10 @@ public sealed class MailInboxPanel : MonoBehaviour
     SettingsLauncher settings;
     ScrollRect listScroll;
     GameObject lastFocus;
+    Sprite actionSprite, deleteSprite;
+    Color actionColor, deleteColor;
     string selected, notice;
-    bool refreshing, claiming;
+    bool refreshing, claiming, confirmingDelete, deleting;
     int loadVersion;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -68,11 +70,19 @@ public sealed class MailInboxPanel : MonoBehaviour
         entrySlot.SetActive(AppPlatform.WindowsDesktop);
         if (!AppPlatform.WindowsDesktop) { enabled = false; return; }
         listScroll = rows.GetComponentInParent<ScrollRect>(true);
+        actionSprite = action.image.sprite;
+        deleteSprite = delete.image.sprite;
+        actionColor = actionLabel.color;
+        deleteColor = deleteLabel.color;
         entry.onClick.AddListener(Open);
         close.onClick.AddListener(Close);
         backdrop.onClick.AddListener(Close);
         back.onClick.AddListener(ShowList);
-        action.onClick.AddListener(() => Activate(selected));
+        action.onClick.AddListener(() => {
+            if (confirmingDelete) DeleteSelected();
+            else Activate(selected);
+        });
+        delete.onClick.AddListener(ToggleDelete);
     }
 
     async void Start()
@@ -128,6 +138,7 @@ public sealed class MailInboxPanel : MonoBehaviour
 
     void OnDisable()
     {
+        confirmingDelete = false;
         if (modal) modal.SetActive(false);
     }
 
@@ -151,6 +162,7 @@ public sealed class MailInboxPanel : MonoBehaviour
     void Open()
     {
         selected = null;
+        confirmingDelete = false;
         modal.SetActive(true);
         transform.SetAsLastSibling();
         notice = null;
@@ -161,6 +173,7 @@ public sealed class MailInboxPanel : MonoBehaviour
 
     void Close()
     {
+        confirmingDelete = false;
         modal.SetActive(false);
         if (EventSystem.current) EventSystem.current.SetSelectedGameObject(entry.gameObject);
     }
@@ -204,8 +217,12 @@ public sealed class MailInboxPanel : MonoBehaviour
         if (!this || generation != loadVersion) return;
         if (saved.Succeeded) states = saved.Value;
 
-        letters = current.ToArray();
-        if (selected != null && !letters.Any(letter => letter.Key == selected)) selected = null;
+        letters = current.Where(letter => State(letter.Key) != SqlitePlayerService.DeletedMailState).ToArray();
+        if (selected != null && !letters.Any(letter => letter.Key == selected))
+        {
+            selected = null;
+            confirmingDelete = false;
+        }
         Render();
     }
 
@@ -213,6 +230,7 @@ public sealed class MailInboxPanel : MonoBehaviour
     {
         if (!letters.Any(letter => letter.Key == key)) return;
         selected = key;
+        confirmingDelete = false;
         notice = null;
         detailScroll.verticalNormalizedPosition = 1;
         Render();
@@ -225,14 +243,52 @@ public sealed class MailInboxPanel : MonoBehaviour
 
     void ShowList()
     {
+        if (confirmingDelete)
+        {
+            ToggleDelete();
+            return;
+        }
         selected = null;
         Render();
+    }
+
+    void ToggleDelete()
+    {
+        if (selected == null || claiming || deleting) return;
+        confirmingDelete = !confirmingDelete;
+        notice = null;
+        Render();
+    }
+
+    async void DeleteSelected()
+    {
+        string key = selected;
+        if (!confirmingDelete || key == null || claiming || deleting) return;
+        confirmingDelete = false;
+        deleting = true;
+        Render();
+        try
+        {
+            var result = await service.DeleteLetterAsync(key);
+            if (!this) return;
+            notice = result.Succeeded ? "Mail deleted." : result.Message;
+            if (result.Succeeded) await ReloadAsync();
+        }
+        catch (Exception error)
+        {
+            if (this) { Debug.LogException(error, this); notice = "Could not delete this letter. Try again."; }
+        }
+        finally
+        {
+            deleting = false;
+            if (this) Render();
+        }
     }
 
     async void Activate(string key)
     {
         var letter = letters.FirstOrDefault(item => item.Key == key);
-        if (letter == null || claiming) return;
+        if (letter == null || claiming || deleting || confirmingDelete) return;
         if (letter.IsUpdate)
         {
             if (settings)
@@ -294,7 +350,7 @@ public sealed class MailInboxPanel : MonoBehaviour
             int state = State(letter.Key);
             row.Display(letter.Title, letter.Body, letter.Reward,
                 letter.IsUpdate ? "Update" : state == 2 ? "Claimed" : "Claim", state == 0,
-                !claiming && (letter.IsUpdate || state < 2 && (letter.BonusVersion != null || !refreshing)), letter.IsUpdate);
+                !claiming && !deleting && (letter.IsUpdate || state < 2 && (letter.BonusVersion != null || !refreshing)), letter.IsUpdate);
         }
 
         var shown = letters.FirstOrDefault(letter => letter.Key == selected);
@@ -307,9 +363,19 @@ public sealed class MailInboxPanel : MonoBehaviour
         int mailState = shown == null ? 0 : State(shown.Key);
         attachments.Display(shown?.Reward ?? default);
         action.gameObject.SetActive(shown != null);
-        actionLabel.text = shown == null || shown.IsUpdate ? "Go to update" : mailState == 2 ? "Claimed" : "Claim";
-        action.interactable = shown != null && !claiming && (shown.IsUpdate || mailState < 2 && (shown.BonusVersion != null || !refreshing));
-        status.text = claiming ? "Verifying reward..." : refreshing ? "Checking mail..." : notice ?? (inbox == null ? "Opening your save..." : "");
+        actionLabel.text = confirmingDelete ? "Confirm delete" : shown == null || shown.IsUpdate ? "Go to update" : mailState == 2 ? "Claimed" : "Claim";
+        action.image.sprite = confirmingDelete ? deleteSprite : actionSprite;
+        actionLabel.color = confirmingDelete ? deleteColor : actionColor;
+        action.interactable = shown != null && !claiming && !deleting
+            && (confirmingDelete || shown.IsUpdate || mailState < 2 && (shown.BonusVersion != null || !refreshing));
+        delete.gameObject.SetActive(shown != null);
+        delete.interactable = shown != null && !claiming && !deleting;
+        deleteLabel.text = confirmingDelete ? "Keep mail" : "Delete";
+        delete.image.sprite = confirmingDelete ? actionSprite : deleteSprite;
+        deleteLabel.color = confirmingDelete ? actionColor : deleteColor;
+        status.text = deleting ? "Deleting mail..." : confirmingDelete
+            ? shown != null && !shown.IsUpdate && mailState < 2 ? "Delete this letter and its unclaimed reward?" : "Delete this letter?"
+            : claiming ? "Verifying reward..." : refreshing ? "Checking mail..." : notice ?? (inbox == null ? "Opening your save..." : "");
         BindNavigation();
     }
 
@@ -323,6 +389,7 @@ public sealed class MailInboxPanel : MonoBehaviour
             buttons.Add(row.Control);
             if (row.Primary.IsInteractable()) buttons.Add(row.Primary);
         }
+        if (delete.IsActive() && delete.IsInteractable()) buttons.Add(delete);
         if (action.IsActive() && action.IsInteractable()) buttons.Add(action);
         return buttons;
     }
@@ -366,7 +433,12 @@ public sealed class MailInboxPanel : MonoBehaviour
     void Update()
     {
         if (!modal.activeSelf) return;
-        if (Input.GetKeyDown(KeyCode.Escape)) { Close(); return; }
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (confirmingDelete) ToggleDelete();
+            else Close();
+            return;
+        }
         if (Input.GetKeyDown(KeyCode.PageDown)) detailScroll.verticalNormalizedPosition -= .25f;
         if (Input.GetKeyDown(KeyCode.PageUp)) detailScroll.verticalNormalizedPosition += .25f;
         if (!Input.GetKeyDown(KeyCode.Tab) || !EventSystem.current) return;

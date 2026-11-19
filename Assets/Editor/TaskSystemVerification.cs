@@ -230,7 +230,7 @@ public static class TaskSystemVerification
             Check(!service.Complete(id),"Incomplete subtasks completed without confirmation.");
             Check(service.Complete(id,true) && service.Complete(id,true),"Completion failed.");
             Check(service.Snapshot.fishCoins==10 && service.Snapshot.experience==25 && service.Snapshot.history.Count==1,"Repeated completion paid rewards twice.");
-            Check(service.Snapshot.tickets==1 && service.Snapshot.history.Single().tickets==1,"First-task ticket missing or duplicate completion paid twice.");
+            Check(service.Snapshot.tickets==0 && service.Snapshot.history.Single().tickets==0,"Task completion paid a mission ticket before claim.");
             Check(service.Query(TaskTab.Today).Count==0 && service.Query(TaskTab.History).Count==1,"Completed task routing failed.");
             Check(service.SaveTag(tag,"Renamed",out _),service.LastError);
             Check(service.Snapshot.history.Single().tagNames.Contains("FYP"),"Renaming a tag rewrote history.");
@@ -284,8 +284,9 @@ public static class TaskSystemVerification
             var ticketStore=new PlayerDataStore(ticketFile); var ticketService=new TaskService(ticketStore,clock);
             var ticketTask=new QuestTask { title="Ticket separation" }; Check(ticketService.Upsert(ticketTask,null,out var ticketTaskId),ticketService.LastError);
             Check(ticketService.Complete(ticketTaskId,true),ticketService.LastError);
+            Check(ticketService.Tickets == 7 && ticketService.ClaimDailyGoal(DailyRewardGoal.FirstQuest), "First mission must award its Ticket only on claim.");
             var reloadedWallet=new PlayerDataStore(ticketFile).Data;
-            Check(reloadedWallet.tickets==8 && reloadedWallet.experience==115,"Ticket balance was lost or mixed with XP after reload.");
+            Check(reloadedWallet.tickets==8 && reloadedWallet.experience==126,"Ticket balance was lost or mixed with XP after reload.");
             var candidate=PlayerDataStore.Copy(unwritable.Data); candidate.fishCoins=123;
             Check(!unwritable.TrySave(candidate,out var writeError) && !string.IsNullOrEmpty(writeError) && unwritable.Data.fishCoins==0,"Actual file-write failure changed data or was not reported.");
             report.Add("PASS: legacy migration, disk persistence, stable IDs, corrupt-save backup recovery.");

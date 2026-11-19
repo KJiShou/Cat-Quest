@@ -15,6 +15,15 @@ public sealed partial class SqlitePlayerRepository
     string Staging => DatabasePath + ".migrating";
     static string Digest(byte[] bytes) { using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(bytes)).Replace("-", ""); }
     static string DataDigest(PlayerData data) => Digest(Encoding.UTF8.GetBytes(JsonUtility.ToJson(data)));
+    static bool MatchesJournalDigest(PlayerData data, string expected)
+    {
+        string json = JsonUtility.ToJson(data);
+        if (Digest(Encoding.UTF8.GetBytes(json)) == expected) return true;
+        // An older in-progress migration hashed reward days before mission Tickets were recorded.
+        if (data.rewardDays.Any(day => day.questsTickets != 0)) return false;
+        string legacyJson = json.Replace(",\"questsTickets\":0", "");
+        return Digest(Encoding.UTF8.GetBytes(legacyJson)) == expected;
+    }
     static void AtomicText(string path, string value)
     {
         string temporary = path + ".tmp";
@@ -71,7 +80,7 @@ public sealed partial class SqlitePlayerRepository
         if (state?.phase == "ready" && File.Exists(Staging)) {
             using (var staged = Open(Staging, true)) {
                 SqlitePlayerSchema.ValidateDatabase(staged, true, true);
-                if (DataDigest(SqlitePlayerSchema.ReadAll(staged)) != state.expectedHash) throw new PlayerRepositoryException(PlayerStorageError.Migration, "The staged migration did not pass verification.");
+                if (!MatchesJournalDigest(SqlitePlayerSchema.ReadAll(staged), state.expectedHash)) throw new PlayerRepositoryException(PlayerStorageError.Migration, "The staged migration did not pass verification.");
             }
             Publish(state);
             return;
@@ -84,7 +93,7 @@ public sealed partial class SqlitePlayerRepository
         }
         var data = ReadLegacy(frozen, allowMissing: state == null || state.sourceHash == "new");
         string expected = DataDigest(data);
-        if (state != null && expected != state.expectedHash)
+        if (state != null && expected != state.expectedHash && !MatchesJournalDigest(data, state.expectedHash))
             throw new PlayerRepositoryException(PlayerStorageError.Migration, "The migration source no longer matches its verified snapshot.");
         state = new MigrationState { phase = "importing", sourceHash = FrozenDigest(frozen), expectedHash = expected };
         Mark(state);
@@ -282,7 +291,7 @@ public sealed partial class SqlitePlayerRepository
         }
         foreach (var day in data.rewardDays ?? new System.Collections.Generic.List<RewardDay>())
             if (!TaskService.TryDate(day.day, out _) || !Nonnegative(day.taskExperience, day.taskFishCoins, day.focusMinutes, day.focusTickets,
-                day.questsExperience, day.questsFishCoins, day.focusGoalExperience, day.focusGoalFishCoins, day.taskTickets, day.firstQuestExperience, day.firstQuestFishCoins)) throw new ArgumentException("Invalid daily reward record.");
+                day.questsExperience, day.questsFishCoins, day.questsTickets, day.focusGoalExperience, day.focusGoalFishCoins, day.taskTickets, day.firstQuestExperience, day.firstQuestFishCoins)) throw new ArgumentException("Invalid daily reward record.");
         foreach (var session in data.focusSessions ?? new System.Collections.Generic.List<FocusSession>()) {
             if (!Enum.IsDefined(typeof(FocusSessionStatus), session.status) || !Enum.IsDefined(typeof(FocusTimerMode), session.mode)
                 || !Duration(session.elapsedSeconds) || !Duration(session.eligibleSeconds) || !OptionalDay(session.rewardDay)

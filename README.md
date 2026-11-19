@@ -136,10 +136,9 @@ You can keep using tasks throughout this progression. Google sign-in and ChatGPT
 | Source | Current base rules |
 | --- | --- |
 | Task completion | Easy / Medium / Hard: **15 / 25 / 40 EXP** and **6 / 10 / 16 Fish Coins** at Lv.1. Daily base allowances: **150 EXP / 60 Fish Coins**. |
-| First valid task settlement of the day | **1 Boss Ticket**, independent of task currency caps. Undo/recompletion cannot award it twice. |
 | Valid Focus | Base **0.5 EXP per complete minute**, **1 Fish Coin per complete 5 minutes**, and **1 ticket per complete 25 minutes**. Intervals are calculated within each session. |
-| Focus limits | EXP/Fish eligibility is limited to the first **180 minutes per session** and **240 minutes per day**. Focus tickets have a separate **3-per-day** limit. |
-| Daily goals | Claim at **1 task**, then **3 distinct task occurrences**, and **25 accumulated eligible Focus minutes**. Goal bonuses are separate from base currency allowances. |
+| Focus limits | EXP/Fish eligibility is limited to the first **240 minutes per session** and **480 minutes per day**. Focus tickets have a separate **10-per-day** limit. |
+| Daily Mission Rewards | Claim **1 Boss Ticket** after **1 task**, then **3 more** after **3 distinct task occurrences**, alongside the existing EXP and Fish bonuses. The **25-minute Focus mission** has its own reward. |
 
 Task reward amounts and task currency caps scale by `1 + 0.1 × (Cat Level − 1)`, using the level before settlement. Focus currency uses the level at session start. Scaled amounts are rounded down. Task completion still counts after its currency cap is reached. Eligible End Early time contributes to the Focus goal.
 

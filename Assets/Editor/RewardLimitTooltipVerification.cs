@@ -133,18 +133,18 @@ public static class RewardLimitTooltipVerification
             if(step==2){
                 var service=manager.Tasks;
                 Check(File.ReadAllText(manager.SavePath)==File.ReadAllText(FolderNow+"/before-save.json"),"Empty-allowance hover mutated save");
-                manager.PlayerData.rewardDays.Add(new RewardDay{day=TaskService.DateKey(service.LocalNow),taskExperience=75,taskFishCoins=30,focusMinutes=120,focusTickets=2});
+                manager.PlayerData.rewardDays.Add(new RewardDay{day=TaskService.DateKey(service.LocalNow),taskExperience=75,taskFishCoins=30,focusMinutes=240,focusTickets=2});
                 // Read projections observe committed snapshots, not direct fixture mutations.
                 Check(manager.TrySaveData(out var error),"Could not commit partial allowance fixture: "+error);
                 var committed=service.TodayRewards;
-                Check(committed.taskExperience==75&&committed.taskFishCoins==30&&committed.focusMinutes==120&&committed.focusTickets==2,"Committed partial allowance projection incorrect");
+                Check(committed.taskExperience==75&&committed.taskFishCoins==30&&committed.focusMinutes==240&&committed.focusTickets==2,"Committed partial allowance projection incorrect");
                 File.Copy(manager.SavePath,FolderNow+"/partial-save.json");
                 fish.OnPointerEnter(pointer);
                 Check(tip.taskBar.normalizedValue==.5f&&tip.focusBar.normalizedValue==.5f,$"Partial allowance bars incorrect: task={tip.taskBar.value}/{tip.taskBar.maxValue}, focus={tip.focusBar.value}/{tip.focusBar.maxValue}");
             }
             if(step==3){Bounds(tip);Content(tip,RewardLimitKind.Fish);Capture("fish-1920");}
             if(step==4){ticket.OnPointerEnter(pointer);fish.OnPointerExit(pointer);Check(tip.gameObject.activeSelf,"Stale exit hid other target");}
-            if(step==5){Bounds(tip);Content(tip,RewardLimitKind.Tickets);Capture("ticket-1920");Check(tip.ticketBar.value==2&&tip.ticketBar.maxValue==4,"Ticket allowance incorrect");}
+            if(step==5){Bounds(tip);Content(tip,RewardLimitKind.Tickets);Capture("ticket-1920");Check(tip.ticketBar.value==2&&tip.ticketBar.maxValue==14,"Ticket allowance incorrect");}
             if(step==6)avatar.OnPointerEnter(pointer);
             if(step==7){Bounds(tip);Content(tip,RewardLimitKind.Experience);Capture("avatar-exp-1920");Check(tip.taskValue.text=="75 / 150 EXP","EXP allowance incorrect");}
             if(step==8){
@@ -168,7 +168,7 @@ public static class RewardLimitTooltipVerification
             if(step==15){Bounds(tip);Content(tip,RewardLimitKind.Experience);Capture("avatar-exp-1280");}
             if(step==16){
                 var day=manager.PlayerData.rewardDays.Single(d=>d.day==manager.Tasks.TodayRewards.day);
-                day.taskExperience=150;day.taskFishCoins=60;day.focusMinutes=240;day.focusTickets=3;day.taskTickets=1;
+                day.taskExperience=150;day.taskFishCoins=60;day.focusMinutes=480;day.focusTickets=10;day.taskTickets=1;day.questsTickets=3;
                 Check(manager.Tasks.SaveTag(null,"Allowance refresh",out var id),"Could not trigger committed refresh");
                 Check(tip.taskBar.normalizedValue==1&&tip.focusBar.normalizedValue==1,"Live refresh did not fill capped bars");
                 Check(manager.Tasks.DeleteTag(id),"Could not remove verification tag");
@@ -183,7 +183,7 @@ public static class RewardLimitTooltipVerification
             }
             if(step==20)Capture("simplecasual-slider-reference-1280");
             if(step>=21&&step<45) GoalFlow(nav,manager,(step-21)%12,(step-21)/12==0?1920:1280);
-            if(step==45){Finish("PASS: reward tooltip empty/partial/cap; Task1+Focus3 tickets; hover/keyboard/focus loss/raycasts; two-stage Task goal idle/ready/claim/claimed and duplicate protection; first-task automatic ticket; Focus Lv.30 preview 48 EXP/19 Fish, 240-minute and 3-ticket limits; authored UI captures at 1920x1080 and 1280x720. No scene/prefab writes.");return;}
+            if(step==45){Finish("PASS: reward tooltip empty/partial/cap; Mission1+3 and Focus10 tickets; hover/keyboard/focus loss/raycasts; two-stage Task goal idle/ready/claim/claimed and duplicate protection; first and third mission tickets; Focus Lv.30 preview 48 EXP/19 Fish, 480-minute and 10-ticket limits; authored UI captures at 1920x1080 and 1280x720. No scene/prefab writes.");return;}
         }
         step++;next=EditorApplication.timeSinceStartup+1;
     }
@@ -198,22 +198,22 @@ public static class RewardLimitTooltipVerification
             Check(service.SaveTag(null,"Goal flow "+width,out _),service.LastError);
         }
         var goal=nav.pages[(int)MainMenuPage.Dashboard].GetComponentsInChildren<DailyGoalUI>(true).Single(g=>g.goal==DailyRewardGoal.ThreeQuests);
-        if(phase==1){Check(goal.progress.text=="0 / 1"&&goal.experienceReward.text=="39"&&!goal.claim.interactable,"First goal idle preview");GoalBounds(goal);Capture("goal-first-idle-"+width);}
-        if(phase==2){Check(service.Upsert(new QuestTask{title="First work"},null,out var id)&&service.Complete(id,true),service.LastError);Check(service.TodayRewards.taskTickets==1&&service.Snapshot.tickets==1,"Automatic ticket missing");}
+        if(phase==1){Check(goal.progress.text=="0 / 1"&&goal.experienceReward.text=="39"&&goal.transform.Find("Text_Info").GetComponent<TMPro.TMP_Text>().text.EndsWith("+1 Ticket")&&!goal.claim.interactable,"First goal idle preview");GoalBounds(goal);Capture("goal-first-idle-"+width);}
+        if(phase==2){Check(service.Upsert(new QuestTask{title="First work"},null,out var id)&&service.Complete(id,true),service.LastError);Check(service.TodayRewards.taskTickets==0&&service.Snapshot.tickets==0,"Task paid the mission before claim");}
         if(phase==3){Check(goal.claim.interactable&&goal.progress.text=="1 / 1","First goal readiness");GoalBounds(goal);Capture("goal-first-ready-"+width);}
-        if(phase==4){ClickGoal(goal.claim);Check(service.DailyGoalClaimed(DailyRewardGoal.FirstQuest)&&!service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests),"First button claimed wrong tier");Capture("goal-first-press-"+width);}
+        if(phase==4){ClickGoal(goal.claim);Check(service.DailyGoalClaimed(DailyRewardGoal.FirstQuest)&&!service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests)&&service.Snapshot.tickets==1,"First button claimed wrong tier");Capture("goal-first-press-"+width);}
         if(phase==5){Check(goal.progress.text=="1 / 3"&&goal.experienceReward.text=="78"&&!goal.claim.interactable,"Second tier did not refresh");GoalBounds(goal);Capture("goal-third-progress-"+width);}
         if(phase==6)for(int i=0;i<2;i++)Check(service.Upsert(new QuestTask{title="More work "+i},null,out var id)&&service.Complete(id,true),service.LastError);
-        if(phase==7){Check(goal.progress.text=="3 / 3"&&goal.claim.interactable,"Third goal readiness");GoalBounds(goal);Capture("goal-third-ready-"+width);}
+        if(phase==7){Check(goal.progress.text=="3 / 3"&&goal.claim.interactable&&goal.transform.Find("Text_Info").GetComponent<TMPro.TMP_Text>().text.EndsWith("+3 Tickets"),"Third goal readiness");GoalBounds(goal);Capture("goal-third-ready-"+width);}
         if(phase==8){
             ClickGoal(goal.claim);int xp=service.Snapshot.experience;goal.claim.onClick.Invoke();goal.claim.onClick.Invoke();
-            Check(service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests)&&service.Snapshot.experience==13458&&xp==13458&&service.Snapshot.tickets==1,"Third goal/duplicate paid wrong amount");
+            Check(service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests)&&service.Snapshot.experience==13458&&xp==13458&&service.Snapshot.tickets==4,"Third goal/duplicate paid wrong amount");
         }
         if(phase==9){Check(goal.inProgressLabel.text=="Claimed"&&!goal.claim.interactable,"Claimed button state");GoalBounds(goal);Capture("goal-both-claimed-"+width);}
         if(phase==10){
             nav.ShowPage(MainMenuPage.Focus);var panel=nav.pages[(int)MainMenuPage.Focus].GetComponent<FocusPanelUI>();
             Check(FocusRunner.EnsureInstance().Controller.Configure(new FocusSessionOptions()),"Focus options");
-            Check(panel.rewards.text=="48"&&panel.fishReward.text=="19"&&panel.ticketReward.text=="1"&&panel.rewardAllowanceBar.maxValue==240&&panel.ticketAllowanceBar.maxValue==3,"Focus authored display shows stale rules");
+            Check(panel.rewards.text=="48"&&panel.fishReward.text=="19"&&panel.ticketReward.text=="1"&&panel.rewardAllowanceBar.maxValue==480&&panel.ticketAllowanceBar.maxValue==10,"Focus authored display shows stale rules");
         }
         if(phase==11)Capture("focus-new-allowances-"+width);
     }

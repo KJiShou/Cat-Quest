@@ -147,7 +147,7 @@ try {
  if($canMovePointer){ClickAt $window 200 170;Check ([FocusNative]::GetForegroundWindow() -eq $window) 'companion foreground before native interaction sequence'}
  $r=Command @{action='advance';seconds=14400}
  $view=WaitFor $viewPath {param($v)$v.timer -like '4:00:*'} 'four-hour count-up'
- Check ($r.phase -eq 'Focusing' -and $r.exp -eq 100 -and $r.fish -eq 39) 'four-hour stopwatch remains active with capped preview'
+ Check ($r.phase -eq 'Focusing' -and $r.exp -eq 100 -and $r.fish -eq 52) 'four-hour stopwatch remains active with capped preview'
  $steady=$view
  Start-Sleep -Seconds 61
  $view=ReadJson $viewPath;$r=ReadJson $resultPath
@@ -180,13 +180,13 @@ try {
  $saveLock.Dispose();$saveLock=$null
  $request=[Guid]::NewGuid().ToString('N');HostCommand $r retry $r.ownerId $r.sessionId $request
  $r=WaitFor $resultPath {param($v)$v.phase -eq 'Finished'} 'retry finish'
- Check ($r.exp -eq 199 -and $r.coins -eq 39 -and $r.tickets -eq 3) 'stopwatch retry pays exactly three hours without Rest'
+ Check ($r.exp -eq 232 -and $r.coins -eq 67 -and $r.tickets -eq 9) 'stopwatch retry pays exactly four hours without Rest'
  HostCommand $r retry $r.ownerId $r.sessionId $request;HostCommand $r end
- Check ((ReadJson $resultPath).exp -eq 199) 'duplicate retry/end cannot pay twice'
+ Check ((ReadJson $resultPath).exp -eq 232) 'duplicate retry/end cannot pay twice'
  $saved=ReadJson (Join-Path $folder 'test-save.json')
- Check ($saved.experience -eq 199 -and $saved.fishCoins -eq 39 -and $saved.tickets -eq 3) 'isolated save contains exactly one reward'
+ Check ($saved.experience -eq 232 -and $saved.fishCoins -eq 67 -and $saved.tickets -eq 9) 'isolated save contains exactly one reward'
  $r=Command @{action='configure';mode=2;focusMinutes=180};$r=Command @{action='start'};$r=Command @{action='advance';seconds=10800}
- Check ($r.phase -eq 'Finished' -and $r.exp -eq 232 -and $r.coins -eq 67 -and $r.tickets -eq 3) 'countdown shares four-hour daily cap and skips Rest'
+ Check ($r.phase -eq 'Finished' -and $r.exp -eq 340 -and $r.coins -eq 110 -and $r.tickets -eq 10) 'countdown uses remaining Ticket allowance and skips Rest'
  $r=Command @{action='configure';mode=1};$r=Command @{action='start'};$r=Command @{action='advance';seconds=60}
  $request=[Guid]::NewGuid().ToString('N');HostCommand $r start $r.ownerId $r.sessionId $request;HostCommand $r start $r.ownerId $r.sessionId $request
  Check ((ReadJson $resultPath).sessionId -eq $r.sessionId) 'duplicate start cannot replace active session'
@@ -206,7 +206,7 @@ try {
  $r=Command @{action='end'}
  Check ($r.cancelPrompt -and $r.phase -eq 'Focusing') 'End Focus prompts before settlement'
  $r=Command @{action='confirm-cancel'}
- Check ($r.phase -eq 'Finished' -and $r.exp -eq 232 -and $r.coins -eq 67) 'third session remains usable without extra rewards'
+ Check ($r.phase -eq 'Finished' -and $r.exp -eq 340 -and $r.coins -eq 110) 'third session remains usable without extra rewards'
  WriteJson (Join-Path $folder 'final-state.json') $r
 } catch { $failure=$_.ToString(); Write-Output "FAIL: $failure" }
 finally {

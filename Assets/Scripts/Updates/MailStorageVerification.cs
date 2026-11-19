@@ -77,6 +77,26 @@ public static class MailStorageVerification
                 && afterDaily.TaskTickets == daily.Value.TaskTickets && afterDaily.FocusSeconds == daily.Value.FocusSeconds,
                 "Mail rewards do not consume daily task or Focus allowances");
 
+            int coins = service.FishCoins, tickets = service.Tickets;
+            repo.FaultPoint = stage => { if (stage == "before-commit") throw new IOException("Injected deletion failure"); };
+            check(!(await service.DeleteLetterAsync(letter.Key)).Succeeded
+                && (await service.ReadMailStatesAsync(new[] { letter.Key })).Value[letter.Key] == 2,
+                "A failed delete keeps the visible claimed letter");
+            repo.FaultPoint = null;
+            var deletions = await Task.WhenAll(service.DeleteLetterAsync(letter.Key), service.DeleteLetterAsync(letter.Key));
+            check(deletions.All(result => result.Succeeded)
+                && (await service.ReadMailStatesAsync(new[] { letter.Key })).Value[letter.Key] == SqlitePlayerService.DeletedMailState
+                && (await repo.ReadAsync(tx => tx.ReadMailState(letter.Key))).Value == 2
+                && service.FishCoins == coins && service.Tickets == tickets,
+                "Duplicate deletes hide mail while preserving the claim receipt and balance");
+
+            feed = Feed("unclaimed-mail", 1, 1, 1);
+            check(await inbox.RefreshAsync(), "Separate unclaimed letter is available");
+            var unclaimed = inbox.Letters().Single();
+            check((await service.DeleteLetterAsync(unclaimed.Key)).Succeeded && !(await inbox.ClaimAsync(unclaimed)).Succeeded
+                && service.Experience == 550 && service.FishCoins == coins && service.Tickets == tickets,
+                "Deleted unclaimed mail cannot be claimed through a stale result");
+
             check((await repo.ExportBackupAsync(backup)).Succeeded, "Portable backup captures mail and balances");
             check((await repo.ExecuteAsync(tx => {
                 var profile = tx.Read<PlayerData>(PlayerRecordKind.Profile, "profile");
@@ -103,6 +123,9 @@ public static class MailStorageVerification
             check(await inbox.RefreshAsync(), "Campaign still exists after restore");
             var duplicate = await inbox.ClaimAsync(inbox.Letters().Single());
             check(duplicate.Succeeded && !duplicate.Value && service.Experience == 550, "Backup restore preserves the duplicate-claim receipt");
+            var deleted = await service.ReadMailStatesAsync(new[] { "reward:welcome-mail", "reward:unclaimed-mail" });
+            check(deleted.Succeeded && deleted.Value.Values.All(state => state == SqlitePlayerService.DeletedMailState),
+                "Deleted mail stays hidden after refresh and backup restore");
         }
         finally { await service.CloseAsync(); }
 

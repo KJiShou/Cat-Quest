@@ -85,7 +85,7 @@ For desktop saves at or above 128 KiB, cached primary/backup byte comparisons ca
 
 ## Rewards and daily goals
 
-At Lv.1, Easy/Medium/Hard pay **15/25/40 EXP** and **6/10/16 Fish Coins**. The saved Normal enum remains compatible and displays as Medium. Each Todo pays once and each daily occurrence pays once per date. Task daily bases are **150 EXP and 60 Fish**. Amounts and caps scale with the pre-settlement level using `1 + 0.1 × (level - 1)`, then floor and clip each currency to its remaining allowance. Completion is recorded even at the cap. The first valid first-time settlement each day gives one automatic Ticket independently of currency caps. Undo/recompletion cannot duplicate it. New saves start at zero, not scene mock balances.
+At Lv.1, Easy/Medium/Hard pay **15/25/40 EXP** and **6/10/16 Fish Coins**. The saved Normal enum remains compatible and displays as Medium. Each Todo pays once and each daily occurrence pays once per date. Task daily bases are **150 EXP and 60 Fish**. Amounts and caps scale with the pre-settlement level using `1 + 0.1 × (level - 1)`, then floor and clip each currency to its remaining allowance. Completion is recorded even at the cap. New saves start at zero, not scene mock balances.
 
 At Lv.30, Medium pays 97 EXP/39 Fish and task caps are 585 EXP/234 Fish. Previews share settlement math. Paid currency, including revoked receipts, consumes allowance. Undo does not release allowance.
 
@@ -95,17 +95,17 @@ The existing two Daily Mission Rewards cards use Mission visuals and Claim/In Pr
 
 | Goal | Base bonus |
 | --- | --- |
-| First completed task | 10 EXP + 5 Fish |
-| Three distinct task occurrences, after the first goal | An additional 20 EXP + 10 Fish |
+| First completed task | 10 EXP + 5 Fish + 1 Boss Ticket |
+| Three distinct task occurrences, after the first goal | An additional 20 EXP + 10 Fish + 3 Boss Tickets |
 | 25 accumulated eligible Focus minutes | 10 EXP + 5 Fish |
 
-Each stage is claimable once daily. Bonuses scale/floor at claim level and do not consume base allowances. Todo and daily occurrences count, subtasks do not. Undo lowers unclaimed progress but keeps paid bonuses. Recompletion cannot pay twice. Local midnight resets goals without carrying unclaimed bonuses forward. End Early seconds count toward Focus goals, with displayed progress floored to minutes and legacy-minute fallback. The automatic first-task Ticket requires no Claim click.
+Each stage is claimable once daily. Bonuses scale/floor at claim level and do not consume base allowances. Todo and daily occurrences count, subtasks do not. Undo lowers unclaimed progress but keeps paid bonuses. Recompletion cannot pay twice. Local midnight resets goals without carrying unclaimed bonuses forward. End Early seconds count toward Focus goals, with displayed progress floored to minutes and legacy-minute fallback. Boss Tickets are paid when the mission is claimed and stay fixed across levels. A first-task Ticket paid automatically by an older build counts toward that day's first mission.
 
 ## Focus settlement
 
 Pomodoro uses 1–60 minute Focus/Rest selectors, default 25/5. Stopwatch counts up beyond three hours. Countdown accepts 1–180 minutes. Only Pomodoro enters Rest after successful settlement. The current Pomodoro UI offers confirmed Cancel, while Stopwatch and Countdown offer confirmed End Focus to settle earned time. The underlying and historical End Early rules remain supported.
 
-Currency bases are 0.5 EXP per complete minute and 1 Fish per complete 5 minutes, multiplied using the session-start level before flooring. Only the first 180 minutes per session and 240 minutes per day earn currency across all modes. Tickets use complete 25-minute intervals with a separate 3-per-day Focus cap. Short sessions are not joined for ticket/fish intervals. A valid 25-minute session can still meet the daily goal after currency limits are exhausted.
+Currency bases are 0.5 EXP per complete minute and 1 Fish per complete 5 minutes, multiplied using the session-start level before flooring. Only the first 240 minutes per session and 480 minutes per day earn currency across all modes. Tickets use complete 25-minute intervals with a separate 10-per-day Focus cap. Short sessions are not joined for ticket/fish intervals. A valid 25-minute session can still meet the daily goal after currency limits are exhausted.
 
 The persistent main controller keeps time through page/application changes. Sleep, suspension or an unverifiable update gap over 10 seconds invalidates active Focus. Restart does not reward unfinished sessions. Cancel/invalid/interrupted sessions grant nothing and do not start Rest. Save failure freezes settlement for Retry Save without duplicate rewards. Rest grants nothing and can end early. Sessions crossing midnight belong to the settlement day. See [Focus and Companion](FOCUS_COMPANION.md).
 
@@ -119,7 +119,7 @@ Each newly reached level L gives `5 × L` Fish. Multiples of five also give one 
 
 ## Header allowance preview
 
-Hover Fish, Ticket or the avatar to see the corresponding allowance. Fish/EXP show Task and Focus bars. Ticket shows paid Task + Focus Tickets out of 4 with the separate 1 + 3 limits. Task bars use level-scaled caps, Focus bars use rewarded minutes and the shared formula at the active reward level. Daily goals and level-up gifts are extra.
+Hover Fish, Ticket or the avatar to see the corresponding allowance. Fish/EXP show Task and Focus bars. Ticket shows paid Mission and Focus Tickets out of 14, with 1 + 3 from missions and up to 10 from Focus. Task bars use level-scaled caps, Focus bars use rewarded minutes and the shared formula at the active reward level. Daily goal EXP and Fish and level-up gifts are outside the base allowances.
 
 `TaskService.TodayRewards` drives the read-only tooltip, refreshed on service changes and dismissed on exit/press, navigation, disable or focus loss. `Assets/Prefabs/RewardLimitTooltip.prefab` retains the EquipmentItemDetail background/shadow/TopFrame and header font. Sliders reuse UserInfo/Slider_Green from SimpleCasual SliderGroup_UserInfo_Light. They have no navigation/callbacks/raycast capture and ignore parent layout. All header targets are serialized without rebuilding the page.
 

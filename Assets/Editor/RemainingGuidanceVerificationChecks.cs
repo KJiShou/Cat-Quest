@@ -230,12 +230,12 @@ public static class RemainingGuidanceVerificationChecks
         var pointer = new PointerEventData(EventSystem.current);
         ExecuteEvents.Execute(target.gameObject, pointer, ExecuteEvents.pointerEnterHandler); yield return .1;
         check(tooltip.gameObject.activeInHierarchy && tooltip.note.text.Contains("25 min in one session")
-            && tooltip.note.text.Contains("Short sessions do not combine") && tooltip.ticketBar.maxValue == 3
+            && tooltip.note.text.Contains("Short sessions do not combine") && tooltip.ticketBar.maxValue == 10
             && tooltip.ticketBar.value == service.TodayRewards.focusTickets,
-            "Focus Ticket rules remain reachable and use the actual three-ticket daily allowance");
+            "Focus Ticket rules remain reachable and use the actual ten-ticket daily allowance");
         GlyphsFit(tooltip.note, tooltip.card, check, "Focus Ticket rules " + width);
         GlyphsFit(tooltip.ticketValue, tooltip.card, check, "Focus Ticket allowance " + width);
-        foreach (var wait in Capture("guidance-focus-ticket-rules-" + (service.TodayRewards.focusTickets >= 3 ? "capped-" : "") + width)) yield return wait;
+        foreach (var wait in Capture("guidance-focus-ticket-rules-" + (service.TodayRewards.focusTickets >= 10 ? "capped-" : "") + width)) yield return wait;
         ExecuteEvents.Execute(target.gameObject, pointer, ExecuteEvents.pointerExitHandler); yield return .05;
         check(!tooltip.gameObject.activeSelf, "Focus Ticket rule tooltip closes on pointer exit");
         EventSystem.current.SetSelectedGameObject(target.gameObject); yield return .05;
@@ -553,17 +553,17 @@ public static class RemainingGuidanceVerificationChecks
                 "After 25 minutes a 30-minute plan keeps its earned Ticket preview without promising an unreachable next Ticket");
             check(focus.Cancel(), "Cancel the display-only 30-minute boundary fixture without rewards");
             check(focus.Start(new FocusSessionOptions { mode = FocusTimerMode.Stopwatch }), "Start remaining daily allowance check");
-            Advance(focus, 3000); check(focus.EndEarly() && focus.LastResult.tickets == 2, "Existing three-Ticket daily allowance is preserved");
+            Advance(focus, 13500); check(focus.EndEarly() && focus.LastResult.tickets == 9, "Nine more Tickets fill the daily allowance");
             foreach (var wait in DismissCelebrations(check)) yield return wait;
             check(focus.Start(new FocusSessionOptions { mode = FocusTimerMode.Stopwatch }), "Start capped Ticket preview");
             Advance(focus, 1500); yield return 1.1; panel.endEarly.onClick.Invoke(); yield return .15;
-            check(!panel.ticketProgressCard.activeSelf && panel.ticketAllowanceBar.maxValue == 3 && panel.ticketAllowanceBar.value == 3
+            check(!panel.ticketProgressCard.activeSelf && panel.ticketAllowanceBar.maxValue == 10 && panel.ticketAllowanceBar.value == 10
                 && panel.cancelConfirmation.previewTickets.text == "0",
                 "The full daily bar and numeric End Early preview agree while the unavailable next-ticket row stays hidden");
             panel.cancelConfirmation.Dismiss();
             foreach (var wait in FocusTicketHelp(panel, service, 1280, check)) yield return wait;
             check(focus.Cancel(), "Cancel cap fixture without rewards");
-            check(new PlayerDataStore(manager.SavePath).Data.rewardDays.Single(d => d.day == TaskService.DateKey(service.LocalNow)).focusTickets == 3,
+            check(new PlayerDataStore(manager.SavePath).Data.rewardDays.Single(d => d.day == TaskService.DateKey(service.LocalNow)).focusTickets == 10,
                 "Focus Ticket allowance and earned receipts survive reload");
 
             // The guide intentionally yields to earned reward feedback. Wait for

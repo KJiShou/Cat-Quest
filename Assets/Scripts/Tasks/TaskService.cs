@@ -274,7 +274,6 @@ public sealed partial class TaskService
                 var amount = TaskAllowance(current.difficulty, rewardDay, rewardLevel);
                 AddRewards(data, amount);
                 rewardDay.firstTaskSettled = true;
-                rewardDay.taskTickets += amount.tickets;
                 rewardDay.taskExperience += amount.experience;
                 rewardDay.taskFishCoins += amount.fishCoins;
                 occurrence.rewardGranted = true;

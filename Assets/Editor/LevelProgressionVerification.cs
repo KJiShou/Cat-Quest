@@ -29,7 +29,7 @@ public static class LevelProgressionVerification
             store.fail=true;Check(!service.FinishFocus(id,10800,true)&&store.Data.experience==224&&events==0,"Failed write awarded level");
             store.fail=false;Check(service.FinishFocus(id,10800,true),service.LastError);
             Check(events==1&&observed.fromLevel==2&&observed.toLevel==3&&observed.fishCoins==15&&observed.tickets==0,"Level transition bonus");
-            Check(store.Data.fishCoins==54&&store.Data.tickets==3&&store.Data.focusSessions.Last().fishCoins==39,"Bonus polluted Focus receipt");
+            Check(store.Data.fishCoins==54&&store.Data.tickets==7&&store.Data.focusSessions.Last().fishCoins==39,"Bonus polluted Focus receipt");
             Check(service.FinishFocus(id,10800,true)&&events==1&&store.Data.fishCoins==54,"Duplicate level payout");
             string folder="Library/LevelProgressionVerification/"+Guid.NewGuid().ToString("N");Directory.CreateDirectory(folder);
             var disk=new PlayerDataStore(folder+"/save.json");Check(disk.TrySave(store.Data,out var error),error);
@@ -39,8 +39,8 @@ public static class LevelProgressionVerification
         {
             var store=new Store();store.Data.experience=549;var service=new TaskService(store,new Clock());
             Check(service.BeginFocus(new FocusSessionOptions{mode=FocusTimerMode.Stopwatch},out var id)&&service.FinishFocus(id,10800,true),service.LastError);
-            Check(store.Data.experience==666&&store.Data.fishCoins==71&&store.Data.tickets==4
-                &&service.TodayRewards.focusTickets==3&&store.Data.focusSessions.Last().tickets==3,"Level-five Ticket consumed Focus cap");
+            Check(store.Data.experience==666&&store.Data.fishCoins==71&&store.Data.tickets==8
+                &&service.TodayRewards.focusTickets==7&&store.Data.focusSessions.Last().tickets==7,"Level-five Ticket consumed Focus cap");
         }
         {
             var store=new Store();store.Data.experience=90;var service=new TaskService(store,new Clock());
@@ -54,9 +54,9 @@ public static class LevelProgressionVerification
             else {service.BeginFocus(out var id);service.FinishFocus(id,1500,false);}
             int expectedXp=goal==DailyRewardGoal.ThreeQuests?78:39, expectedFish=goal==DailyRewardGoal.ThreeQuests?39:19;
             var preview=service.PreviewDailyGoal(goal);Check(preview.experience==expectedXp&&preview.fishCoins==expectedFish,"Daily level multiplier");
-            int xp=store.Data.experience,fish=store.Data.fishCoins;store.fail=true;
-            Check(!service.ClaimDailyGoal(goal)&&!service.DailyGoalClaimed(goal)&&store.Data.fishCoins==fish,"Daily failure paid");
-            store.fail=false;Check(service.ClaimDailyGoal(goal)&&service.ClaimDailyGoal(goal)&&store.Data.experience==xp+expectedXp&&store.Data.fishCoins==fish+expectedFish,"Daily duplicate");
+            int xp=store.Data.experience,fish=store.Data.fishCoins,tickets=store.Data.tickets;store.fail=true;
+            Check(!service.ClaimDailyGoal(goal)&&!service.DailyGoalClaimed(goal)&&store.Data.fishCoins==fish&&store.Data.tickets==tickets,"Daily failure paid");
+            store.fail=false;Check(service.ClaimDailyGoal(goal)&&service.ClaimDailyGoal(goal)&&store.Data.experience==xp+expectedXp&&store.Data.fishCoins==fish+expectedFish&&store.Data.tickets==tickets+(goal==DailyRewardGoal.ThreeQuests?3:0),"Daily duplicate");
             store.Data.experience=34300;Check(service.PreviewDailyGoal(goal).experience==expectedXp&&service.PreviewDailyGoal(goal).fishCoins==expectedFish,"Claimed card repriced");
         }
         {

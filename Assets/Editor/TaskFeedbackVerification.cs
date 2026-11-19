@@ -196,7 +196,7 @@ public static class TaskFeedbackVerification
             Check(notice.message.text.Contains("previous rewards are kept"),"Recompletion not distinguished.");
             snapshot=owner.Service.ReadVerificationSnapshotAsync();
             foreach(var delay in SqlitePlayVerificationSupport.Wait(snapshot)) yield return delay;
-            var saved=SqlitePlayVerificationSupport.Value(snapshot);Check(saved.history.Count==1&&saved.fishCoins==10&&saved.experience==25&&saved.tickets==1,"Feedback changed reward settlement.");
+            var saved=SqlitePlayVerificationSupport.Value(snapshot);Check(saved.history.Count==1&&saved.fishCoins==10&&saved.experience==25&&saved.tickets==0,"Feedback changed reward settlement.");
 
             // Seed only this runner's isolated store at the existing cap; no production rules change.
             var seedCap=owner.Service.ApplyVerificationFixtureAsync(tx=>{
@@ -218,7 +218,7 @@ public static class TaskFeedbackVerification
             Check(saved.history.Count==2&&saved.fishCoins==10,"Capped completion missing or rewarded.");
             using(var disk=new SQLite.SQLiteConnection(GameDataManager.Instance.SavePath,SQLite.SQLiteOpenFlags.ReadOnly)) {
                 var profile=JsonUtility.FromJson<PlayerData>(disk.ExecuteScalar<string>("SELECT payload FROM cq_Profile"));
-                Check(disk.ExecuteScalar<int>("SELECT COUNT(*) FROM cq_History")==2&&profile.experience==25&&profile.tickets==1,"Result not persisted.");
+                Check(disk.ExecuteScalar<int>("SELECT COUNT(*) FROM cq_History")==2&&profile.experience==25&&profile.tickets==0,"Result not persisted.");
             }
             owner.CompleteSelected("missing-task");
             foreach(var delay in SqlitePlayVerificationSupport.Wait(owner.Service.FlushAsync())) yield return delay;

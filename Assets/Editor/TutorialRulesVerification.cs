@@ -23,10 +23,10 @@ public static class TutorialRulesVerification
         store.fail=false;Check(service.Upsert(new QuestTask{title="Real task",difficulty=TaskDifficulty.Normal},null,out var id),service.LastError);
         Check(service.Tutorial.taskStep==3&&service.Tutorial.taskId==id&&service.Snapshot.history.Count==0,"Task receipt or false completion");
         Check(service.Complete(id)&&service.Complete(id),service.LastError);
-        // Current Medium task: 25 EXP, 10 Fish and one first-task daily ticket at Lv.1.
+        // Current Medium task: 25 EXP and 10 Fish at Lv.1. Mission tickets require a claim.
         var completed=service.Snapshot;
-        Check(completed.history.Count==1&&completed.experience==25&&completed.fishCoins==10&&completed.tickets==1,"Medium task reward or duplicate changed");
-        Check(completed.history.Single().experience==25&&completed.history.Single().fishCoins==10&&completed.history.Single().tickets==1,"Task receipt must match credited balances");
+        Check(completed.history.Count==1&&completed.experience==25&&completed.fishCoins==10&&completed.tickets==0,"Medium task reward or duplicate changed");
+        Check(completed.history.Single().experience==25&&completed.history.Single().fishCoins==10&&completed.history.Single().tickets==0,"Task receipt must match credited balances");
         store.Data.experience=99;Check(!service.CanAccess(ProgressionFeature.Focus),"Focus early unlock");
         store.Data.experience=100;Check(service.CanAccess(ProgressionFeature.Focus)&&!service.CanAccess(ProgressionFeature.Boss),"Lv.2 boundary");
         Check(service.BeginFocus(out var session),service.LastError);
@@ -37,7 +37,7 @@ public static class TutorialRulesVerification
         // Lowering current XP after entry must not change the saved reward level.
         var settled=service.Snapshot;var receipt=settled.focusSessions.Single();
         Check(receipt.rewardLevel==2&&receipt.status==FocusSessionStatus.EndedEarly&&receipt.experience==13&&receipt.fishCoins==5&&receipt.tickets==1,"Saved entry level/End Early rewards changed");
-        Check(settled.experience==13&&settled.fishCoins==15&&settled.tickets==2,"Focus retry credited rewards twice or changed totals");
+        Check(settled.experience==13&&settled.fishCoins==15&&settled.tickets==1,"Focus retry credited rewards twice or changed totals");
         Check(!service.BeginFocus(out _),"Low-level continuation allowed new session");
         store.Data.experience=549;Check(!service.CanAccess(ProgressionFeature.Boss)&&!service.CanAccess(ProgressionFeature.Leaderboard),"Lv.5 early unlock");
         store.Data.experience=550;store.Data.tickets=3;

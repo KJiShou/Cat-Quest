@@ -47,17 +47,17 @@ public static class RewardSystemVerification
         var clock = new Clock();
         var store = new Store();
         var service = new TaskService(store, clock);
-        var legacy = new RewardDay { day = TaskService.DateKey(clock.LocalNow), taskExperience = 4, focusMinutes = 239 };
+        var legacy = new RewardDay { day = TaskService.DateKey(clock.LocalNow), taskExperience = 4, focusMinutes = 479 };
         store.Data.rewardDays.Add(legacy);
         var preview = service.TodayRewards;
         Check(preview.firstTaskSettled && !legacy.rewardRulesInitialized, "Reading legacy rewards must not migrate the live save.");
         preview.focusMinutes = 0;
-        Check(service.TodayRewards.focusMinutes == 239, "The caller mutated the cached allowance.");
+        Check(service.TodayRewards.focusMinutes == 479, "The caller mutated the cached allowance.");
         Check(service.PreviewFocusRewards(300).fishCoins == 0, "Focus preview ignored the daily allowance.");
         var next = service.Snapshot;
         next.rewardDays[0].focusMinutes = 0;
         store.fail = true;
-        Check(!store.TrySave(next, out _) && service.TodayRewards.focusMinutes == 239, "Failed persistence invalidated the allowance.");
+        Check(!store.TrySave(next, out _) && service.TodayRewards.focusMinutes == 479, "Failed persistence invalidated the allowance.");
         store.fail = false;
         Check(store.TrySave(next, out _) && service.PreviewFocusRewards(300).fishCoins == 1, "Committed allowance did not refresh.");
         clock.now = clock.now.AddDays(1);
@@ -92,10 +92,10 @@ public static class RewardSystemVerification
         Check(!service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests), "Incomplete goal can be claimed.");
         Check(service.Complete(hard, true) && service.Complete(hard, true) && service.Snapshot.experience == 80, "Recompletion paid twice.");
         store.fail = true;
-        Check(!service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests) && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Failed claim changed state.");
+        Check(!service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests) && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests) && service.Snapshot.tickets == 0, "Failed claim changed state.");
         store.fail = false;
         Check(service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests) && service.ClaimDailyGoal(DailyRewardGoal.ThreeQuests), service.LastError);
-        Check(service.Snapshot.experience == 100 && service.Snapshot.fishCoins == 52 && service.TodayRewards.taskExperience == 80, "Claim duplicated or consumed task cap.");
+        Check(service.Snapshot.experience == 100 && service.Snapshot.fishCoins == 52 && service.TodayRewards.taskExperience == 80 && service.Snapshot.tickets == 3 && service.TodayRewards.questsTickets == 3, "Claim duplicated or consumed task cap.");
         Check(service.UndoCompletion(receipt.id) && service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Undo revoked a paid claim.");
         Complete(service, TaskDifficulty.Hard); Complete(service, TaskDifficulty.Hard); Complete(service, TaskDifficulty.Hard); Complete(service, TaskDifficulty.Hard);
         Check(service.Snapshot.experience == 185 && service.Snapshot.fishCoins == 86, "Task cap failed.");
@@ -130,7 +130,7 @@ public static class RewardSystemVerification
             store.fail=true; Check(!service.Complete(id,true) && store.Data.history.Count==0 && store.Data.experience==experience[level],"Failed task write paid");
             store.fail=false; Check(service.Complete(id,true) && service.Complete(id,true),service.LastError);
             Check(store.Data.experience==experience[level]+xp[level,difficulty] && store.Data.fishCoins==fish[level,difficulty]
-                && store.Data.tickets==1 && store.Data.history.Count==1,"Task retry/duplicate/scaling");
+                && store.Data.tickets==0 && store.Data.history.Count==1,"Task retry/duplicate/scaling");
         }
         {
             var store=new Store(); var clock=new Clock(); store.Data.experience=13050;
@@ -185,18 +185,18 @@ public static class RewardSystemVerification
         Check(service.FinishFocus(id, 1500, false) && service.Snapshot.experience == 126 && service.Snapshot.fishCoins == 9 && service.Snapshot.tickets == 1, "Focus reward tiers or idempotency failed.");
         Check(service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes) && service.Snapshot.experience == 137 && !service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests), "Independent Focus claim failed.");
         clock.now = clock.now.AddDays(1); service.RefreshDate();
-        for (int i = 0; i < 16; i++) Session(service);
-        Check(service.TodayRewards.focusMinutes == 240 && service.TodayRewards.focusTickets == 3 && service.Snapshot.tickets == 4, "Focus daily caps failed.");
+        for (int i = 0; i < 21; i++) Session(service);
+        Check(service.TodayRewards.focusMinutes == 480 && service.TodayRewards.focusTickets == 10 && service.Snapshot.tickets == 11, "Focus daily caps failed.");
         var sessions = service.Snapshot.focusSessions.Where(s => s.rewardDay == TaskService.DateKey(clock.now)).ToArray();
-        Check(sessions[9].experience == 9 && sessions[9].fishCoins == 3 && sessions[9].tickets == 0 && sessions[10].experience == 0, "Focus level scaling failed.");
+        Check(sessions[19].experience == 3 && sessions[19].fishCoins == 1 && sessions[19].tickets == 0 && sessions[20].experience == 0, "Focus level scaling failed.");
         // Explicit level-30 boundary fixture; previous sessions already checked natural level increases.
         store.Data.experience = 13050;
-        store.Data.rewardDays.Single(d => d.day == TaskService.DateKey(clock.now)).focusMinutes = 230;
+        store.Data.rewardDays.Single(d => d.day == TaskService.DateKey(clock.now)).focusMinutes = 470;
         string partialId = Session(service); string cappedId = Session(service);
         var partial = service.Snapshot.focusSessions.Single(s => s.id == partialId);
         Check(partial.rewardedMinutes == 10 && partial.experience == 19 && partial.fishCoins == 7
             && service.Snapshot.focusSessions.Single(s => s.id == cappedId).experience == 0
-            && service.TodayRewards.focusMinutes == 240, "Focus partial allowance failed.");
+            && service.TodayRewards.focusMinutes == 480, "Focus partial allowance failed.");
         Check(service.DailyGoalProgress(DailyRewardGoal.Focus25Minutes) == 25 && service.ClaimDailyGoal(DailyRewardGoal.Focus25Minutes), "Capped Focus did not satisfy objective.");
         clock.now = new DateTime(2026, 10, 10, 23, 59, 0); service.RefreshDate();
         Check(service.BeginFocus(out string across), service.LastError);

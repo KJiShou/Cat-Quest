@@ -43,8 +43,7 @@ public sealed partial class SqlitePlayerService
         var basis = TaskService.BaseReward(difficulty);
         return new RewardAmounts(
             Math.Max(0, Math.Min(TaskService.ScaleRewardAmount(basis.experience, level), TaskService.ScaleRewardAmount(TaskService.TaskExperienceCap, level) - day.taskExperience)),
-            Math.Max(0, Math.Min(TaskService.ScaleRewardAmount(basis.fishCoins, level), TaskService.ScaleRewardAmount(TaskService.TaskFishCap, level) - day.taskFishCoins)),
-            day.firstTaskSettled ? 0 : TaskService.TaskTicketCap);
+            Math.Max(0, Math.Min(TaskService.ScaleRewardAmount(basis.fishCoins, level), TaskService.ScaleRewardAmount(TaskService.TaskFishCap, level) - day.taskFishCoins)));
     }
     static bool SqlGoalClaimed(RewardDay day, DailyRewardGoal goal)
         => goal == DailyRewardGoal.ThreeQuests ? day.questsClaimed : goal == DailyRewardGoal.FirstQuest ? day.firstQuestClaimed : day.focusClaimed;
@@ -61,11 +60,15 @@ public sealed partial class SqlitePlayerService
             if (progress < TaskService.DailyGoalTarget(goal)) throw new PlayerCommandException("Complete this goal before claiming its reward.");
             var profile = tx.Read<PlayerData>(PlayerRecordKind.Profile, "profile");
             TaskService.CatLevel(profile.experience, out int level, out _, out _);
-            var basis = goal == DailyRewardGoal.ThreeQuests ? TaskService.GoalReward : TaskService.SmallGoalReward;
-            var reward = new RewardAmounts(TaskService.ScaleRewardAmount(basis.experience, level), TaskService.ScaleRewardAmount(basis.fishCoins, level));
+            var reward = TaskService.DailyGoalReward(goal, day, level);
             SqlAddRewards(profile, reward); profile.equipmentUnlocked = true;
-            if (goal == DailyRewardGoal.ThreeQuests) { day.questsClaimed = true; day.questsExperience = reward.experience; day.questsFishCoins = reward.fishCoins; }
-            else if (goal == DailyRewardGoal.FirstQuest) { day.firstQuestClaimed = true; day.firstQuestExperience = reward.experience; day.firstQuestFishCoins = reward.fishCoins; }
+            if (goal == DailyRewardGoal.ThreeQuests) {
+                day.questsClaimed = true; day.questsExperience = reward.experience; day.questsFishCoins = reward.fishCoins;
+                day.questsTickets = reward.tickets;
+            } else if (goal == DailyRewardGoal.FirstQuest) {
+                day.firstQuestClaimed = true; day.firstQuestExperience = reward.experience; day.firstQuestFishCoins = reward.fishCoins;
+                day.taskTickets += reward.tickets;
+            }
             else { day.focusClaimed = true; day.focusGoalExperience = reward.experience; day.focusGoalFishCoins = reward.fishCoins; }
             tx.Put(PlayerRecordKind.RewardDays, day); tx.Put(PlayerRecordKind.Profile, profile); return true;
         });

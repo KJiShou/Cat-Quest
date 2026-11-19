@@ -74,13 +74,13 @@ public sealed class RewardLimitTooltip : MonoBehaviour
         SetBar(focusBar, day.focusMinutes, service.FocusDailyMinuteLimit);
         focusValue.text = $"{day.focusMinutes} / {service.FocusDailyMinuteLimit} rewarded min";
         ticketRewards.text = focusTickets ? "Today" : "Task + Focus";
-        int ticketLimit = (focusTickets ? 0 : TaskService.TaskTicketCap) + TaskService.FocusTicketCap;
-        int ticketUsed = (focusTickets ? 0 : day.taskTickets) + day.focusTickets;
+        int ticketLimit = (focusTickets ? 0 : TaskService.FirstQuestTickets + TaskService.ThreeQuestTickets) + TaskService.FocusTicketCap;
+        int ticketUsed = (focusTickets ? 0 : day.taskTickets + day.questsTickets) + day.focusTickets;
         SetBar(ticketBar, ticketUsed, ticketLimit);
         ticketValue.text = $"{ticketUsed} / {ticketLimit} Tickets";
         var sessionCurrency = TaskService.FocusCurrencyForMinutes(service.FocusSessionMinuteLimit, focusLevel);
         int sessionLimit = experience ? sessionCurrency.experience : sessionCurrency.fishCoins;
-        note.text = focusTickets ? "1 Ticket per full 25 min in one session.\nShort sessions do not combine." : tickets ? "First Task: 1 · Focus: 3/day\nResets at midnight · Level bonuses extra" : $"Session: {sessionLimit} {currency} / {service.FocusSessionMinuteLimit} min\nResets at midnight · Bonuses are extra";
+        note.text = focusTickets ? "1 Ticket per full 25 min in one session.\nShort sessions do not combine." : tickets ? $"Missions: {TaskService.FirstQuestTickets}+{TaskService.ThreeQuestTickets} · Focus: {TaskService.FocusTicketCap}/day\nResets at midnight · Level bonuses extra" : $"Session: {sessionLimit} {currency} / {service.FocusSessionMinuteLimit} min\nResets at midnight · Bonuses are extra";
     }
     static void SetBar(Slider bar, int value, int limit)
     {

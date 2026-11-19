@@ -434,7 +434,7 @@ public static class FocusLayoutVerification
         if(step==8){panel.stopwatchMode.isOn=true;Check(focus.CountsUp && !panel.focusDurationCard.activeSelf && !panel.restDurationCard.activeSelf && panel.rewards.text=="0","Stopwatch settings incorrect");Capture("stopwatch-ready-1280");}
         if(step==9){panel.start.onClick.Invoke();await Idle();for(int i=0;i<14400;i++)focus.Advance(1);await Idle();Check(focus.Phase==FocusPhase.Focusing && panel.stopwatchMode.interactable==false,"Stopwatch limit/lock wrong");}
         if(step==10)Capture("stopwatch-four-hours-1280");
-        if(step==11){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();Check(focus.Phase==FocusPhase.Finished && focus.LastResult.rewardLevel==2 && focus.LastResult.rewardedMinutes==180 && focus.LastResult.experience==99 && focus.LastResult.fishCoins==39 && focus.LastResult.tickets==2 && service.TodayRewards.focusMinutes==217 && service.Experience==219,"Stopwatch saved incorrectly");Capture("stopwatch-saved-1280");}
+        if(step==11){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();Check(focus.Phase==FocusPhase.Finished && focus.LastResult.rewardLevel==2 && focus.LastResult.rewardedMinutes==240 && focus.LastResult.experience==132 && focus.LastResult.fishCoins==52 && focus.LastResult.tickets==9 && service.TodayRewards.focusMinutes==277 && service.Experience==252,"Stopwatch saved incorrectly");Capture("stopwatch-saved-1280");}
         if(step==12){
             Check(!panel.allowance.text.Contains("Focus saved."), "Saved notice did not expire while timer was stopped");
             nav.ShowPage(MainMenuPage.Dashboard);nav.ShowPage(MainMenuPage.Focus);
@@ -444,15 +444,21 @@ public static class FocusLayoutVerification
         }
         if(step==13){panel.countdownMode.isOn=true;panel.focusDuration.value=180;Check(focus.Options.focusMinutes==180 && !panel.restDurationCard.activeSelf,"Countdown settings incorrect");Resolution(1920,1080);}
         if(step==14)Capture("countdown-ready-1920");
-        if(step==15){panel.start.onClick.Invoke();await Idle();for(int i=0;i<10800;i++)focus.Advance(1);await Idle();Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==240 && focus.LastResult.rewardLevel==2 && focus.LastResult.rewardedMinutes==23 && focus.LastResult.experience==12 && focus.LastResult.fishCoins==4 && focus.LastResult.tickets==0 && service.Experience==231 && service.RewardLevel==3,"Mixed mode cap or frozen starting level incorrect");Capture("countdown-saved-1920");}
+        if(step==15){panel.start.onClick.Invoke();await Idle();for(int i=0;i<10800;i++)focus.Advance(1);await Idle();Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==457 && focus.LastResult.rewardLevel==3 && focus.LastResult.rewardedMinutes==180 && focus.LastResult.experience==108 && focus.LastResult.fishCoins==43 && focus.LastResult.tickets==0 && service.Experience==360 && service.RewardLevel==3,"Mixed mode cap or frozen starting level incorrect");Capture("countdown-saved-1920");}
         if(step==16){
             if (DismissLevelUps(panel)) return;
-            Check(!panel.allowanceNotice.activeSelf && panel.rewardAllowanceBar.value == 240, "Capped session notice did not expire or cap progress disappeared");
+            Check(!panel.allowanceNotice.activeSelf && panel.rewardAllowanceBar.value == 457, "Capped session notice did not expire or cap progress disappeared");
             Capture("saved-notice-expired-1920");
         }
-        if(step==17){panel.stopwatchMode.isOn=true;panel.start.onClick.Invoke();await Idle();for(int i=0;i<3600;i++)focus.Advance(1);}
+        if(step==17){
+            panel.stopwatchMode.isOn=true;panel.start.onClick.Invoke();await Idle();
+            for(int i=0;i<3600;i++)focus.Advance(1);
+            panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();
+            Check(focus.LastResult.rewardedMinutes==23 && service.TodayRewards.focusMinutes==480, "Final session did not fill the daily cap");
+            panel.start.onClick.Invoke();await Idle();for(int i=0;i<3600;i++)focus.Advance(1);
+        }
         if(step==18)Capture("stopwatch-capped-1920");
-        if(step==19){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==240 && focus.LastResult.experience==0 && focus.LastResult.fishCoins==0 && focus.LastResult.tickets==0,"Capped End Focus changed allowance");}
+        if(step==19){panel.endEarly.onClick.Invoke();panel.cancelConfirmation.Confirm();await Idle();Check(focus.Phase==FocusPhase.Finished && service.TodayRewards.focusMinutes==480 && focus.LastResult.experience==0 && focus.LastResult.fishCoins==0 && focus.LastResult.tickets==0,"Capped End Focus changed allowance");}
         if(step==20){
             Check(!panel.allowanceNotice.activeSelf, "Interrupted notice did not expire");
             panel.start.onClick.Invoke();await Idle();for(int i=0;i<300;i++)focus.Advance(1);
@@ -532,11 +538,11 @@ public static class FocusLayoutVerification
         }
         if(step==45) {
             Check(panel.rewards.text=="48" && panel.fishReward.text=="19" && panel.ticketReward.text=="1", "Late-game reward preview");
-            Check(panel.rewardAllowanceBar.maxValue==240 && panel.rewardAllowanceLabel.text.Contains("240")
+            Check(panel.rewardAllowanceBar.maxValue==480 && panel.rewardAllowanceLabel.text.Contains("480")
                 && !panel.allowanceNotice.activeSelf, "Late-game allowance progress without repeated rules");
             var target=nav.GetComponentsInChildren<RewardLimitHoverTarget>(true).Single(t=>t.kind==RewardLimitKind.Experience);
             target.tooltip.Show(target);
-            Check(target.tooltip.note.text.Contains("351") && target.tooltip.focusRewards.text.Contains("468"), "Late-game session/daily caps remain available in the EXP tooltip");
+            Check(target.tooltip.note.text.Contains("468") && target.tooltip.focusRewards.text.Contains("936"), "Late-game session/daily caps remain available in the EXP tooltip");
             target.tooltip.Hide(target);
             Capture("level30-ready-1920");
         }

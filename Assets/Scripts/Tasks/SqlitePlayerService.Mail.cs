@@ -8,7 +8,9 @@ public sealed partial class SqlitePlayerService
 {
     const string InstalledVersionPrefix = "mail-version:";
     const string BonusEligibilityPrefix = "mail-bonus:";
+    const string DeletedPrefix = "mail-deleted:";
     internal const string BonusReceiptPrefix = "version-bonus:";
+    internal const int DeletedMailState = 3;
     internal static readonly RewardAmounts VersionGift = new RewardAmounts(888, 888, 8);
 
     internal Task<OperationResult<bool>> ObserveMailVersionAsync(string version)
@@ -45,8 +47,17 @@ public sealed partial class SqlitePlayerService
     internal Task<OperationResult<Dictionary<string, int>>> ReadMailStatesAsync(IEnumerable<string> keys)
     {
         var ids = keys.Distinct(StringComparer.Ordinal).ToArray();
-        return repository.ReadAsync(tx => ids.ToDictionary(id => id, tx.ReadMailState, StringComparer.Ordinal));
+        return repository.ReadAsync(tx => ids.ToDictionary(id => id,
+            id => tx.ReadMailState(DeletedPrefix + id) == 0 ? tx.ReadMailState(id) : DeletedMailState,
+            StringComparer.Ordinal));
     }
+
+    internal Task<OperationResult<bool>> DeleteLetterAsync(string key) =>
+        ExecuteCommandAsync(tx => {
+            // Keep the deletion marker alongside any claim receipt in the existing mail table.
+            tx.SetMailState(DeletedPrefix + key, 1);
+            return true;
+        });
 
     internal Task<OperationResult<bool>> ReadLetterAsync(string key) =>
         ExecuteCommandAsync(tx => {
@@ -70,6 +81,8 @@ public sealed partial class SqlitePlayerService
     static bool GrantMail(IPlayerTransaction tx, string key, RewardAmounts reward)
     {
         if (tx.ReadMailState(key) == 2) return false;
+        if (tx.ReadMailState(DeletedPrefix + key) != 0)
+            throw new PlayerCommandException("This letter was deleted.");
         var profile = tx.Read<PlayerData>(PlayerRecordKind.Profile, "profile");
         SqlAddRewards(profile, reward);
         tx.Put(PlayerRecordKind.Profile, profile);
