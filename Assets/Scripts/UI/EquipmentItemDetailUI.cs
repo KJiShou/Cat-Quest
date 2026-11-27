@@ -22,6 +22,7 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
         if(abilityIcon){abilityIcon.gameObject.SetActive(ability>0);abilityIcon.sprite=ability>0&&abilityIcons!=null&&ability<abilityIcons.Length?abilityIcons[ability]:null;}
     }
     public Button close, equip, upgrade;
+    public EquipmentBulkUpgradeUI bulkUpgrade;
     public GameObject upgradeCaption;
     public Sprite[] tierLabels;
     public TMP_Text setProgress;
@@ -124,7 +125,7 @@ public sealed class EquipmentItemDetailUI : MonoBehaviour, IPointerClickHandler
     {
         // Only a click that starts and ends outside the card dismisses the modal.
         // The full-screen raycast surface consumes the click before it reaches the page.
-        if(IsHoverPreview || eventData.button != PointerEventData.InputButton.Left || eventData.dragging || !card)return;
+        if(IsHoverPreview || (bulkUpgrade && bulkUpgrade.isActiveAndEnabled) || eventData.button != PointerEventData.InputButton.Left || eventData.dragging || !card)return;
         if(RectTransformUtility.RectangleContainsScreenPoint(card,eventData.pressPosition,eventData.pressEventCamera) ||
            RectTransformUtility.RectangleContainsScreenPoint(card,eventData.position,eventData.pressEventCamera))return;
         gameObject.SetActive(false);

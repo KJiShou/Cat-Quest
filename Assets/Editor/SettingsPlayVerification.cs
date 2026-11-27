@@ -785,21 +785,56 @@ public static class SettingsPlayVerification
             Check(toggle && toggle.isOn && !service.Settings.playMusicInBackground, "Pause defaults to on.");
             var row = (RectTransform)toggle.transform.parent;
             var motion = ui.reduceMotion;
+            var preload = (Toggle)new SerializedObject(ui).FindProperty("preloadPetWidget").objectReferenceValue;
             var motionRow = (RectTransform)motion.transform.parent;
             var label = row.GetComponentInChildren<TMP_Text>();
             var popup = ui.settingsPage.transform.Find("Popup");
             Layout(ui, size);
-            var leftRows = new[] { "Alarm_Group(Clone)", "Sound_Group(Clone)", "Music_Group(Clone)", "ReduceMotion", row.name }
+            Check(!preload.isOn && !legacy.preloadPetWidget, "Pet preload defaults off for new and older settings.");
+            var preloadRow = (RectTransform)preload.transform.parent;
+            var preloadLabel = preloadRow.GetComponentInChildren<TMP_Text>();
+            var preloadVisual = preload.GetComponent<SettingsToggleVisual>();
+            var preloadBounds = Bounds((RectTransform)preload.transform);
+            var updatesBounds = Bounds((RectTransform)popup.Find("AppUpdates"));
+            var taskTabBounds = Bounds((RectTransform)popup.Find("DefaultTaskTab"));
+            Check(!preloadLabel.isTextOverflowing && Bounds(preloadRow).xMax < updatesBounds.xMin
+                && Bounds(preloadRow).yMin > taskTabBounds.yMax && updatesBounds.yMin > taskTabBounds.yMax,
+                "Preferences and management actions occupy distinct columns above task defaults.");
+            Check(Bounds((RectTransform)ui.exportBackup.transform).yMin > updatesBounds.yMax
+                && taskTabBounds.yMin > Bounds((RectTransform)popup.Find("DashboardRanking")).yMax,
+                "Updates follows backup actions and task defaults precede dashboard settings.");
+            Click(preload);
+            yield return WaitSettings(ui);
+            Check(preload.isOn && ReadSettingsOnDisk(manager.SavePath).preloadPetWidget, "Pet preload click persists.");
+            yield return .3;
+            Check(Mathf.Abs(preloadVisual.handle.anchoredPosition.x - preloadVisual.travel) < .5f,
+                "Preload switch settles in the on position.");
+            Stable(preloadBounds, preload);
+            Capture("pet-preload-on-" + suffix);
+            yield return .15;
+            EventSystem.current.SetSelectedGameObject(preload.gameObject);
+            ExecuteEvents.Execute(preload.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+            yield return WaitSettings(ui);
+            Check(!preload.isOn && !ReadSettingsOnDisk(manager.SavePath).preloadPetWidget, "Pet preload keyboard submit persists off.");
+            for (int i = 0; i < 4; i++) Click(preload);
+            yield return WaitSettings(ui);
+            yield return .3;
+            Check(!preload.isOn && !ReadSettingsOnDisk(manager.SavePath).preloadPetWidget
+                && Mathf.Abs(preloadVisual.handle.anchoredPosition.x + preloadVisual.travel) < .5f,
+                "Rapid preload toggles settle off without moving the hit area.");
+            Stable(preloadBounds, preload);
+            var leftRows = new[] { "Alarm_Group(Clone)", "Sound_Group(Clone)", "Music_Group(Clone)", "ReduceMotion", row.name, preloadRow.name }
                 .Select(name => Bounds((RectTransform)popup.Find(name))).ToArray();
             for (int i = 1; i < leftRows.Length; i++)
                 Check(Mathf.Abs(leftRows[i].xMin - leftRows[0].xMin) < 1 && leftRows[i - 1].yMin > leftRows[i].yMax,
-                    "Notification, Sound, Music and both preference switches share one aligned left column.");
+                    "Audio and preference controls share one aligned left column.");
             Check(label.text == "Pause music when unfocused" && !label.isTextOverflowing
                 && !Bounds(motionRow).Overlaps(Bounds(ui.musicValue.rectTransform))
                 && !Bounds(row).Overlaps(Bounds((RectTransform)popup.Find("DashboardRanking"))),
                 "Both switches clear the music percentage label and the ranking.");
-            Check(toggle.FindSelectableOnUp() == motion && motion.FindSelectableOnDown() == toggle,
-                "Keyboard navigation follows the visual order of both switches.");
+            Check(toggle.FindSelectableOnUp() == motion && motion.FindSelectableOnDown() == toggle
+                && toggle.FindSelectableOnDown() == preload && preload.FindSelectableOnDown() == ui.accountButton,
+                "Keyboard navigation follows the preference switches before the management actions.");
             var visual = toggle.GetComponent<SettingsToggleVisual>();
             var bounds = Bounds((RectTransform)toggle.transform);
             var motionBounds = Bounds((RectTransform)motion.transform);

@@ -8,13 +8,13 @@ using System.Threading.Tasks;
 
 public interface IChatGptHttp
 {
-    Task<string> Send(string url, string method, string body, string contentType, string bearer, bool stream, CancellationToken cancellation);
+    Task<string> Send(string url, string method, string body, string contentType, string bearer, bool stream, CancellationToken cancellation, Action<string> onDelta = null);
 }
 
 public sealed class ChatGptHttp : IChatGptHttp, IDisposable
 {
     readonly HttpClient client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan };
-    public async Task<string> Send(string url, string method, string body, string contentType, string bearer, bool stream, CancellationToken cancellation)
+    public async Task<string> Send(string url, string method, string body, string contentType, string bearer, bool stream, CancellationToken cancellation, Action<string> onDelta = null)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
@@ -34,7 +34,10 @@ public sealed class ChatGptHttp : IChatGptHttp, IDisposable
             }
             using var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
             using var reader = new StreamReader(input, new UTF8Encoding(false, true));
-            var text = new StringBuilder(); var events = stream ? new ChatGptEventStream() : null;
+            var text = new StringBuilder(); var events = stream ? new ChatGptEventStream(onDelta == null ? null : fragment => {
+                deadline.Token.ThrowIfCancellationRequested();
+                onDelta(fragment);
+            }) : null;
             var buffer = new char[1024];
             while (true)
             {
@@ -46,7 +49,9 @@ public sealed class ChatGptHttp : IChatGptHttp, IDisposable
                 string chunk = new string(buffer, 0, count);
                 if (events != null)
                 {
-                    events.Push(chunk); if (events.Completed) return events.Text;
+                    events.Push(chunk);
+                    deadline.Token.ThrowIfCancellationRequested();
+                    if (events.Completed) return events.Text;
                 }
                 // Account model catalogs include capability metadata and can exceed 256 KiB.
                 // Keep JSON bounded separately from the much smaller inference event stream.

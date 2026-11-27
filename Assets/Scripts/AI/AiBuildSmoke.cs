@@ -73,7 +73,7 @@ public sealed class AiBuildSmoke : MonoBehaviour
     }
     sealed class OfflineHttp : IChatGptHttp
     {
-        public Task<string> Send(string url,string method,string body,string type,string bearer,bool stream,CancellationToken token)
+        public Task<string> Send(string url,string method,string body,string type,string bearer,bool stream,CancellationToken token, Action<string> onDelta = null)
         {
             if(url.EndsWith("/models")) return Task.FromResult("{\"models\":[{\"visibility\":\"list\",\"slug\":\"isolated-mock\"}]}");
             return Task.FromResult("{\"message\":\"Review this synthetic task before saving.\",\"drafts\":[{\"title\":\"Windows chat smoke task\",\"description\":\"测试本地聊天记录恢复。\"}]}");

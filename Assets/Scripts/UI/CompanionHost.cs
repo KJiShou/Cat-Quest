@@ -14,7 +14,8 @@ public sealed class CompanionHost : MonoBehaviour
     public bool IsOpen => visible && IsRunning;
     bool visible;
     static bool IsolatedSmoke => CompanionProtocol.HasArgument("--focus-smoke");
-    static void SaveWidgetPreference(bool enabled) {if(!IsolatedSmoke)PlayerPrefs.SetInt("PetWidgetEnabled",enabled?1:0); }
+    static bool UsesWidgetPreference => !IsolatedSmoke && !DemoProfile.IsActive;
+    static void SaveWidgetPreference(bool enabled) {if(UsesWidgetPreference)PlayerPrefs.SetInt("PetWidgetEnabled",enabled?1:0); }
     public string Error { get; private set; }
     public string DirectoryPath { get; private set; }
     public string OwnerId { get; private set; }
@@ -44,7 +45,7 @@ public sealed class CompanionHost : MonoBehaviour
         OwnerId=Guid.NewGuid().ToString("N");
         DirectoryPath=Path.Combine(Application.temporaryCachePath,"Companion",OwnerId);
         if (CompanionProtocol.HasArgument("--focus-smoke")) Directory.CreateDirectory(DirectoryPath);
-        Enabled=IsUnlocked && !IsolatedSmoke && PlayerPrefs.GetInt("PetWidgetEnabled",0)==1;
+        Enabled=IsUnlocked && UsesWidgetPreference && PlayerPrefs.GetInt("PetWidgetEnabled",0)==1;
         focus.Changed+=PublishIfOpen;
         service=GameDataManager.Instance.Service;service.Changed+=PublishIfOpen;
     }

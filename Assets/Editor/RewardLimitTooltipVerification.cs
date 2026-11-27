@@ -198,24 +198,32 @@ public static class RewardLimitTooltipVerification
             Check(service.SaveTag(null,"Goal flow "+width,out _),service.LastError);
         }
         var goal=nav.pages[(int)MainMenuPage.Dashboard].GetComponentsInChildren<DailyGoalUI>(true).Single(g=>g.goal==DailyRewardGoal.ThreeQuests);
-        if(phase==1){Check(goal.progress.text=="0 / 1"&&goal.experienceReward.text=="39"&&goal.transform.Find("Text_Info").GetComponent<TMPro.TMP_Text>().text.EndsWith("+1 Ticket")&&!goal.claim.interactable,"First goal idle preview");GoalBounds(goal);Capture("goal-first-idle-"+width);}
+        if(phase==1){Check(goal.progress.text=="0 / 1"&&goal.experienceReward.text=="39"&&!goal.claim.interactable,"First goal idle preview");GoalTickets(goal,"1");GoalBounds(goal);Capture("goal-first-idle-"+width);}
         if(phase==2){Check(service.Upsert(new QuestTask{title="First work"},null,out var id)&&service.Complete(id,true),service.LastError);Check(service.TodayRewards.taskTickets==0&&service.Snapshot.tickets==0,"Task paid the mission before claim");}
         if(phase==3){Check(goal.claim.interactable&&goal.progress.text=="1 / 1","First goal readiness");GoalBounds(goal);Capture("goal-first-ready-"+width);}
         if(phase==4){ClickGoal(goal.claim);Check(service.DailyGoalClaimed(DailyRewardGoal.FirstQuest)&&!service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests)&&service.Snapshot.tickets==1,"First button claimed wrong tier");Capture("goal-first-press-"+width);}
         if(phase==5){Check(goal.progress.text=="1 / 3"&&goal.experienceReward.text=="78"&&!goal.claim.interactable,"Second tier did not refresh");GoalBounds(goal);Capture("goal-third-progress-"+width);}
         if(phase==6)for(int i=0;i<2;i++)Check(service.Upsert(new QuestTask{title="More work "+i},null,out var id)&&service.Complete(id,true),service.LastError);
-        if(phase==7){Check(goal.progress.text=="3 / 3"&&goal.claim.interactable&&goal.transform.Find("Text_Info").GetComponent<TMPro.TMP_Text>().text.EndsWith("+3 Tickets"),"Third goal readiness");GoalBounds(goal);Capture("goal-third-ready-"+width);}
+        if(phase==7){Check(goal.progress.text=="3 / 3"&&goal.claim.interactable,"Third goal readiness");GoalTickets(goal,"3");GoalBounds(goal);Capture("goal-third-ready-"+width);}
         if(phase==8){
             ClickGoal(goal.claim);int xp=service.Snapshot.experience;goal.claim.onClick.Invoke();goal.claim.onClick.Invoke();
             Check(service.DailyGoalClaimed(DailyRewardGoal.ThreeQuests)&&service.Snapshot.experience==13458&&xp==13458&&service.Snapshot.tickets==4,"Third goal/duplicate paid wrong amount");
         }
-        if(phase==9){Check(goal.inProgressLabel.text=="Claimed"&&!goal.claim.interactable,"Claimed button state");GoalBounds(goal);Capture("goal-both-claimed-"+width);}
+        if(phase==9){Check(goal.inProgressLabel.text=="Claimed"&&!goal.claim.interactable,"Claimed button state");GoalTickets(goal,"3");GoalBounds(goal);Capture("goal-both-claimed-"+width);}
         if(phase==10){
             nav.ShowPage(MainMenuPage.Focus);var panel=nav.pages[(int)MainMenuPage.Focus].GetComponent<FocusPanelUI>();
             Check(FocusRunner.EnsureInstance().Controller.Configure(new FocusSessionOptions()),"Focus options");
             Check(panel.rewards.text=="48"&&panel.fishReward.text=="19"&&panel.ticketReward.text=="1"&&panel.rewardAllowanceBar.maxValue==480&&panel.ticketAllowanceBar.maxValue==10,"Focus authored display shows stale rules");
         }
         if(phase==11)Capture("focus-new-allowances-"+width);
+    }
+    static void GoalTickets(DailyGoalUI goal, string expected)
+    {
+        var reward = goal.transform.Find("Boss Ticket Reward");
+        Check(reward && reward.gameObject.activeInHierarchy, "Missing mission ticket preview");
+        var icon = reward.GetComponentInChildren<Image>();
+        var count = reward.GetComponentInChildren<TMPro.TMP_Text>();
+        Check(icon && icon.sprite && count && count.text == expected, "Wrong mission ticket icon or count");
     }
     static void GoalBounds(DailyGoalUI goal){Canvas.ForceUpdateCanvases();foreach(var t in goal.GetComponentsInChildren<TMPro.TMP_Text>()){t.ForceMeshUpdate();Check(!t.isTextOverflowing,"Goal text clipped: "+t.text);}}
     static void ClickGoal(Button button){

@@ -33,7 +33,7 @@ Auto Select 枚举拥有的搭配并包含套装效果，同 Power 保留现搭�
 
 Auto Select 在悬停或键盘选中时说明“Highest Power · includes sets”。成功保存后显示勾选图标；搭配有变化时另显示真实 Power 差值并短暂高亮相关槽位，相同搭配只显示勾选。保存失败保留错误提示，不显示成功反馈。减少动态效果时保留勾选和 Power 差值，停止槽位高亮。空背包使用状态图标、必要的等级／胜场门槛及操作按钮，按当前进度进入 Daily Rewards、Tasks、Boss 或已获得的 Mastery 领取；空筛选提供 All equipment。不显示装饰加号或重复说明段落。悬停／详情使用独立装备快照，不复制任务与 Focus 历史。
 
-物品详情是 `Assets/Prefabs/EquipmentItemDetail.prefab`，源于 SimpleCasual Light/Equipment_Popup_Detail。EquipmentPageUI 提供物品、等级、当前下一加成、套装和鱼币成本，EquipmentItemDetailUI 保留绑定并限制键盘到有效操作。背景关闭且不穿透，卡内点击和拖动不关闭。装备卸装直接执行并反馈，点击鱼币直接升级，失败在详情显示。熟练度宝箱直接领取，另一个未拥有物品详情仍保留 Claim 确认。保留 Fredoka，两处 Canvas EquipmentPageUI 引用共用详情，Boss 选择面板独立。
+物品详情是 `Assets/Prefabs/EquipmentItemDetail.prefab`，源于 SimpleCasual Light/Equipment_Popup_Detail。EquipmentPageUI 提供物品、等级、当前下一加成、套装和鱼币成本，EquipmentItemDetailUI 保留绑定并限制键盘到有效操作。背景关闭且不穿透，卡内点击和拖动不关闭。装备卸装直接执行并反馈，点击鱼币按钮打开共用的批量升级弹窗，用滑杆或加减键选择目标等级，预览属性和累计鱼币总价。熟练度宝箱直接领取，另一个未拥有物品详情仍保留 Claim 确认。保留 Fredoka，两处 Canvas EquipmentPageUI 引用共用详情，Boss 选择面板独立。
 
 EquipmentPageUI 复用一个 TaskDialogKeyboard 管理最上层详情、熟练度或确认弹窗。Tab／Shift+Tab 只循环当前可见且可用的操作；Escape 关闭顶层界面（存在悬停预览时先关闭预览）。确认默认选中 Cancel，取消后返回原操作；最后一个弹窗关闭后恢复仍有效的入口焦点。背景关闭或离页会释放键盘控制并清空待确认回调。只调整输入处理，保留现有布局和领取、装备、升级规则。
 
@@ -43,7 +43,7 @@ Dashboard 与 Cat Home 共用 `Assets/Prefabs/EquipmentStats.prefab`，来源为
 
 两个角色卡的战力使用 Light/Character_Detail_2 的 Middle_Character_Group/Platform/Power 拳头数字徽章，保留原文本对象、字体和真实绑定，用图标替代 Total Power 标签。
 
-鱼币升级按钮悬停或键盘选择时，在当前属性旁以绿色显示下一等级实际差值，并用 EquipmentUpgradeFeedback 展示 Upgrade_Green，独立于 JuicyButton。移出、禁用、确认或失焦清理，预览不消费。点击直接带显示等级成本交服务检查。战力徽章增大，Dashboard 猫预览上移，底部 TaskStatus 成功条已移除，任务错误用既有可关闭弹窗。
+鱼币升级按钮悬停或键盘选择时，在当前属性旁以绿色显示下一等级实际差值，并用 EquipmentUpgradeFeedback 展示 Upgrade_Green，独立于 JuicyButton。移出、禁用、确认或失焦清理，预览不消费。批量升级弹窗采用 SimpleCasual Light Material_Level_Up（预览 092）。确认后一次保存目标等级和费用，等级受 Cat Level 和余额限制。保存失败时保留所选等级，重试使用同一请求。战力徽章增大，Dashboard 猫预览上移，底部 TaskStatus 成功条已移除，任务错误用既有可关闭弹窗。
 
 Dashboard 槽与战力徽章保持间距，空槽用 512px PictoIcon_Attack/Armor/Helmet 灰化，装备后恢复原彩色图标。详情不再有单独 Next level 卡，当前属性内放悬停差值与特效，鱼币文案仍 Upgrade。套装标签使用蓝紫黄 Label_Tag00，三个进度点与两张阈值卡显示实际 2/3 件套进度，均可编辑序列化。
 

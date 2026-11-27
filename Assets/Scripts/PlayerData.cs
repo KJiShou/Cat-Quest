@@ -34,6 +34,8 @@ public class PlayerData
     public List<BattleAttempt> battles = new List<BattleAttempt>();
     public int fishCoins;
     public int tickets;
+    public string lastTicketExchangeId;
+    public int lastTicketExchangeQuantity;
     public int experience;
     public bool tagsInitialized;
     public List<QuestTask> tasks = new List<QuestTask>();

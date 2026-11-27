@@ -11,6 +11,7 @@ public sealed class DailyGoalUI : MonoBehaviour
     public GameObject inProgress;
     public TMP_Text inProgressLabel;
     public TMP_Text experienceReward, fishReward;
+    [SerializeField] private TMP_Text ticketReward;
     public Image rowBackground, progressFill;
     public Sprite inProgressSprite, completedSprite;
     public Sprite inProgressFillSprite, completedFillSprite;
@@ -50,12 +51,15 @@ public sealed class DailyGoalUI : MonoBehaviour
         bool claimed = service.DailyGoalClaimed(displayed);
         var reward=service.PreviewDailyGoal(displayed);
         if (taskHeading)
-        {
-            string title = displayed == DailyRewardGoal.FirstQuest ? "Complete 1 task" : "Complete 3 tasks";
-            taskHeading.text = reward.tickets > 0 ? $"{title}  +{reward.tickets} {(reward.tickets == 1 ? "Ticket" : "Tickets")}" : title;
-        }
+            taskHeading.text = displayed == DailyRewardGoal.FirstQuest ? "Complete 1 task" : "Complete 3 tasks";
         if(experienceReward) experienceReward.text=reward.experience.ToString();
         if(fishReward) fishReward.text=reward.fishCoins.ToString();
+        if (ticketReward)
+        {
+            bool hasTickets = reward.tickets > 0;
+            if (hasTickets) ticketReward.text = reward.tickets.ToString();
+            ticketReward.transform.parent.gameObject.SetActive(hasTickets);
+        }
         progress.text = $"{value} / {target}" + (goal == DailyRewardGoal.Focus25Minutes ? " min" : "");
         progressBar.maxValue = target;
         progressBar.SetValueWithoutNotify(claimed ? target : value);

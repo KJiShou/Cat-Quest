@@ -5,8 +5,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 #endif
 
-// Read-only visibility of this player's window. Focus and IPC keep running when
-// invisible; preview owners use this only to suspend their camera rendering.
+// Read-only visibility and client-area pointer coordinates for this player.
+// Focus and IPC keep running while preview cameras are suspended.
 public static class WindowsAppWindow
 {
     public static bool IsMinimized
@@ -35,7 +35,23 @@ public static class WindowsAppWindow
         }
     }
 
+    public static bool TryGetClientPointer(out Vector2 position, out Vector2 size)
+    {
+        position = size = Vector2.zero;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        if (IsMinimized || window == IntPtr.Zero || !GetCursorPos(out var point)
+            || !ScreenToClient(window, ref point) || !GetClientRect(window, out var rect)) return false;
+        position = new Vector2(point.x, rect.bottom - 1 - point.y);
+        size = new Vector2(rect.right, rect.bottom);
+        return true;
+#else
+        return false;
+#endif
+    }
+
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+    [StructLayout(LayoutKind.Sequential)] struct Point { public int x, y; }
+    [StructLayout(LayoutKind.Sequential)] struct Rect { public int left, top, right, bottom; }
     delegate bool WindowVisitor(IntPtr handle, IntPtr state);
     static readonly WindowVisitor FindOwnWindow = VisitWindow;
     static IntPtr window;
@@ -57,6 +73,9 @@ public static class WindowsAppWindow
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr handle, StringBuilder name, int capacity);
     [DllImport("user32.dll")] static extern bool IsWindow(IntPtr handle);
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr handle);
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr handle, ref Point point);
+    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr handle, out Rect rect);
     [DllImport("kernel32.dll")] static extern uint GetCurrentProcessId();
 #endif
 }

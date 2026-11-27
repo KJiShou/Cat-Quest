@@ -19,6 +19,7 @@ public static class DialogueAudioVerification
     const string Request = "Temp/verify-dialogue-audio.request";
     const string ReturningRequest = "Temp/verify-intro-returning.request";
     const string MusicRequest = "Temp/verify-background-music.request";
+    const string SkipRequest = "Temp/verify-intro-skip.request";
     static IEnumerator flow;
     static double next;
     static string Folder => SessionState.GetString(Flag + ".folder", "");
@@ -35,7 +36,8 @@ public static class DialogueAudioVerification
             if (state == PlayModeStateChange.EnteredPlayMode)
             {
                 flow = Flatten(SessionState.GetBool(Flag + ".returning", false) ? RunReturning()
-                    : SessionState.GetBool(Flag + ".musicOnly", false) ? RunBackgroundMusic() : Run());
+                    : SessionState.GetBool(Flag + ".musicOnly", false) ? RunBackgroundMusic()
+                    : SessionState.GetBool(Flag + ".skip", false) ? RunSkipPopup() : Run());
                 next = EditorApplication.timeSinceStartup + 3;
             }
             if (state == PlayModeStateChange.EnteredEditMode) Restore();
@@ -53,14 +55,16 @@ public static class DialogueAudioVerification
             return;
         }
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-        var request = File.Exists(ReturningRequest) ? ReturningRequest : File.Exists(MusicRequest) ? MusicRequest : Request;
+        var request = File.Exists(SkipRequest) ? SkipRequest
+            : File.Exists(ReturningRequest) ? ReturningRequest : File.Exists(MusicRequest) ? MusicRequest : Request;
         if (!File.Exists(request)) return;
         File.Delete(request);
         SessionState.SetBool(Flag + ".musicOnly", request == MusicRequest);
         SessionState.SetBool(Flag + ".returning", request == ReturningRequest);
+        SessionState.SetBool(Flag + ".skip", request == SkipRequest);
         bool priorPaused = EditorApplication.isPaused;
-        SessionState.SetBool(Flag + ".capturing", request == Request);
-        if (request == Request)
+        SessionState.SetBool(Flag + ".capturing", request == Request || request == SkipRequest);
+        if (SessionState.GetBool(Flag + ".capturing", false))
         {
             SessionState.SetInt(Flag + ".size", (int)GameViewSize.GetValue(GameView));
             RememberCustomSizes(Flag);
@@ -165,6 +169,68 @@ public static class DialogueAudioVerification
             if (reference) UnityEngine.Object.DestroyImmediate(reference);
             if (capture) UnityEngine.Object.DestroyImmediate(capture);
         }
+    }
+
+    static IEnumerator RunSkipPopup()
+    {
+        var manager = GameDataManager.Instance;
+        Check(manager && manager.SavePath.Contains("DialogueAudioVerification"), "Skip popup uses isolated storage");
+        yield return Command(manager.Ready);
+        var input = UnityEngine.Object.FindFirstObjectByType<UsernameInputController>();
+        var name = (TMP_InputField)typeof(UsernameInputController).GetField("usernameInput", Private).GetValue(input);
+        name.text = "Skip layout";
+        input.ConfirmUsername();
+        yield return Ui(manager.Service);
+        var skip = UnityEngine.Object.FindFirstObjectByType<StorySkipUI>(FindObjectsInactive.Include);
+        var dim = skip.transform.Find("ScreenDim").GetComponent<Image>();
+        float timeScale = Time.timeScale;
+        ClickSkipControl(skip, "skipButton");
+        Check(dim.isActiveAndEnabled && Time.timeScale == 0, "Skip displays the overlay and pauses the story");
+        var capture = manager.gameObject.AddComponent<RewardScreenshotCapture>();
+        var uncovered = new System.Collections.Generic.List<Vector2Int>();
+        var hits = new System.Collections.Generic.List<RaycastResult>();
+        foreach (var size in new[] { new Vector2Int(1920, 1080), new Vector2Int(1280, 720),
+            new Vector2Int(1024, 768), new Vector2Int(2560, 1080) })
+        {
+            GameViewResolution.Invoke(null, new object[] { size });
+            yield return .4;
+            Check(Screen.width == size.x && Screen.height == size.y, "Skip Game View resolution " + size);
+            capture.Begin(Folder + $"/skip-{size.x}x{size.y}.png");
+            while (capture.Pending) { EditorApplication.QueuePlayerLoopUpdate(); GameView.Repaint(); yield return .05; }
+            Canvas.ForceUpdateCanvases();
+            var pointer = new PointerEventData(EventSystem.current);
+            foreach (var corner in new[] { new Vector2(1, 1), new Vector2(size.x - 2, 1),
+                new Vector2(1, size.y - 2), new Vector2(size.x - 2, size.y - 2) })
+            {
+                pointer.position = corner;
+                EventSystem.current.RaycastAll(pointer, hits);
+                if (hits.Count > 0 && hits[0].gameObject == dim.gameObject) continue;
+                uncovered.Add(size);
+                break;
+            }
+            PointerForControl((Button)typeof(StorySkipUI).GetField("laterButton", Private).GetValue(skip), "Later " + size);
+            PointerForControl((Button)typeof(StorySkipUI).GetField("yesButton", Private).GetValue(skip), "Yes " + size);
+        }
+        const string source = "Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_DemoScene_Panels/Light/Popup_Message_common.prefab";
+        GameViewResolution.Invoke(null, new object[] { new Vector2Int(1280, 720) });
+        var reference = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(source), skip.transform.parent, false);
+        skip.gameObject.SetActive(false);
+        yield return .4;
+        capture.Begin(Folder + "/skip-simplecasual-reference-1280x720.png");
+        while (capture.Pending) { EditorApplication.QueuePlayerLoopUpdate(); GameView.Repaint(); yield return .05; }
+        UnityEngine.Object.DestroyImmediate(reference);
+        skip.gameObject.SetActive(true);
+        Check(uncovered.Count == 0, "Backdrop fills and blocks all four corners at all sizes. Uncovered: " + string.Join(", ", uncovered));
+        var later = (Button)typeof(StorySkipUI).GetField("laterButton", Private).GetValue(skip);
+        later.Select();
+        ExecuteEvents.Execute(later.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+        Check(!dim.isActiveAndEnabled && Time.timeScale == timeScale, "Keyboard submit on Later closes the overlay and resumes the story");
+        ClickSkipControl(skip, "skipButton");
+        ClickSkipControl(skip, "yesButton");
+        Check(!dim.isActiveAndEnabled && Time.timeScale == timeScale, "Yes closes the overlay and restores time");
+        yield return 3;
+        Check(SceneManager.GetActiveScene().name == "CharacterHome", "Confirming Skip loads CharacterHome");
+        UnityEngine.Object.Destroy(capture);
     }
 
     static IEnumerator RunReturning()

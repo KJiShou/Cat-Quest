@@ -7,6 +7,7 @@ Open Settings from the existing gear in the main header. The modal uses the proj
 ## Controls and local persistence
 
 - **Notification** enables Windows reminders for completed Focus and Rest timers. The switch saves immediately.
+- **Preload pet at startup** starts the Windows pet widget in the background on the next launch. It defaults to off, so the widget starts when you first open it from the header.
 - **Reduce motion** is off for older saves. It removes button bounce, sidebar transitions, reward flights, health-bar shake, moving damage numbers and repeated decorative particles, while retaining text, colour, reward amounts and core character/battle presentation. Failed writes restore the committed option. The main application sends this preference through validated Companion state; Companion does not save it independently.
 - **Sound** and **Music** independently adjust their assigned in-app audio sources from 0 to 100%. Zero displays **Muted**. Dragging previews the volume. Release, keyboard deselection, a short keyboard idle period or closing the view commits it. Failed saves show an error and restore the saved volumes.
 - Click the circular Sound/Music icon to mute or unmute that channel immediately. Unmute restores its last nonzero volume during this application session, including after closing/reopening Settings; if launched already muted, it restores 100%. The muted volume is saved through the same transaction and failure rollback as the sliders.

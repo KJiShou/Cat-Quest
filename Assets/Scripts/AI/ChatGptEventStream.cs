@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-// Bounded SSE framing shared by chat and the HTTP verifier. Publish only completed output.
+// Bounded SSE framing. The callback receives provisional text from validated delta events.
 public sealed class ChatGptEventStream
 {
     readonly StringBuilder pending = new StringBuilder();
     readonly StringBuilder data = new StringBuilder();
     readonly StringBuilder output = new StringBuilder();
+    readonly Action<string> onDelta;
     int received;
+    public ChatGptEventStream(Action<string> onDelta = null) { this.onDelta = onDelta; }
     public bool Completed { get; private set; }
     public string Text => output.ToString();
     public void Push(string chunk)
@@ -36,6 +38,7 @@ public sealed class ChatGptEventStream
         if(type=="response.output_text.delta") {
             if(!(item.TryGetValue("delta",out var delta)&&delta is string text))throw new ArgumentException("Invalid chat stream.");
             output.Append(text); if(output.Length>8192)throw new ArgumentException("ChatGPT output was too large.");
+            if (text.Length > 0) onDelta?.Invoke(text);
         } else if(type=="response.completed") {
             if(!(item.TryGetValue("response",out var response)&&response is Dictionary<string,object> body) || ChatGptJson.Text(body,"status")!="completed")
                 throw new ArgumentException("ChatGPT returned an incomplete response.");

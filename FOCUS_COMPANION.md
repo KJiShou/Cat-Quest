@@ -12,7 +12,9 @@ At every size, the session action stays hidden while the pointer is outside unle
 
 ## Keyboard and repeated input
 
-Tab enters keyboard navigation at Pin; Tab / Shift+Tab cycles through Pin, Minimize, Close and the currently available session action, skipping inactive or disabled actions. Arrow keys use the existing Unity navigation between selected controls. Enter activates the selected button. Keyboard navigation keeps the session action visible even with the pointer outside; Escape clears ordinary selection and returns to pointer-driven fading. The End Focus confirmation owns its own Tab/Enter/Escape focus while open; Escape dismisses it without cancelling Focus.
+Tab enters keyboard navigation at Pin. Tab and Shift+Tab cycle through Pin, Minimize, Close and the available session action, skipping inactive or disabled controls. Arrow keys use Unity navigation. Enter activates the selected control. Keyboard navigation keeps the session action visible even with the pointer outside. Escape clears selection and returns to pointer-driven fading. The End Focus confirmation owns Tab, Enter and Escape while open.
+
+With the widget focused, the pointer across the whole window drives the same layered scene motion as the Focus page. The scene recenters on focus loss, hide, minimize or native resize. Reduce Motion stops the parallax. The session timer and Acorn animation continue.
 
 Leaving the native window explicitly clears pointer hover/press feedback while retaining keyboard selection. Losing application focus or minimizing clears keyboard selection and resets feedback. When the companion is already the Windows foreground window but has no native keyboard focus, it repairs that missing focus; it never activates itself over another application. This prevents Enter from being delivered as an unintended system-key/fullscreen command. Rapid session submissions remain guarded by the existing pending request and authoritative host; feedback does not submit additional commands or settle rewards.
 

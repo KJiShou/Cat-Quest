@@ -28,22 +28,53 @@ public sealed class ChatGptStorage : IChatGptStorage
     }
     public void Write(string name, string json, bool encrypted)
     {
+        using (var prepared = Prepare(name, json, encrypted)) prepared.Publish();
+    }
+
+    internal sealed class PreparedWrite : IDisposable
+    {
+        readonly string path, temporary;
+        bool published;
+        internal PreparedWrite(string path, string temporary) { this.path = path; this.temporary = temporary; }
+        internal void Publish()
+        {
+            if (File.Exists(path)) File.Replace(temporary, path, null); else File.Move(temporary, path);
+            published = true;
+        }
+        public void Dispose() { if (!published) File.Delete(temporary); }
+    }
+
+    internal PreparedWrite Prepare(string name, string json, bool encrypted)
+    {
         Directory.CreateDirectory(directory);
-        string path = PathFor(name), temporary = path + ".tmp";
+        string path = PathFor(name), temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         byte[] plain = Encoding.UTF8.GetBytes(json), bytes = null;
         try
         {
             bytes = encrypted ? Protect(plain, true) : plain;
             using (var file = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None)) { file.Write(bytes, 0, bytes.Length); file.Flush(true); }
-            if (File.Exists(path)) File.Replace(temporary, path, null); else File.Move(temporary, path);
+            return new PreparedWrite(path, temporary);
         }
+        catch { File.Delete(temporary); throw; }
         finally
         {
             Array.Clear(plain, 0, plain.Length); if (bytes != null) Array.Clear(bytes, 0, bytes.Length);
-            if (File.Exists(temporary)) File.Delete(temporary);
         }
     }
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+    static readonly byte[] zeroBlock = new byte[8192];
+
+    static void ClearNativeBuffer(IntPtr address, int length)
+    {
+        while (length > 0)
+        {
+            int count = Math.Min(length, zeroBlock.Length);
+            Marshal.Copy(zeroBlock, 0, address, count);
+            address = IntPtr.Add(address, count);
+            length -= count;
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)] struct Blob { public int size; public IntPtr data; }
     [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] static extern bool CryptProtectData(ref Blob input, string description, IntPtr entropy, IntPtr reserved, IntPtr prompt, uint flags, out Blob output);
@@ -66,9 +97,9 @@ public sealed class ChatGptStorage : IChatGptStorage
         }
         finally
         {
-            for (int i = 0; i < input.size; i++) Marshal.WriteByte(input.data, i, 0);
+            ClearNativeBuffer(input.data, input.size);
             Marshal.FreeHGlobal(input.data);
-            if (output.data != IntPtr.Zero) { for (int i = 0; i < output.size; i++) Marshal.WriteByte(output.data, i, 0); LocalFree(output.data); }
+            if (output.data != IntPtr.Zero) { ClearNativeBuffer(output.data, output.size); LocalFree(output.data); }
         }
 #else
         throw new PlatformNotSupportedException(AppPlatform.DesktopMessage);

@@ -234,6 +234,20 @@ try {
   Tap 9;Check ((ReadJson $viewPath).selected -eq 'MinimizeWindow') 'Tab advances focus'
   [FocusNative]::Key(16,$false);Tap 9;[FocusNative]::Key(16,$true)
   Check ((ReadJson $viewPath).selected -eq 'PinWindow') 'Shift Tab reverses focus'
+  $reduced = $size[0] -eq 240
+  $null=Command @{action='reduce-motion';enabled=$reduced}
+  $null=WaitFor $viewPath {param($v) $v.reduceMotion -eq $reduced} 'widget Reduce Motion snapshot'
+  MovePointer $window -30 -30
+  Start-Sleep -Milliseconds 700
+  $center=(ReadJson $viewPath).sceneCameraPosition.x
+  MovePointer $window 40 20
+  Start-Sleep -Milliseconds 450
+  $offset=[Math]::Abs((ReadJson $viewPath).sceneCameraPosition.x-$center)
+  if($reduced){Check ($offset -lt .01) 'Reduce Motion keeps preview centered over title bar'}
+  else{Check ($offset -gt .08) 'pointer over title bar moves the preview camera'}
+  MovePointer $window -30 -30
+  $null=WaitFor $viewPath {param($v) [Math]::Abs($v.sceneCameraPosition.x-$center) -lt .01} 'preview recenters when pointer leaves' 3
+  $null=Command @{action='reduce-motion';enabled=$false}
   $baseline=ReadJson $viewPath
   $pinX=$size[0]-93
   $rect=[FocusNative+Rect]::new();[FocusNative]::GetWindowRect($window,[ref]$rect)|Out-Null

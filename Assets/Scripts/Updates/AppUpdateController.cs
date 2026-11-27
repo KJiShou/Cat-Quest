@@ -18,6 +18,7 @@ public sealed class AppUpdateController : MonoBehaviour
     public string Message { get; private set; } = "Check for the latest Cat Quest release.";
     public ReleaseManifest Release { get; private set; }
     public float Progress { get; private set; }
+    public string InstalledVersion { get; private set; }
     public string DownloadDirectory => work;
     public bool Busy => State == AppUpdateState.Checking || State == AppUpdateState.Downloading || State == AppUpdateState.Verifying || State == AppUpdateState.Installing;
     public static string InstallDirectory => Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -32,7 +33,7 @@ public sealed class AppUpdateController : MonoBehaviour
         var go = new GameObject("App Updates"); DontDestroyOnLoad(go);
         return go.AddComponent<AppUpdateController>();
     }
-    void Awake() { Instance = this; }
+    void Awake() { Instance = this; InstalledVersion = Application.version; }
     async void Start()
     {
         // Editor/tests never contact the release service automatically.
@@ -48,6 +49,9 @@ public sealed class AppUpdateController : MonoBehaviour
     public async void Check()
     {
         if (Busy || State == AppUpdateState.Ready) return;
+#if UNITY_EDITOR
+        if (DemoProfile.IsActive) { await CheckDemoAsync(); return; }
+#endif
         Set(AppUpdateState.Checking, "Checking for updates...");
         try
         {
@@ -73,6 +77,9 @@ public sealed class AppUpdateController : MonoBehaviour
     public async void Download()
     {
         if (Busy || Release == null || !UpdateRules.IsNewer(Release.version, Application.version)) return;
+#if UNITY_EDITOR
+        if (DemoProfile.IsActive) { Set(AppUpdateState.Ready, "Demo download complete."); return; }
+#endif
         cancelled = false; Progress = 0;
         Set(AppUpdateState.Downloading, "Downloading update...");
         try
@@ -110,7 +117,7 @@ public sealed class AppUpdateController : MonoBehaviour
     public void CancelDownload() { if (State == AppUpdateState.Downloading && request != null) { cancelled = true; request.Abort(); } }
     public static string RestartBlockReason()
     {
-        if (Application.isEditor) return "Updates can only be installed in the Windows application.";
+        if (Application.isEditor && !DemoProfile.IsActive) return "Updates can only be installed in the Windows application.";
         var manager = GameDataManager.Instance;
         if (!manager) return "Wait for Cat Quest to finish starting.";
         if (manager.IsSaveReadOnly) return "Resolve the save warning before restarting to update.";
@@ -126,6 +133,9 @@ public sealed class AppUpdateController : MonoBehaviour
         if (State != AppUpdateState.Ready) return;
         string blocked = RestartBlockReason();
         if (blocked != null) { Message = blocked; Changed?.Invoke(); return; }
+#if UNITY_EDITOR
+        if (DemoProfile.IsActive) { await ApplyDemoAsync(); return; }
+#endif
         var host = CompanionHost.Instance;
         Process updater = null;
         var manager = GameDataManager.Instance;
@@ -182,6 +192,48 @@ public sealed class AppUpdateController : MonoBehaviour
         try { await preparation; } catch (Exception) { }
         if (manager) manager.ResumeAfterShutdownFailure();
     }
+#if UNITY_EDITOR
+    async Task CheckDemoAsync()
+    {
+        Set(AppUpdateState.Checking, "Checking for a demo update...");
+        var manager = GameDataManager.EnsureInstance();
+        var opened = await manager.Ready;
+        if (disposed) return;
+        if (!opened.Succeeded) { Set(AppUpdateState.Error, opened.Message); return; }
+        var service = manager.Service;
+        var installed = await service.ObserveMailVersionAsync(Application.version);
+        var gifts = await service.ReadVersionGiftsAsync();
+        if (disposed) return;
+        if (!installed.Succeeded || !gifts.Succeeded)
+        { Set(AppUpdateState.Error, "Could not read demo update progress."); return; }
+        var current = UpdateRules.VersionOf(Application.version);
+        var demo = new Version(current.Major, current.Minor, current.Build + 1, 0);
+        if (gifts.Value.Contains(demo))
+        {
+            InstalledVersion = demo.ToString(3);
+            Release = null;
+            Set(AppUpdateState.Current, "Demo update applied. Check the Inbox for its gift.");
+            return;
+        }
+        Release = new ReleaseManifest {
+            version = demo.ToString(3), size = 8L * 1024 * 1024, sha256 = new string('0', 64),
+            url = UpdateRules.Repository + "/releases/download/demo/preview.zip",
+            notes = "Offline demo update. Applying this update unlocks an Inbox gift in this demo save."
+        };
+        Set(AppUpdateState.Available, "A demo update is available.");
+    }
+
+    async Task ApplyDemoAsync()
+    {
+        Set(AppUpdateState.Installing, "Applying the demo update...");
+        var result = await GameDataManager.Instance.Service.ObserveMailVersionAsync(Release.version);
+        if (disposed) return;
+        if (!result.Succeeded) { Set(AppUpdateState.Ready, result.Message); return; }
+        InstalledVersion = Release.version;
+        Release = null;
+        Set(AppUpdateState.Current, "Demo update applied. Check the Inbox for its gift.");
+    }
+#endif
     void OnDestroy() { disposed = true; request?.Abort(); if (Instance == this) Instance = null; }
     public void PrepareSmokeUpdate(string folder)
     {

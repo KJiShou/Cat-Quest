@@ -23,6 +23,24 @@ public sealed class LeaderboardReader : ILeaderboardSource
         var tasks = GameDataManager.EnsureInstance().Service;
         if (!tasks.CanAccess(ProgressionFeature.Leaderboard))
         { result.message = tasks.AccessMessage(ProgressionFeature.Leaderboard); complete(result); yield break; }
+#if UNITY_EDITOR
+        if (DemoProfile.IsActive)
+        {
+            string name = AccountAggregate.ValidName(tasks.PlayerName) ? tasks.PlayerName : "Cat Quest Demo";
+            var aggregate = tasks.QueryAccountAggregateAsync(DemoProfile.OwnRankId, name);
+            while (!aggregate.IsCompleted && owner == generation) yield return null;
+            if (owner != generation) yield break;
+            if (aggregate.Status == System.Threading.Tasks.TaskStatus.RanToCompletion && aggregate.Result.Succeeded)
+                result = DemoProfile.Ranking(kind, aggregate.Result.Value);
+            else
+            {
+                result.message = "Could not load demo rankings. Please retry.";
+                result.ownMessage = "Your rank is unavailable.";
+            }
+            complete(result);
+            yield break;
+        }
+#endif
         if (!state.configured || !state.signedIn)
         {
             result.message = state.configured ? "Sign in with Google to view the leaderboard." : "Leaderboards are not available in this build yet.";

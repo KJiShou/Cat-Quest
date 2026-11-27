@@ -31,12 +31,26 @@ public static class PriorityUsabilityVerification
     }
     static void Resolution(Vector2Int size)=>typeof(DashboardRewardPlayVerification).GetMethod("Resolution",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{size.x,size.y});
     static void Capture(string name)=>capture.Begin(Path.GetFullPath(folder+"/"+name+".png"));
-    static void Click(Button button)
+    static FocusCancelConfirmation OpenFocusExit(FocusExitGuard guard)
+    {
+        Check(!(bool)typeof(FocusExitGuard).GetMethod("WantsToQuit",Hidden).Invoke(guard,null),"Windows close opens or retains the Focus confirmation");
+        return (FocusCancelConfirmation)typeof(FocusExitGuard).GetField("dialog",Hidden).GetValue(guard);
+    }
+    static void CheckFocusExitLayout(FocusCancelConfirmation prompt,Vector2Int size)
+    {
+        Inside(prompt.card,size);
+        foreach(var label in prompt.GetComponentsInChildren<TMP_Text>())
+        {
+            label.ForceMeshUpdate();
+            Check(!label.isTextOverflowing,"Focus exit text fits at "+size+": "+label.text);
+        }
+    }
+    static void Click(Button button,Vector2? localPoint=null)
     {
         Canvas.ForceUpdateCanvases();
         var rect=(RectTransform)button.transform;
         var canvas=button.GetComponentInParent<Canvas>().rootCanvas;
-        var point=RectTransformUtility.WorldToScreenPoint(canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera,rect.TransformPoint(rect.rect.center));
+        var point=RectTransformUtility.WorldToScreenPoint(canvas.renderMode==RenderMode.ScreenSpaceOverlay?null:canvas.worldCamera,rect.TransformPoint(localPoint??rect.rect.center));
         var pointer=new PointerEventData(EventSystem.current){position=point,button=PointerEventData.InputButton.Left};
         var hits=new System.Collections.Generic.List<RaycastResult>();EventSystem.current.RaycastAll(pointer,hits);
         Check(hits.Count>0&&hits[0].gameObject.GetComponentInParent<Button>()==button,"Raycast reaches "+button.name+" at "+point+"; top="+(hits.Count>0?hits[0].gameObject.name:"none"));
@@ -279,6 +293,45 @@ public static class PriorityUsabilityVerification
             Click(panel.start);
             foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>!focus.OperationPending,"Focus start timed out"))yield return wait;
             Check(focus.Phase==FocusPhase.Focusing&&string.IsNullOrEmpty(focus.ErrorMessage),"Successful Focus start clears error");
+            var exit=FocusRunner.EnsureInstance().GetComponent<FocusExitGuard>();
+            nav.ShowPage(MainMenuPage.Dashboard);
+            Resolution(Sizes[0]);yield return .5;
+            var canvas=nav.GetComponentInParent<Canvas>().rootCanvas;
+            var exitPopupReference=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Packages/UI/Layer Lab/GUI Pro-SimpleCasual/Prefabs/Prefabs_DemoScene_Panels/Light/Popup_Update.prefab");
+            var referenceView=UnityEngine.Object.Instantiate(exitPopupReference,canvas.transform,false);
+            try
+            {
+                yield return .1;
+                Capture("focus-exit-simplecasual-reference");while(capture.Pending)yield return .05;
+            }
+            finally { UnityEngine.Object.Destroy(referenceView); }
+            yield return .1;
+            var activeExit=OpenFocusExit(exit);
+            Check(activeExit&&activeExit.transform.parent==canvas.transform&&EventSystem.current.currentSelectedGameObject==activeExit.keepFocusing.gameObject,"Exit works from Dashboard and defaults to Keep focusing");
+            Check(OpenFocusExit(exit)==activeExit,"Repeated close retains the same modal");
+            foreach(var size in Sizes.Take(2))
+            {
+                Resolution(size);yield return .5;
+                CheckFocusExitLayout(activeExit,size);
+                Capture("focus-active-exit-"+size.x);while(capture.Pending)yield return .05;
+            }
+            foreach(var wait in ConfirmFeedback("focus-exit-feedback",activeExit.keepFocusing,activeExit.confirm))yield return wait;
+            InputSystem.QueueStateEvent(keyboard,new KeyboardState(Key.Tab));yield return .2;
+            InputSystem.QueueStateEvent(keyboard,new KeyboardState());yield return .2;
+            Check(EventSystem.current.currentSelectedGameObject==activeExit.confirm.gameObject,"Tab selects the exit action");
+            InputSystem.QueueStateEvent(keyboard,new KeyboardState(Key.Escape));yield return .2;
+            InputSystem.QueueStateEvent(keyboard,new KeyboardState());yield return .2;
+            Check(!activeExit&&focus.Phase==FocusPhase.Focusing,"Escape dismisses the prompt and keeps the session running");
+            activeExit=OpenFocusExit(exit);
+            yield return .2;
+            Click(activeExit.keepFocusing);
+            Check(!activeExit.IsOpen&&focus.Phase==FocusPhase.Focusing,"Keep focusing dismisses the prompt without cancelling the session");
+            activeExit=OpenFocusExit(exit);
+            yield return .2;
+            var bounds=((RectTransform)activeExit.backdrop.transform).rect;
+            Click(activeExit.backdrop,new Vector2(bounds.xMin+48,bounds.center.y));
+            Check(!activeExit.IsOpen&&focus.Phase==FocusPhase.Focusing,"The backdrop intercepts page clicks and dismisses the prompt");
+            nav.ShowPage(MainMenuPage.Focus);yield return .3;
             for(int second=0;second<61;second++)focus.Advance(1);
             using(TaskCalendarPlayVerification.FailSqliteWrites()) {
                 var failedEnd=focus.EndEarlyAsync();
@@ -291,12 +344,20 @@ public static class PriorityUsabilityVerification
                     Check(!panel.allowance.isTextOverflowing,"Focus save error fits at "+size);
                     Capture("focus-save-error-"+size.x);while(capture.Pending)yield return .1;
                 }
-                var exit=FocusRunner.EnsureInstance().GetComponent<FocusExitGuard>();
-                Check(!(bool)typeof(FocusExitGuard).GetMethod("WantsToQuit",Hidden).Invoke(exit,null),"Exit pending save opens confirmation");
-                var dialog=(GameObject)typeof(FocusExitGuard).GetField("dialog",Hidden).GetValue(exit);
-                Check(dialog.GetComponentsInChildren<TMP_Text>().Any(t=>t.text.Contains("Retry Save and exit")),"Saving exit explains actual retry action");
-                Capture("focus-save-exit");while(capture.Pending)yield return .1;
-                dialog.transform.Find("Dialog/Stay").GetComponent<Button>().onClick.Invoke();
+                var dialog=OpenFocusExit(exit);
+                Check(dialog.confirm.GetComponentInChildren<TMP_Text>().text=="Retry and exit","Saving exit explains actual retry action");
+                foreach(var size in Sizes.Take(2))
+                {
+                    Resolution(size);yield return .5;
+                    CheckFocusExitLayout(dialog,size);
+                    Capture("focus-save-exit-"+size.x);while(capture.Pending)yield return .05;
+                }
+                Click(dialog.confirm);
+                Check(!dialog.confirm.interactable,"Exit confirmation disables repeat input while saving");
+                foreach(var wait in TaskCalendarPlayVerification.WaitUntil(()=>dialog.confirm.interactable,"Exit save retry timed out"))yield return wait;
+                Check(dialog.IsOpen&&focus.Phase==FocusPhase.Saving,"Failed save retry keeps the confirmation open");
+                ExecuteEvents.Execute(dialog.keepFocusing.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler);
+                Check(!dialog.IsOpen,"Submitting Stay dismisses the pending save prompt");
             }
             yield return .2;
             Click(panel.retry);

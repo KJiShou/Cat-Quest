@@ -198,25 +198,73 @@ public sealed partial class SqlitePlayerService
         tx.Put(PlayerRecordKind.Profile, preview); return true;
     });
 
-    public Task<OperationResult<bool>> UpgradeEquipmentAsync(string itemId, int expectedLevel, string requestId) => ExecuteCommandAsync(tx => {
+    public int MaxEquipmentUpgradeLevel(string itemId, int fromLevel)
+        => UpgradeEquipmentError(itemId, fromLevel) == null
+            ? EquipmentRules.AffordableUpgradeLevel(fromLevel, ProgressionLevel(presentation), FishCoins) : fromLevel;
+
+    public Task<OperationResult<bool>> UpgradeEquipmentAsync(string itemId, int expectedLevel, string requestId)
+        => UpgradeEquipmentAsync(itemId, expectedLevel, checked(expectedLevel + 1), requestId);
+
+    public Task<OperationResult<bool>> UpgradeEquipmentAsync(string itemId, int expectedLevel, int targetLevel, string requestId) => ExecuteCommandAsync(tx => {
         ProgressionRequire(!string.IsNullOrWhiteSpace(requestId), "Missing upgrade request.");
         var receipt = tx.Read<EquipmentUpgradeReceipt>(PlayerRecordKind.EquipmentUpgrades, requestId);
         if (receipt != null) {
-            ProgressionRequire(receipt.itemId == itemId && receipt.fromLevel == expectedLevel, "Upgrade request does not match.");
+            int receiptLevel = receipt.toLevel == 0 ? receipt.fromLevel + 1 : receipt.toLevel;
+            ProgressionRequire(receipt.itemId == itemId && receipt.fromLevel == expectedLevel && receiptLevel == targetLevel, "Upgrade request does not match.");
             return true;
         }
         var profile = ProgressionProfile(tx); ProgressionEquipmentAccess(tx, profile);
         var item = tx.Read<EquipmentItem>(PlayerRecordKind.Equipment, itemId);
         ProgressionRequire(item != null && EquipmentRules.Find(itemId) != null, "This item is not owned.");
         ProgressionRequire(item.level == expectedLevel, "Equipment changed. Review the new upgrade cost.");
-        ProgressionRequire(item.level < ProgressionLevel(profile), "Reach Cat Lv. " + (item.level + 1) + " to upgrade.");
-        int cost = EquipmentRules.UpgradeCost(item.level);
+        ProgressionRequire(targetLevel > item.level, "Choose a higher equipment level.");
+        ProgressionRequire(targetLevel <= ProgressionLevel(profile), "Reach Cat Lv. " + targetLevel + " to upgrade.");
+        long cost = EquipmentRules.UpgradeCost(item.level, targetLevel);
         ProgressionRequire(profile.fishCoins >= cost, "Not enough Fish Coins.");
-        profile.fishCoins -= cost; item.level++; profile.equipmentUnlocked = true;
+        profile.fishCoins -= (int)cost; item.level = targetLevel; profile.equipmentUnlocked = true;
         tx.Put(PlayerRecordKind.Profile, profile); tx.Put(PlayerRecordKind.Equipment, item);
-        tx.Put(PlayerRecordKind.EquipmentUpgrades, new EquipmentUpgradeReceipt { id = requestId, itemId = itemId, fromLevel = expectedLevel });
+        tx.Put(PlayerRecordKind.EquipmentUpgrades, new EquipmentUpgradeReceipt { id = requestId, itemId = itemId, fromLevel = expectedLevel,
+            toLevel = targetLevel == expectedLevel + 1 ? 0 : targetLevel });
         return true;
     });
+
+    public const int BossTicketFishCost = 100;
+
+    public string LastTicketExchangeId => presentation.lastTicketExchangeId ?? "";
+
+    public int MaxBossTicketExchange => Math.Min(presentation.fishCoins / BossTicketFishCost, int.MaxValue - presentation.tickets);
+
+    public string BossTicketExchangeError(int quantity) => TicketExchangeError(presentation, quantity);
+
+    static string TicketExchangeError(PlayerData profile, int quantity)
+    {
+        if (quantity < 1) return "Choose at least one Boss Ticket.";
+        if (quantity > int.MaxValue - profile.tickets) return "Boss Ticket balance cannot hold that many tickets.";
+        if (quantity > profile.fishCoins / BossTicketFishCost) return "Not enough Fish Coins.";
+        return null;
+    }
+
+    public Task<OperationResult<bool>> ExchangeBossTicketAsync(int quantity, string previousExchangeId, string requestId)
+        => ExecuteCommandAsync(tx => {
+            ProgressionRequire(Guid.TryParseExact(requestId, "N", out _), "Invalid ticket exchange request.");
+            var profile = ProgressionProfile(tx);
+            string lastExchangeId = profile.lastTicketExchangeId ?? "";
+            if (lastExchangeId == requestId) {
+                // Older exchange receipts always bought one ticket.
+                ProgressionRequire(Math.Max(1, profile.lastTicketExchangeQuantity) == quantity, "Ticket exchange quantity does not match.");
+                return true;
+            }
+            // Keep a single persisted receipt and reject requests from an earlier exchange.
+            ProgressionRequire(lastExchangeId == previousExchangeId, "Ticket balance changed. Reopen the exchange and try again.");
+            var error = TicketExchangeError(profile, quantity);
+            ProgressionRequire(error == null, error);
+            profile.fishCoins -= quantity * BossTicketFishCost;
+            profile.tickets += quantity;
+            profile.lastTicketExchangeId = requestId;
+            profile.lastTicketExchangeQuantity = quantity;
+            tx.Put(PlayerRecordKind.Profile, profile);
+            return true;
+        });
 
     public Task<OperationResult<LootReceipt>> DrawLootAsync(int count, string requestId)
         => DrawLootAsync(count, requestId, progressionLootRandom.Next);

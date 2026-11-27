@@ -12,6 +12,7 @@ public sealed class AiChatPage : MonoBehaviour
     public TMP_Text reviewStatus;
     public AiThinkingWave thinking;
     public Button send, stop, retry, clear, settings, today, plan;
+    public GameObject replyActions;
     public RectTransform content;
     public ScrollRect scroll;
     public AiChatRow messageTemplate;
@@ -26,6 +27,9 @@ public sealed class AiChatPage : MonoBehaviour
     readonly List<AiChatMessage> renderedMessages = new List<AiChatMessage>();
     readonly Dictionary<AiTaskDraft, (AiChatDraftCard card, string state, QuestTask task)> draftCards =
         new Dictionary<AiTaskDraft, (AiChatDraftCard, string, QuestTask)>();
+    readonly List<AiChatRow> rows = new List<AiChatRow>();
+    AiChatRow previewRow;
+    string renderedPreview;
     bool backfilling;
     int nextMessage;
     bool requestedModels;
@@ -34,8 +38,12 @@ public sealed class AiChatPage : MonoBehaviour
         var canvas = GetComponentInParent<Canvas>().rootCanvas.transform;
         editorOverlay.transform.SetParent(canvas, false); TaskUIBuilder.Stretch((RectTransform)editorOverlay.transform);
         send.onClick.AddListener(Send);
-        stop.onClick.AddListener(() => session?.Stop());
-        retry.onClick.AddListener(() => session?.Retry());
+        stop.onClick.AddListener(() => session?.StopReply());
+        retry.onClick.AddListener(() => {
+            if (session == null || !session.CanRegenerate) return;
+            CloseDraft();
+            session.Regenerate();
+        });
         clear.onClick.AddListener(() => { clearDialog.SetActive(true); Focus(cancelClear.gameObject); });
         cancelClear.onClick.AddListener(() => clearDialog.SetActive(false));
         confirmClear.onClick.AddListener(() => { CloseDraft(); session?.Clear(); clearDialog.SetActive(false); });
@@ -76,7 +84,7 @@ public sealed class AiChatPage : MonoBehaviour
     }
     void Send()
     {
-        if (!send.interactable) return;
+        if (!send.isActiveAndEnabled || !send.interactable) return;
         int count = session.History.messages.Count;
         SendText(input.text);
         if (session.History.messages.Count > count) input.text = "";
@@ -95,7 +103,7 @@ public sealed class AiChatPage : MonoBehaviour
             empty.text = "Create and manage your tasks on the Tasks page.";
             empty.gameObject.SetActive(true);
             input.interactable = send.interactable = today.interactable = plan.interactable = clear.interactable = false;
-            stop.gameObject.SetActive(false); retry.gameObject.SetActive(false); thinking.enabled = false;
+            stop.gameObject.SetActive(false); replyActions.SetActive(false); thinking.enabled = false;
             return;
         }
         if (client.Ready && !client.Busy && client.Connection.Connected && string.IsNullOrEmpty(client.Connection.Model) && !requestedModels) {
@@ -107,33 +115,115 @@ public sealed class AiChatPage : MonoBehaviour
         }
         bool ready = client.Enabled && session != null && session.Loaded;
         bool busy = session != null && session.Busy;
-        status.text = !client.Ready ? "Loading AI connection…" : !client.Connection.Connected ? "Connect ChatGPT in AI Settings to start chatting." : session?.Status;
-        status.gameObject.SetActive(!string.IsNullOrEmpty(status.text));
-        thinking.enabled = busy;
+        var events = UnityEngine.EventSystems.EventSystem.current;
+        var selected = events ? events.currentSelectedGameObject : null;
+        RefreshStatus();
         RefreshSendAvailability();
         today.interactable = plan.interactable = ready && !busy;
-        stop.gameObject.SetActive(busy); retry.gameObject.SetActive(!busy && session != null && session.CanRetry);
-        retry.interactable = ready; clear.interactable = session != null;
-        if (session == null) return;
+        send.gameObject.SetActive(!busy);
+        stop.gameObject.SetActive(busy);
+        if (busy && (selected == send.gameObject || selected == retry.gameObject)) Focus(stop.gameObject);
+        if (!busy && selected == stop.gameObject) Focus(send.interactable ? send.gameObject : input.gameObject);
+        retry.interactable = ready;
+        clear.interactable = session != null;
+        if (session == null) { replyActions.SetActive(false); return; }
+
+        bool followBottom = AtBottom();
         var messages = session.History.messages;
-        bool reset = renderedMessages.Count > messages.Count;
-        for (int i = 0; !reset && i < renderedMessages.Count; i++)
-            reset = !ReferenceEquals(renderedMessages[i], messages[i]);
-        if (reset) {
-            foreach (Transform child in content) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-            renderedMessages.Clear(); draftCards.Clear(); nextMessage = 0;
-        }
+        int count = session.VisibleMessageCount;
+        int common = 0;
+        while (common < renderedMessages.Count && common < count &&
+            ReferenceEquals(renderedMessages[common], messages[common])) common++;
+        bool changed = common != renderedMessages.Count || common != count;
+        if (common < renderedMessages.Count) RemoveTail(common);
         empty.gameObject.SetActive(messages.Count == 0 && !string.IsNullOrWhiteSpace(empty.text));
-        bool added = renderedMessages.Count < messages.Count;
-        for (int i=renderedMessages.Count; i<messages.Count; i++) renderedMessages.Add(messages[i]);
-        if (added || reset) AppendBatch();
+        for (int i = common; i < count; i++) renderedMessages.Add(messages[i]);
+        if (changed) AppendBatch();
         foreach (var message in messages)
             foreach (var draft in message.drafts) {
                 if (!draftCards.TryGetValue(draft, out var previous)) continue;
                 if (previous.state == draft.state && previous.task == draft.task) continue;
                 BindCard(previous.card, draft);
             }
+        SyncPreview(out bool previewLayoutChanged);
+        changed |= previewLayoutChanged;
+        changed |= SyncReplyActions();
+        if (changed) KeepScroll(followBottom);
     }
+
+    void RefreshStatus()
+    {
+        bool showingPreview = !string.IsNullOrEmpty(session?.PreviewText);
+        status.text = !client.Ready ? "Loading AI connection…" : !client.Connection.Connected
+            ? "Connect ChatGPT in AI Settings to start chatting." : session?.Status;
+        status.gameObject.SetActive(!showingPreview && !string.IsNullOrEmpty(status.text));
+        thinking.enabled = session != null && session.Busy && !showingPreview;
+    }
+
+    void RemoveTail(int common)
+    {
+        for (int i = common; i < nextMessage; i++) {
+            Remove(rows[i].gameObject);
+            foreach (var draft in renderedMessages[i].drafts) {
+                if (draftCards.TryGetValue(draft, out var entry)) Remove(entry.card.gameObject);
+                draftCards.Remove(draft);
+            }
+        }
+        if (common < nextMessage) rows.RemoveRange(common, nextMessage - common);
+        nextMessage = Math.Min(nextMessage, common);
+        renderedMessages.RemoveRange(common, renderedMessages.Count - common);
+    }
+
+    static void Remove(GameObject item)
+    {
+        item.SetActive(false);
+        Destroy(item);
+    }
+
+    bool AtBottom() => content.rect.height <= scroll.viewport.rect.height + 1 || scroll.verticalNormalizedPosition <= .02f;
+
+    void KeepScroll(bool followBottom)
+    {
+        if (!followBottom) return;
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+        scroll.verticalNormalizedPosition = 0;
+    }
+
+    bool SyncPreview(out bool layoutChanged)
+    {
+        layoutChanged = false;
+        string value = session.PreviewText;
+        if (string.IsNullOrEmpty(value)) {
+            if (!previewRow) return false;
+            Remove(previewRow.gameObject);
+            previewRow = null;
+            renderedPreview = null;
+            layoutChanged = true;
+            return true;
+        }
+        if (backfilling || value == renderedPreview) return false;
+        if (!previewRow) {
+            previewRow = Instantiate(messageTemplate, content);
+            previewRow.text.font = status.font;
+            previewRow.gameObject.SetActive(true);
+            layoutChanged = true;
+        }
+        float oldHeight = previewRow.bubble.sizeDelta.y;
+        previewRow.ShowPreview(value);
+        layoutChanged |= !Mathf.Approximately(oldHeight, previewRow.bubble.sizeDelta.y);
+        renderedPreview = value;
+        return true;
+    }
+
+    bool SyncReplyActions()
+    {
+        bool visible = !backfilling && session.CanRegenerate;
+        bool changed = replyActions.activeSelf != visible;
+        replyActions.SetActive(visible);
+        if (visible) replyActions.transform.SetAsLastSibling();
+        return changed;
+    }
+
     void BindCard(AiChatDraftCard card, AiTaskDraft draft)
     {
         card.Bind(draft, () => OpenDraft(draft), () => session.Dismiss(draft));
@@ -144,7 +234,13 @@ public sealed class AiChatPage : MonoBehaviour
         int end = Math.Min(nextMessage + 8, renderedMessages.Count);
         while (nextMessage < end) {
             var message = renderedMessages[nextMessage++];
-            var row = Instantiate(messageTemplate, content);
+            var row = previewRow && nextMessage == renderedMessages.Count && message.role == "assistant"
+                ? previewRow : Instantiate(messageTemplate, content);
+            if (row == previewRow) {
+                previewRow = null;
+                renderedPreview = null;
+            }
+            rows.Add(row);
             row.text.font = status.font; row.gameObject.SetActive(true); row.Bind(message);
             foreach (var draft in message.drafts) {
                 var card = Instantiate(draftTemplate, content);
@@ -152,9 +248,18 @@ public sealed class AiChatPage : MonoBehaviour
             }
         }
         backfilling = nextMessage < renderedMessages.Count;
-        if (!backfilling) { Canvas.ForceUpdateCanvases(); scroll.verticalNormalizedPosition = 0; }
     }
-    void LateUpdate() { if (backfilling && session != null) AppendBatch(); }
+    void LateUpdate()
+    {
+        if (session == null || !backfilling && session.PreviewText == renderedPreview) return;
+        bool followBottom = AtBottom();
+        bool changed = backfilling;
+        if (backfilling) AppendBatch();
+        if (SyncPreview(out bool previewLayoutChanged)) RefreshStatus();
+        changed |= previewLayoutChanged;
+        changed |= SyncReplyActions();
+        if (changed) KeepScroll(followBottom);
+    }
     public void OpenDraft(AiTaskDraft draft)
     {
         if (draft.state != "pending") return;

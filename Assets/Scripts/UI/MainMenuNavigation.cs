@@ -13,6 +13,8 @@ public sealed class MainMenuNavigation : MonoBehaviour
     public MainMenuPage initialPage=MainMenuPage.Tasks;
     public TaskSystemUI taskSystem;
     public TMP_Text fishCoins, tickets;
+    [SerializeField] Button addBossTicket;
+    [SerializeField] BossTicketExchangeUI ticketExchange;
     public MainMenuPage CurrentPage { get; private set; }
     public event System.Action<MainMenuPage> PageChanged;
     public event System.Action<string> AccessDenied;
@@ -32,6 +34,7 @@ public sealed class MainMenuNavigation : MonoBehaviour
     {
         service=GameDataManager.EnsureInstance().Service;
         service.Changed+=RefreshHeader;
+        if(addBossTicket) addBossTicket.onClick.AddListener(OpenTicketExchange);
         listeners=new UnityAction[buttons.Length];
         for(int i=0;i<buttons.Length;i++) {
             int index=i; listeners[i]=()=>ShowPage((MainMenuPage)index);
@@ -73,11 +76,14 @@ public sealed class MainMenuNavigation : MonoBehaviour
     {
         if(service==null) return;
         fishCoins.text=service.FishCoins.ToString(); tickets.text=service.Tickets.ToString();
+        if(addBossTicket) addBossTicket.interactable=service.IsReady;
     }
+    private void OpenTicketExchange() => ticketExchange.Open(service, addBossTicket);
     private void OnApplicationFocus(bool focus) { if(focus && service!=null) { _ = service.RefreshDateAsync(); RefreshHeader(); } }
     private void OnDestroy()
     {
         if(service!=null) service.Changed-=RefreshHeader;
+        if(addBossTicket) addBossTicket.onClick.RemoveListener(OpenTicketExchange);
         if(listeners!=null) for(int i=0;i<listeners.Length;i++)
             if(buttons[i]) buttons[i].onClick.RemoveListener(listeners[i]);
     }

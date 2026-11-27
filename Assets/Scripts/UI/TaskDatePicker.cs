@@ -17,6 +17,7 @@ public class TaskDatePicker : MonoBehaviour
     public Button noDate;
     public TMP_Text noDateLabel;
     public bool embedded;
+    [SerializeField] private bool useWhiteTodayLabel;
     public bool HasDate { get; private set; } = true;
     public event Action DateCleared;
     public Button[] days;
@@ -112,9 +113,12 @@ public class TaskDatePicker : MonoBehaviour
             label.text = date.Day.ToString();
             bool selected = HasDate && date == SelectedDate;
             bool isToday = date == today;
+            bool highlightToday = isToday && useWhiteTodayLabel;
             days[i].GetComponent<Image>().color = selected ? new Color32(0, 156, 246, 255)
+                : highlightToday ? ink
                 : isToday ? new Color32(186, 247, 255, 255) : new Color32(244, 248, 255, 255);
-            label.color = selected ? Color.white : isToday || date.Month == displayedMonth.Month ? ink : new Color32(167, 182, 200, 255);
+            label.color = selected || highlightToday ? Color.white
+                : isToday || date.Month == displayedMonth.Month ? ink : new Color32(167, 182, 200, 255);
         }
     }
 

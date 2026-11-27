@@ -19,6 +19,9 @@ public sealed class FocusScenePreview : MonoBehaviour
     RenderTexture texture;
     PreviewPixels.ResizeGate resizeGate;
     CharacterEquipmentAura equipmentAura;
+    [SerializeField] bool enableParallax;
+    CatSceneParallax parallax;
+    bool parallaxAllowed = true;
     public int targetHeight = 720;
     public float minimumOrthographicSize = 10, horizontalHalfWidth = 13;
     public void Bind(IFocusPresentation source)
@@ -63,6 +66,7 @@ public sealed class FocusScenePreview : MonoBehaviour
             Stage.name = "Focus Page Stage";
             equipmentAura = Stage.GetComponentInChildren<CharacterEquipmentAura>(true);
             PreviewCamera = Stage.GetComponentInChildren<Camera>(true);
+            if (enableParallax) PreviewCamera.TryGetComponent(out parallax);
             cameraHome = PreviewCamera.transform.position;
             battle = Stage.GetComponentInChildren<FocusTrainingBattle>();
             fish = Stage.GetComponentInChildren<FocusFishSpectators>();
@@ -77,7 +81,7 @@ public sealed class FocusScenePreview : MonoBehaviour
     {
         if (!PreviewCamera || !view) return;
         // Rendering may stop while the native window is minimized; Focus and IPC keep running.
-        if (WindowsAppWindow.IsMinimized) { PreviewCamera.enabled = false; return; }
+        if (WindowsAppWindow.IsMinimized) { ResetParallax(); PreviewCamera.enabled = false; return; }
         var size = view.rectTransform.rect.size;
         if (size.x <= 0 || size.y <= 0) return;
         float aspect = size.x / size.y;
@@ -89,15 +93,30 @@ public sealed class FocusScenePreview : MonoBehaviour
             texture.Create();
         }
         if (view.texture != texture) view.texture = texture;
-        PreviewCamera.transform.position = cameraHome + new Vector3(framingOffset.x, framingOffset.y, 0);
         if (PreviewCamera.targetTexture != texture) PreviewCamera.targetTexture = texture;
         if (!Mathf.Approximately(PreviewCamera.aspect, aspect)) PreviewCamera.aspect = aspect;
         PreviewCamera.orthographicSize = Mathf.Max(minimumOrthographicSize, horizontalHalfWidth / aspect);
+        var framing = cameraHome + new Vector3(framingOffset.x, framingOffset.y, 0);
+        if (parallax && parallaxAllowed) parallax.Apply(framing);
+        else PreviewCamera.transform.position = framing;
         PreviewCamera.enabled = true;
+    }
+
+    public void SetParallaxAllowed(bool allowed)
+    {
+        if (parallaxAllowed == allowed) return;
+        parallaxAllowed = allowed;
+        if (!allowed) ResetParallax();
+    }
+
+    void ResetParallax()
+    {
+        if (parallax) parallax.ResetOffset();
     }
 
     void OnDisable()
     {
+        ResetParallax();
         if (loading != null) {
             loading.completed -= StageLoaded; loading = null;
             view.enabled = showWhenReady;

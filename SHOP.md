@@ -6,6 +6,8 @@ See the Chinese companion document for the full research, presentation rationale
 
 Cat Home → Shop opens the editable `Assets/Prefabs/LootShop.prefab`. One draw costs 1 Boss Ticket; ten cost 10. Each independent draw yields one item, with no pity, guarantees, discount or duplicate protection.
 
+Select the blue `+` beside the Boss Ticket balance in the main header or in the shop. Both buttons open the same exchange dialog. Choose the number of tickets with `−`, `+`, or `Max`. Each ticket costs 100 Fish Coins, and Buy shows the batch total before confirmation. The entire batch is saved together. Tickets can be used for Boss battles or chest draws. Exchanges can be repeated on the same day while the player has enough Fish Coins.
+
 | Rarity | Colour | Chance | Items | Chance per item | Duplicate Fish |
 | --- | --- | --- | --- | --- | --- |
 | Legendary | Yellow | 1% | 6 | 0.1667% | 300 |

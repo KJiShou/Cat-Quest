@@ -53,7 +53,7 @@ public class GameDataManager : MonoBehaviour
         var ready = await Ready;
         if (!this || !ready.Succeeded) return;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-        if (Instance == this) CompanionHost.Ensure().WarmUp();
+        if (Instance == this && Service.Settings.preloadPetWidget) CompanionHost.Ensure().WarmUp();
 #endif
     }
     private void Initialize()

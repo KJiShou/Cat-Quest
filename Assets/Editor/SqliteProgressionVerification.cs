@@ -103,6 +103,52 @@ public static class SqliteProgressionVerification
             await Match(old.SaveAccountSettings(changedOwner), service.SaveAccountSettingsAsync(changedOwner), "Account ownership cannot be silently changed");
             var tutorial = old.Tutorial; tutorial.equipmentStep = 3;
             await Match(old.SaveTutorial(tutorial), service.SaveTutorialAsync(tutorial), "Tutorial progress commit");
+            var firstExchange = Guid.NewGuid().ToString("N");
+            var secondExchange = Guid.NewGuid().ToString("N");
+            int fish = service.FishCoins, tickets = service.Tickets;
+            repository.FaultPoint = stage => { if (stage == "before-commit") throw new IOException("Injected exchange failure"); };
+            var failed = await service.ExchangeBossTicketAsync(3, "", firstExchange);
+            check(!failed.Succeeded && service.FishCoins == fish && service.Tickets == tickets, "Failed exchange leaves both balances intact");
+            repository.FaultPoint = null;
+            var duplicates = await Task.WhenAll(service.ExchangeBossTicketAsync(3, "", firstExchange), service.ExchangeBossTicketAsync(3, "", firstExchange));
+            check(duplicates.All(r => r.Succeeded) && service.FishCoins == fish - 300 && service.Tickets == tickets + 3,
+                "Retry and duplicate exchange settle all three tickets once");
+            check(!(await service.ExchangeBossTicketAsync(2, "", firstExchange)).Succeeded, "Committed request rejects a different quantity");
+            check(!(await service.ExchangeBossTicketAsync(0, firstExchange, secondExchange)).Succeeded &&
+                !(await service.ExchangeBossTicketAsync(service.MaxBossTicketExchange + 1, firstExchange, secondExchange)).Succeeded &&
+                !(await service.ExchangeBossTicketAsync(int.MaxValue, firstExchange, secondExchange)).Succeeded &&
+                service.FishCoins == fish - 300 && service.Tickets == tickets + 3, "Invalid, unaffordable and overflowing quantities cannot change balances");
+            check((await service.ExchangeBossTicketAsync(2, firstExchange, secondExchange)).Succeeded &&
+                service.FishCoins == fish - 500 && service.Tickets == tickets + 5, "Second exchange on the same day succeeds at the same unit price");
+            check(!(await service.ExchangeBossTicketAsync(3, "", firstExchange)).Succeeded && service.Tickets == tickets + 5,
+                "Stale exchange replay cannot charge again");
+            memory.Data.fishCoins -= 500;
+            memory.Data.tickets += 5;
+            memory.Data.lastTicketExchangeId = secondExchange;
+            memory.Data.lastTicketExchangeQuantity = 2;
+            await Same("Ticket exchange profile and request identity");
+            string bulkId = Guid.NewGuid().ToString("N");
+            const string weapon = "boss1-weapon";
+            int beforeUpgrade = service.FishCoins;
+            int maximum = service.MaxEquipmentUpgradeLevel(weapon, 2);
+            check(maximum >= 5 && EquipmentRules.UpgradeCost(2, 5) == 75 &&
+                EquipmentRules.AffordableUpgradeLevel(2, 8, 74) == 4 && EquipmentRules.AffordableUpgradeLevel(2, 8, 75) == 5,
+                "Batch pricing accumulates per-level costs and honors the exact affordability boundary");
+            check(!(await service.UpgradeEquipmentAsync(weapon, 2, maximum + 1, bulkId)).Succeeded &&
+                !(await service.UpgradeEquipmentAsync(weapon, 2, 2, bulkId)).Succeeded && service.FishCoins == beforeUpgrade,
+                "Invalid and over-limit targets cannot spend fish");
+            repository.FaultPoint = phase => { if (phase == "before-commit") throw new IOException("Injected bulk upgrade failure"); };
+            check(!(await service.UpgradeEquipmentAsync(weapon, 2, 5, bulkId)).Succeeded && service.FishCoins == beforeUpgrade &&
+                service.EquipmentSnapshot.equipment.Single(i => i.id == weapon).level == 2, "Failed bulk upgrade rolls back level and price");
+            repository.FaultPoint = null;
+            var batchRetries = await Task.WhenAll(service.UpgradeEquipmentAsync(weapon, 2, 5, bulkId),service.UpgradeEquipmentAsync(weapon, 2, 5, bulkId));
+            check(batchRetries.All(result => result.Succeeded) && service.FishCoins == beforeUpgrade - 75 &&
+                service.EquipmentSnapshot.equipment.Single(i => i.id == weapon).level == 5, "Concurrent retries commit the full batch once");
+            check(!(await service.UpgradeEquipmentAsync(weapon, 2, 4, bulkId)).Succeeded, "Committed upgrade identity rejects a different target");
+            memory.Data.fishCoins -= 75;
+            memory.Data.equipment.Single(i => i.id == weapon).level = 5;
+            memory.Data.equipmentUpgrades.Add(new EquipmentUpgradeReceipt { id=bulkId, itemId=weapon, fromLevel=2, toLevel=5 });
+            await Same("Batch upgrade level, fish and receipt");
             await repository.CloseAsync();
             var reopened = new SqlitePlayerRepository(path, legacy);
             try {

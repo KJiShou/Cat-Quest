@@ -4,7 +4,7 @@ using System.Linq;
 
 public enum EquipmentSlot { Weapon, Body, Head }
 [Serializable] public sealed class EquipmentItem { public string id; public int level=1; }
-[Serializable] public sealed class EquipmentUpgradeReceipt { public string id,itemId;public int fromLevel; }
+[Serializable] public sealed class EquipmentUpgradeReceipt { public string id,itemId;public int fromLevel,toLevel; }
 public sealed class EquipmentDefinition
 {
     public readonly string Id,Name;public readonly int Tier;public readonly EquipmentSlot Slot;
@@ -51,6 +51,23 @@ public static class EquipmentRules
     };
     public static double Bonus(EquipmentDefinition d,int level)=>d.Slot==EquipmentSlot.Head?.05*d.Tier+.01*(level-1):2*d.Tier+.5*(level-1);
     public static int UpgradeCost(int level)=>checked(10+5*level);
+    public static long UpgradeCost(int fromLevel, int targetLevel)
+    {
+        long levels = (long)targetLevel - fromLevel;
+        return checked(levels * (20 + 5 * ((long)fromLevel + targetLevel - 1)) / 2);
+    }
+
+    public static int AffordableUpgradeLevel(int fromLevel, int catLevel, int fishCoins)
+    {
+        int low = fromLevel, high = Math.Max(fromLevel, catLevel);
+        while (low < high)
+        {
+            int candidate = low + (high - low + 1) / 2;
+            if (UpgradeCost(fromLevel, candidate) <= fishCoins) low = candidate;
+            else high = candidate - 1;
+        }
+        return low;
+    }
     public static string Effect(EquipmentDefinition d,int level)=>d.Slot==EquipmentSlot.Head?$"+{Bonus(d,level):0.00} ASPD":$"+{Bonus(d,level):0.#} {(d.Slot==EquipmentSlot.Weapon?"ATK":"DEF")}";
     public static string Equipped(PlayerData d,EquipmentSlot slot)=>slot==EquipmentSlot.Weapon?d.equippedWeaponId:slot==EquipmentSlot.Body?d.equippedBodyOutfitId:d.equippedHeadAccessoryId;
     public static void SetEquipped(PlayerData d,EquipmentSlot slot,string id){if(slot==EquipmentSlot.Weapon)d.equippedWeaponId=id;else if(slot==EquipmentSlot.Body)d.equippedBodyOutfitId=id;else d.equippedHeadAccessoryId=id;}

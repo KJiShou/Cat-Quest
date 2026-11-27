@@ -12,7 +12,7 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
 {
     [Serializable] public sealed class CameraCount { public string name,type,hierarchy,scene,targetAtFirstRender;public int instanceId; public long renders,textureRenders; }
     [Serializable] public sealed class FeedbackState { public string name; public bool active,interactable; public float scaleX,scaleY,offset,x,y,width,height; }
-    [Serializable] public sealed class ViewState { public string lastAck; public bool lastAccepted,reduceMotion,nativeVisible; public int sentCommands,snapshots,connections,ackCount,resizeStarts,resizeFrames,lastResizeEdge; public bool nativeResizeInstalled; public string[] edgeTargets; public string selected; public bool keyboard; public FeedbackState[] feedback; public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha;public string utc;public int frameCount;public long cameraRenders,textureCameraRenders;public CameraCount[] cameras; }
+    [Serializable] public sealed class ViewState { public string lastAck; public bool lastAccepted,reduceMotion,nativeVisible; public int sentCommands,snapshots,connections,ackCount,resizeStarts,resizeFrames,lastResizeEdge; public bool nativeResizeInstalled; public string[] edgeTargets; public string selected; public bool keyboard; public FeedbackState[] feedback; public int width,height,fish,auraTier,auraPieces;public bool connected,compact,controls,training,noPlayerStore,pinned,cancelPrompt;public string timer,phase,animationState,ninjaSprite,acornSprite,playerName;public float animationTime,controlAlpha;public Vector3 sceneCameraPosition;public string utc;public int frameCount;public long cameraRenders,textureCameraRenders;public CameraCount[] cameras; }
     public FocusScenePreview preview;
     public TMP_Text timer,title;
     public RectTransform controls,header,sceneFrame,dragHandle,timerBacking;
@@ -36,7 +36,7 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
     bool configured,closing,keyboardNavigation,visible;
     double lastOwnerContact, nextParentCheck;
     System.Diagnostics.Process parentProcess;
-    Button[] keyboardButtons;
+    Selectable[] keyboardControls;
     PointerEventData pointerExit;
     bool IsCompact=>Screen.width<360 || Screen.height<260;
     int observedResizeStarts;
@@ -77,6 +77,7 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
     void Start()
     {
         Application.runInBackground=true;Application.targetFrameRate=30;
+        preview.SetParallaxAllowed(false);
         directory=CompanionProtocol.Argument("--companion-dir");owner=CompanionProtocol.Argument("--companion-owner");
         pipeName=CompanionProtocol.Argument("--companion-pipe"); token=CompanionProtocol.Argument("--companion-token");
         if(string.IsNullOrEmpty(pipeName)||string.IsNullOrEmpty(token)||string.IsNullOrEmpty(owner)){enabled=false;return;}
@@ -91,7 +92,7 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
         close.onClick.AddListener(CloseDisplay);
         pin.onClick.AddListener(TogglePinned);
         minimize.onClick.AddListener(CompanionNativeWindow.Minimize);
-        keyboardButtons=new[]{pin,minimize,close,start,end,rest,retry};
+        keyboardControls=new Selectable[]{pin,minimize,close,start,end,rest,retry};
         if(EventSystem.current)pointerExit=new PointerEventData(EventSystem.current);
         RefreshState();
         RefreshPin();
@@ -119,10 +120,11 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
         // Recheck while outside: reopening a modal can replay cached pointer-enter events.
         // Pointer exits preserve keyboard selection.
         if(!inside && pointerExit!=null)
-            foreach(var button in keyboardButtons)
-                if(button.gameObject.activeInHierarchy)ExecuteEvents.Execute(button.gameObject,pointerExit,ExecuteEvents.pointerExitHandler);
+            foreach(var control in keyboardControls)
+                if(control && control.gameObject.activeInHierarchy)ExecuteEvents.Execute(control.gameObject,pointerExit,ExecuteEvents.pointerExitHandler);
         bool focused=CompanionNativeWindow.IsForeground;
         if(!focused && (keyboardNavigation || (EventSystem.current && EventSystem.current.currentSelectedGameObject)))OnApplicationFocus(false);
+        preview.SetParallaxAllowed(visible && focused && !CompanionNativeWindow.SuppressPointer);
         UpdateKeyboardNavigation();
         bool showControls=inside || (keyboardNavigation && focused);
         reveal=Mathf.MoveTowards(reveal,showControls?1:0,Time.unscaledDeltaTime/(showControls?.32f:.24f));
@@ -199,18 +201,19 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
         if(!tab && !arrow)return;
         keyboardNavigation=true;
         controlFade.interactable=true;
-        int current=Array.FindIndex(keyboardButtons,b=>b.gameObject==events.currentSelectedGameObject);
+        int current=Array.FindIndex(keyboardControls,control=>control && control.gameObject==events.currentSelectedGameObject);
         if(!tab && current>=0)return; // InputSystemUIInputModule owns ordinary arrow navigation.
         int direction=tab && (keys.leftShiftKey.isPressed || keys.rightShiftKey.isPressed)?-1:1;
         if(current<0)current=direction>0?-1:0;
-        for(int step=1;step<=keyboardButtons.Length;step++){
-            var candidate=keyboardButtons[(current+direction*step+keyboardButtons.Length*2)%keyboardButtons.Length];
-            if(candidate.gameObject.activeInHierarchy && candidate.interactable){events.SetSelectedGameObject(candidate.gameObject);return;}
+        for(int step=1;step<=keyboardControls.Length;step++){
+            var candidate=keyboardControls[(current+direction*step+keyboardControls.Length*2)%keyboardControls.Length];
+            if(candidate && candidate.isActiveAndEnabled && candidate.IsInteractable()){events.SetSelectedGameObject(candidate.gameObject);return;}
         }
     }
     void OnApplicationFocus(bool focused)
     {
         if(focused)return;
+        preview.SetParallaxAllowed(false);
         keyboardNavigation=false;
         if(EventSystem.current)EventSystem.current.SetSelectedGameObject(null);
     }
@@ -226,6 +229,7 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
     void SetVisible(bool show)
     {
         visible=show;
+        if(!show) preview.SetParallaxAllowed(false);
         if(!show && cancelConfirmation) cancelConfirmation.Dismiss();
         if(configured) { if(show) CompanionNativeWindow.Show(); else CompanionNativeWindow.Hide(); }
         Application.targetFrameRate=show?30:10;
@@ -259,7 +263,7 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
         confirmingSession=state.sessionId;string session=confirmingSession;
         cancelConfirmation.Show(false, ()=>{if(state.connected&&state.phase==FocusPhase.Focusing&&state.sessionId==session)Send("end");});
     }
-    void OnDisable(){RenderPipelineManager.beginCameraRendering-=CountVerificationCamera;if(cancelConfirmation)cancelConfirmation.Dismiss();}
+    void OnDisable(){RenderPipelineManager.beginCameraRendering-=CountVerificationCamera;if(preview)preview.SetParallaxAllowed(false);if(cancelConfirmation)cancelConfirmation.Dismiss();}
     static void SetCaption(Button b,string text){b.GetComponentInChildren<TMP_Text>().text=text;}
     public void ApplyLayout(bool compact,bool showControls)
     {
@@ -303,14 +307,15 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
     }
     FeedbackState[] FeedbackSnapshot()
     {
-        var result=new FeedbackState[keyboardButtons.Length];
-        for(int i=0;i<keyboardButtons.Length;i++){
-            var button=keyboardButtons[i];var effect=button.GetComponent<JuicyButton>();var rect=(RectTransform)button.transform;
-            result[i]=new FeedbackState{name=button.name,active=button.gameObject.activeInHierarchy,interactable=button.IsInteractable(),
+        var result=new List<FeedbackState>(keyboardControls.Length);
+        foreach(var control in keyboardControls){
+            if(control is not Button button)continue;
+            var effect=button.GetComponent<JuicyButton>();var rect=(RectTransform)button.transform;
+            result.Add(new FeedbackState{name=button.name,active=button.gameObject.activeInHierarchy,interactable=button.IsInteractable(),
                 scaleX=effect?effect.DrawScale.x:1,scaleY=effect?effect.DrawScale.y:1,offset=effect?effect.DrawOffset:0,
-                x=rect.anchoredPosition.x,y=rect.anchoredPosition.y,width=rect.rect.width,height=rect.rect.height};
+                x=rect.anchoredPosition.x,y=rect.anchoredPosition.y,width=rect.rect.width,height=rect.rect.height});
         }
-        return result;
+        return result.ToArray();
     }
     string[] VerificationEdgeTargets()
     {
@@ -335,7 +340,7 @@ public sealed class CompanionWindowUI : MonoBehaviour, ICanvasRaycastFilter
         {
             var battle=preview.Stage?preview.Stage.GetComponentInChildren<FocusTrainingBattle>():null;
             var aura=preview.Stage?preview.Stage.GetComponentInChildren<CharacterEquipmentAura>():null;
-            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{resizeStarts=CompanionNativeWindow.ResizeStarts,resizeFrames=CompanionNativeWindow.ResizeFrames,lastResizeEdge=CompanionNativeWindow.LastResizeEdge,nativeResizeInstalled=CompanionNativeWindow.NativeResizeInstalled,edgeTargets=VerificationEdgeTargets(),nativeVisible=CompanionNativeWindow.IsVisible,utc=DateTime.UtcNow.ToString("O"),frameCount=Time.frameCount,cameraRenders=verificationCameraRenders,textureCameraRenders=verificationTextureCameraRenders,cameras=VerificationCameraCounts(),reduceMotion=UiMotion.Reduced,ackCount=ackCount,lastAck=lastAck,lastAccepted=lastAccepted,sentCommands=sentCommands,snapshots=snapshots,connections=connections,selected=EventSystem.current&&EventSystem.current.currentSelectedGameObject?EventSystem.current.currentSelectedGameObject.name:"",keyboard=keyboardNavigation,feedback=FeedbackSnapshot(),auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
+            CompanionProtocol.Write(Path.Combine(directory,"companion-window.json"),new ViewState{resizeStarts=CompanionNativeWindow.ResizeStarts,resizeFrames=CompanionNativeWindow.ResizeFrames,lastResizeEdge=CompanionNativeWindow.LastResizeEdge,nativeResizeInstalled=CompanionNativeWindow.NativeResizeInstalled,edgeTargets=VerificationEdgeTargets(),nativeVisible=CompanionNativeWindow.IsVisible,sceneCameraPosition=preview.PreviewCamera?preview.PreviewCamera.transform.position:Vector3.zero,utc=DateTime.UtcNow.ToString("O"),frameCount=Time.frameCount,cameraRenders=verificationCameraRenders,textureCameraRenders=verificationTextureCameraRenders,cameras=VerificationCameraCounts(),reduceMotion=UiMotion.Reduced,ackCount=ackCount,lastAck=lastAck,lastAccepted=lastAccepted,sentCommands=sentCommands,snapshots=snapshots,connections=connections,selected=EventSystem.current&&EventSystem.current.currentSelectedGameObject?EventSystem.current.currentSelectedGameObject.name:"",keyboard=keyboardNavigation,feedback=FeedbackSnapshot(),auraTier=aura?aura.Tier:0,auraPieces=aura?aura.Pieces:0,cancelPrompt=cancelConfirmation&&cancelConfirmation.IsOpen,pinned=CompanionNativeWindow.IsPinned,width=Screen.width,height=Screen.height,connected=state.connected,compact=IsCompact,controls=controlFade.alpha>.02f,controlAlpha=controlFade.alpha,fish=preview.Stage?preview.Stage.GetComponentInChildren<FocusFishSpectators>().VisibleFishCount:0,animationState=battle?(battle.animator.GetCurrentAnimatorStateInfo(0).IsName("Training")?"Training":"Idle"):"",animationTime=battle?battle.animator.GetCurrentAnimatorStateInfo(0).normalizedTime:0,ninjaSprite=SpriteName(battle,"Training Ninja"),acornSprite=SpriteName(battle,"Acorn"),training=battle&&battle.IsTraining,noPlayerStore=GameDataManager.Instance==null,timer=timer.text,phase=state.Phase.ToString(),playerName=title.text});
             string request = Path.Combine(directory,"pipe-command.request");
             var command = CompanionProtocol.Read<CompanionCommand>(request);
             if (command != null) { File.Delete(request); SendCommand(command); }

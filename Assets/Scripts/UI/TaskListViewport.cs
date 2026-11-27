@@ -91,8 +91,19 @@ internal sealed class TaskListViewport
         if (entries.Count > 32 && layout && height > 0) {
             float top = Mathf.Max(0, offset - prefixHeight - layout.padding.top - 160);
             float bottom = Mathf.Max(top + 160, offset + height - prefixHeight + 160);
-            while (first < last-1 && entries[first].top + entries[first].height < top) first++;
-            while (last > first+1 && entries[last-1].top > bottom) last--;
+            int high = entries.Count - 1;
+            while (first < high) {
+                int mid = first + (high - first) / 2;
+                var entry = entries[mid];
+                if (entry.top + entry.height < top) first = mid + 1;
+                else high = mid;
+            }
+            int low = first + 1;
+            while (low < last) {
+                int mid = low + (last - low) / 2;
+                if (entries[mid].top <= bottom) low = mid + 1;
+                else last = mid;
+            }
         }
         if (!refresh && first == previousFirst && last == previousLast) return;
         previousFirst = first; previousLast = last;

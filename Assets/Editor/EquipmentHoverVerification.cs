@@ -174,8 +174,8 @@ public static class EquipmentHoverVerification
             if(step==24){Check(File.ReadAllText(manager.SavePath)==File.ReadAllText(FolderNow+"/before-hover-save.json"),"Hover/click inspection mutated save");page.OpenItem("boss1-weapon");}
             if(step==25){Capture("click-after-hover-1280");TextFits(detail);}
             if(step==26){detail.equip.onClick.Invoke();Check(string.IsNullOrEmpty(service.Snapshot.equippedWeaponId),"Unequip after hover failed");}
-            if(step==27){detail.equip.onClick.Invoke();Check(service.Snapshot.equippedWeaponId=="boss1-weapon","Equip after hover failed");detail.upgrade.onClick.Invoke();Check(service.Snapshot.equipment.First(x=>x.id=="boss1-weapon").level==2,"Upgrade after hover failed");}
-            if(step==28){detail.close.onClick.Invoke();target.OnPointerEnter(pointer);}
+            if(step==27){detail.equip.onClick.Invoke();Check(service.Snapshot.equippedWeaponId=="boss1-weapon","Equip after hover failed");detail.upgrade.onClick.Invoke();detail.bulkUpgrade.transform.Find("Popup/Button_Confirm").GetComponent<Button>().onClick.Invoke();}
+            if(step==28){Check(service.Snapshot.equipment.First(x=>x.id=="boss1-weapon").level==2,"Upgrade after hover failed");detail.close.onClick.Invoke();target.OnPointerEnter(pointer);}
             if(step==29){Check(detail.level.text=="2","Hover has stale upgraded level");Bounds(detail);Capture("hover-upgraded-1280");}
             if(step==30){
                 page.HideHover();

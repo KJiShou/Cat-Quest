@@ -143,29 +143,48 @@ public sealed partial class SqlitePlayerRepository
             imported.account = Query<AccountPreferences>(database, new PlayerRecordQuery { Kind = PlayerRecordKind.Account, Limit = 1 }).Single();
             imported.account.playerName = imported.username;
             if (DatabasePath != ":memory:") RecoveryBackup(DatabasePath + ".before-import-" + Guid.NewGuid().ToString("N") + ".sqlite3");
-            long revision = Revision;
-            string importCommitId = Guid.NewGuid().ToString("N");
-            try {
-                database.Execute("BEGIN IMMEDIATE");
-                foreach (var map in SqlitePlayerSchema.Mappings) database.Execute("DELETE FROM " + SqlitePlayerSchema.Table(map.Kind));
-                database.Execute("UPDATE cq_totals SET taskCount=0,focusSeconds=0");
-                SqlitePlayerSchema.WriteAll(database, imported);
-                database.Execute("DELETE FROM cq_mail_state");
-                CopySavedMail(database, mail);
-                SqlitePlayerSchema.SetMeta(database, "revision", checked(revision + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
-                SqlitePlayerSchema.SetMeta(database, "importCommitId", importCommitId);
-                FaultPoint?.Invoke("import-before-commit");
-                database.Execute("COMMIT");
-                FaultPoint?.Invoke("import-after-commit");
-            } catch {
-                try { database.Execute("ROLLBACK"); } catch (SQLiteException) { }
-                // This marker was committed with the replacement. A lost commit
-                // acknowledgement must never turn a successful import into retry.
-                if (SqlitePlayerSchema.MetaValue(database,"importCommitId") != importCommitId) throw;
-            }
+            ReplaceSavedData(imported, mail);
             return true;
         });
     }
+
+#if UNITY_EDITOR
+    public Task<OperationResult<bool>> ResetEditorProfileAsync(string backupPath)
+    {
+        string destination = Path.GetFullPath(backupPath);
+        CheckTransferPath(destination);
+        return Queue(() => {
+            RecoveryBackup(destination);
+            ReplaceSavedData(Fresh(), Array.Empty<SavedMailState>(), resetProfile: true);
+            return true;
+        });
+    }
+#endif
+
+    void ReplaceSavedData(PlayerData data, System.Collections.Generic.IEnumerable<SavedMailState> mail, bool resetProfile = false)
+    {
+        long revision = Revision;
+        string importCommitId = Guid.NewGuid().ToString("N");
+        try {
+            database.Execute("BEGIN IMMEDIATE");
+            foreach (var map in SqlitePlayerSchema.Mappings) database.Execute("DELETE FROM " + SqlitePlayerSchema.Table(map.Kind));
+            database.Execute("UPDATE cq_totals SET taskCount=0,focusSeconds=0");
+            SqlitePlayerSchema.WriteAll(database, data);
+            database.Execute("DELETE FROM cq_mail_state");
+            CopySavedMail(database, mail);
+            if (resetProfile) SqlitePlayerSchema.SetMeta(database, "sourceHash", "editor-reset");
+            SqlitePlayerSchema.SetMeta(database, "revision", checked(revision + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            SqlitePlayerSchema.SetMeta(database, "importCommitId", importCommitId);
+            FaultPoint?.Invoke("import-before-commit");
+            database.Execute("COMMIT");
+            FaultPoint?.Invoke("import-after-commit");
+        } catch {
+            try { database.Execute("ROLLBACK"); } catch (SQLiteException) { }
+            // The marker distinguishes a lost acknowledgement from a rollback.
+            if (SqlitePlayerSchema.MetaValue(database, "importCommitId") != importCommitId) throw;
+        }
+    }
+
     void RecoveryBackup(string path)
         => CreateConsistentBackup(database, path, System.Threading.CancellationToken.None);
     static void CreateConsistentBackup(SQLiteConnection source, string path, System.Threading.CancellationToken cancellation)

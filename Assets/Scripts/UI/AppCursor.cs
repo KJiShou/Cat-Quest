@@ -73,7 +73,8 @@ public sealed class AppCursor : MonoBehaviour
         if (!control || !control.isActiveAndEnabled || !control.IsInteractable()) return false;
         if (control is TMPro.TMP_InputField text) return !text.readOnly;
         if (control is InputField legacyText) return !legacyText.readOnly;
-        return control is Button || control is Slider || control is Toggle || control is Dropdown || control is TMPro.TMP_Dropdown;
+        return control is Button || control is Slider || control is Toggle || control is Dropdown
+            || control is TMPro.TMP_Dropdown;
     }
 
     void OnApplicationFocus(bool hasFocus)

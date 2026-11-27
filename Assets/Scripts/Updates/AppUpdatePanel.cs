@@ -70,14 +70,16 @@ public sealed class AppUpdatePanel : MonoBehaviour
     {
         if (!controller || !entryLabel) return;
         var state = controller.State;
-        entryLabel.text = state == AppUpdateState.Available || state == AppUpdateState.Ready ? "Update available" : "Updates  ·  v" + Application.version;
+        entryLabel.text = state == AppUpdateState.Available || state == AppUpdateState.Ready ? "Update available" : "Updates  ·  v" + controller.InstalledVersion;
         heading.text = "Cat Quest Updates";
-        details.text = "Installed version " + Application.version + (controller.Release == null ? "" : "\nLatest release " + controller.Release.version + "  ·  " + (controller.Release.size / 1048576f).ToString("0.0") + " MB\n\n" + controller.Release.notes);
+        details.text = "Installed version " + controller.InstalledVersion + (controller.Release == null ? "" : "\nLatest release " + controller.Release.version + "  ·  " + (controller.Release.size / 1048576f).ToString("0.0") + " MB\n\n" + controller.Release.notes);
         status.text = controller.Message + (state == AppUpdateState.Downloading ? "  " + (controller.Progress * 100).ToString("0") + "%" : "");
         string blocked = state == AppUpdateState.Ready ? AppUpdateController.RestartBlockReason() : null;
         lastBlock = blocked;
         if (blocked != null) status.text = blocked;
-        primaryLabel.text = state == AppUpdateState.Available ? "Download" : state == AppUpdateState.Downloading ? "Cancel download" : state == AppUpdateState.Verifying ? "Verifying..." : state == AppUpdateState.Ready ? "Restart & update" : "Check again";
+        primaryLabel.text = state == AppUpdateState.Available ? DemoProfile.IsActive ? "Simulate download" : "Download"
+            : state == AppUpdateState.Downloading ? "Cancel download" : state == AppUpdateState.Verifying ? "Verifying..."
+            : state == AppUpdateState.Ready ? DemoProfile.IsActive ? "Apply demo update" : "Restart & update" : "Check again";
         primary.interactable = state != AppUpdateState.Checking && state != AppUpdateState.Verifying && state != AppUpdateState.Installing && blocked == null;
         later.interactable = close.interactable = backdrop.interactable = state != AppUpdateState.Installing;
         laterLabel.text = state == AppUpdateState.Downloading ? "In background" : "Later";

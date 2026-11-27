@@ -157,6 +157,17 @@ See [Boss battle details](BOSS_BATTLE.md) and [equipment details](EQUIPMENT.md).
 
 ## Run the Unity project
 
+### Offline demo
+
+In the Windows Unity Editor, select **Tools → Cat Quest → Test Account → Start Fresh Demo Run**, then press **Play**. Complete **Review the presentation slides** to go from Cat Lv.24 to Lv.25 and unlock the third-task reward.
+
+- **Inbox and rankings** — Claim Fish Coins and Boss Tickets from the envelope. All four ranking categories include sample players, player details, and a **Your Rank** row based on this run's saved progress.
+- **App updates** — Open the update announcement in the Inbox, select **Simulate download → Apply demo update**, then claim the version gift. The simulated update writes only to this demo save.
+- **Equipment and battles** — Upgrade the equipped Demon Weapon, try Legendary gear, open shop chests, claim the Cyclope mastery reward, and enter all three normal Bosses and Master Stage.
+- **Tasks, Focus and Chat** — Browse recurring tasks, subtasks, tags, the calendar, and history. Focus statistics contain seven days of sample sessions, with the current day's 25-minute goal ready to claim. Ask Chat for a task in English or Chinese, then edit and confirm the offline draft.
+
+**Use Demo Account** resumes the most recent run. **Start Fresh Demo Run** creates a separate save and retains earlier runs. **Use Original Account** returns to the regular save. Use **Reset Beginner Account** for the opening story and tutorial. Pet Widget can open the companion window using the project's `Builds/Windows/CatQuest.exe`. Live Google sign-in and rankings use the regular account flow.
+
 ### Requirements
 
 | Requirement | Project configuration |

@@ -237,6 +237,7 @@ public sealed class EquipmentPageUI : MonoBehaviour
     void RefreshModalKeyboard(bool force=false,GameObject returnTo=null)
     {
         if(!Ready||!isActiveAndEnabled){StopModalKeyboard();return;}
+        if(itemDetail.bulkUpgrade&&itemDetail.bulkUpgrade.isActiveAndEnabled){StopModalKeyboard();return;}
         Transform top=confirmation.gameObject.activeInHierarchy?confirmation
             :itemDetail.gameObject.activeInHierarchy&&!itemDetail.IsHoverPreview?itemDetail.transform
             :modal.gameObject.activeInHierarchy?modal:null;
@@ -354,16 +355,17 @@ public sealed class EquipmentPageUI : MonoBehaviour
         int claim=ReadyClaimBoss(data);
         if(navigation.ShowPage(MainMenuPage.Boss)&&claim>0)navigation.pages[(int)MainMenuPage.Boss].GetComponent<EquipmentPageUI>().OpenClaim(claim);
     }
-    async void Upgrade(){
+    void Upgrade(){
         if(commandPending||!itemDetail.upgrade.interactable)return;
-        commandPending=true;
         itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().Dismiss();
-        string id=selected;bool success;
-        try{success=(await service.UpgradeEquipmentAsync(id,expectedLevel,Guid.NewGuid().ToString("N"))).Succeeded;}finally{commandPending=false;}
-        if (!this || !isActiveAndEnabled) return;
-        if(selected!=id)return;
-        if(success){Result(true);itemDetail.status.text="Upgraded.";itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().PlaySuccess();}
-        else {string error=service.LastError;OpenItem(selected);itemDetail.status.text=error;}
+        string id=selected;
+        var definition=EquipmentRules.Find(id);
+        if(!itemDetail.bulkUpgrade.Open(service,definition,expectedLevel,ItemIcon(definition),itemDetail.currentIcon.sprite,success=>{
+            if(!this||!isActiveAndEnabled||!itemDetail.gameObject.activeInHierarchy||selected!=id)return;
+            if(success){Result(true);itemDetail.status.text="Upgraded.";itemDetail.upgrade.GetComponent<EquipmentUpgradeFeedback>().PlaySuccess();}
+            RefreshModalKeyboard(true,itemDetail.upgrade.gameObject);
+        }))return;
+        StopModalKeyboard();
     }
     void ConfirmClaim(){string id=selected;Ask("Claim "+EquipmentRules.Find(id).Name+"?\nUses 1 mastery reward. Starts at Lv. 1.",async ()=>{bool saved=(await service.ClaimEquipmentAsync(id)).Succeeded;if(this&&isActiveAndEnabled&&selected==id)Result(saved);});}
 }

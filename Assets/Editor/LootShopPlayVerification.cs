@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -95,6 +96,64 @@ public static class LootShopPlayVerification
         Check(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(shop.gameObject)==0,"No missing shop scripts");
         var launch=page.GetComponentsInChildren<Button>(true).Single(b=>b.name=="ShopLauncher");
         Check(((Image)launch.targetGraphic).pixelsPerUnitMultiplier==2,"Cat Home Shop pixel multiplier");
+        var exchange=UnityEngine.Object.FindFirstObjectByType<BossTicketExchangeUI>(FindObjectsInactive.Include);
+        Check(exchange&&!exchange.gameObject.activeSelf,"One shared exchange starts closed");
+        var exchangeBuy=exchange.GetComponentsInChildren<Button>(true).Single(b=>b.name=="Confirm");
+        var exchangeCancel=exchange.GetComponentsInChildren<Button>(true).Single(b=>b.name=="Cancel");
+        Check(exchangeBuy.GetComponentsInChildren<TMP_Text>(true).Any(text=>text.gameObject.activeSelf&&text.text=="Buy")&&
+            exchangeCancel.GetComponentsInChildren<TMP_Text>(true).Any(text=>text.gameObject.activeSelf&&text.text=="Cancel"),
+            "Exchange uses visible Buy and Cancel labels");
+        var exchangePrice=exchangeBuy.GetComponentsInChildren<TMP_Text>(true).Single(t=>t.name=="TicketCount");
+        var exchangeStatus=exchange.GetComponentsInChildren<TMP_Text>(true).Single(t=>t.name=="ExchangeStatus");
+        var exchangeUnitPrice=exchange.GetComponentsInChildren<TMP_Text>(true).Single(t=>t.name=="UnitPrice");
+        var exchangeBalance=exchange.GetComponentsInChildren<TMP_Text>(true).Single(t=>t.name=="FishBalance");
+        foreach(string iconName in new[]{"UnitTicketIcon","UnitFishIcon","BalanceFishIcon","QuantityTicketIcon","TotalFishIcon"})
+            Check(exchange.GetComponentsInChildren<Image>(true).Any(i=>i.name==iconName&&i.sprite&&!i.raycastTarget),"Exchange has non-blocking currency artwork for "+iconName);
+        var exchangeQuantity=exchange.GetComponentsInChildren<TMP_Text>(true).Single(t=>t.name=="TicketQuantity");
+        var decrease=exchange.GetComponentsInChildren<Button>(true).Single(b=>b.name=="DecreaseQuantity");
+        var increase=exchange.GetComponentsInChildren<Button>(true).Single(b=>b.name=="IncreaseQuantity");
+        var maximum=exchange.GetComponentsInChildren<Button>(true).Single(b=>b.name=="MaxQuantity");
+        var mainPlus=nav.tickets.transform.parent.Find("AddBossTicket").GetComponent<Button>();
+        var addTicket=shop.balance.transform.parent.Find("AddBossTicket").GetComponent<Button>();
+        Check(((Image)mainPlus.targetGraphic).sprite==((Image)addTicket.targetGraphic).sprite,"Main and shop reuse the blue plus artwork");
+        var resizer=UnityEngine.Object.FindFirstObjectByType<ResisesSideMenuInLayoutGroup>();
+        var sidebar=(Toggle)new SerializedObject(resizer).FindProperty("expander").objectReferenceValue;
+        bool sidebarWasExpanded=sidebar.isOn;
+        nav.ShowPage(MainMenuPage.Dashboard);
+        yield return 4.0;
+        foreach(int width in new[]{1920,1280,1024,2560}){
+            Resolution(width,width==1920||width==2560?1080:width==1024?768:720);
+            foreach(bool expanded in new[]{false,true}){
+                sidebar.isOn=expanded;yield return .45;
+                var position=RectTransformUtility.WorldToScreenPoint(null,mainPlus.transform.position);
+                var headerHits=new System.Collections.Generic.List<RaycastResult>();
+                EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current){position=position},headerHits);
+                Check(headerHits.Count>0&&headerHits[0].gameObject==mainPlus.gameObject,"Main ticket plus is reachable at "+width+", expanded="+expanded);
+                Check(nav.tickets.text=="50"&&nav.tickets.textBounds.size.x>0&&nav.tickets.textBounds.size.y>0&&
+                    nav.tickets.rectTransform.rect.width>0&&nav.tickets.rectTransform.rect.height>0,"Main ticket count renders beside plus at "+width);
+                Capture("main-ticket-"+width+(expanded?"-expanded":"-collapsed"));yield return .15;
+            }
+            if(width==1920||width==1280){
+                EventSystem.current.SetSelectedGameObject(mainPlus.gameObject);
+                ExecuteEvents.Execute(mainPlus.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler);
+                Check(exchange.isActiveAndEnabled&&!shop.gameObject.activeSelf&&nav.CurrentPage==MainMenuPage.Dashboard&&exchangePrice.text=="100","Header opens exchange directly and keeps the current page");
+                Check(exchangeQuantity.text=="1"&&exchangeUnitPrice.text=="100"&&exchangeBalance.text=="1000"&&
+                    !decrease.interactable&&increase.interactable&&maximum.interactable,"Each opening starts at one ticket and shows the unit price and current balance");
+                EventSystem.current.SetSelectedGameObject(increase.gameObject);
+                ExecuteEvents.Execute(increase.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler);
+                Check(exchangeQuantity.text=="2"&&exchangePrice.text=="200"&&decrease.interactable,"Keyboard quantity increment updates the total");
+                yield return .2;Capture("main-ticket-exchange-"+width);yield return .15;
+                exchangeCancel.onClick.Invoke();
+                Check(!exchange.isActiveAndEnabled&&EventSystem.current.currentSelectedGameObject==mainPlus.gameObject,"Header exchange cancel restores focus to the plus");
+            }
+        }
+        sidebar.isOn=sidebarWasExpanded;
+        Resolution(1920,1080);
+        mainPlus.onClick.Invoke();increase.onClick.Invoke();increase.onClick.Invoke();exchangeBuy.onClick.Invoke();
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;
+        Check(!exchange.isActiveAndEnabled&&!shop.gameObject.activeSelf&&service.FishCoins==700&&service.Tickets==53,"Header purchase awards three tickets and deducts exactly 300 without the shop");
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.fishCoins=1000;data.tickets=50;})))yield return wait;
+        nav.ShowPage(MainMenuPage.CatHome);
         yield return 2.0;
         Capture("cat-home-entry-1920");yield return .2;
         launch.onClick.Invoke();yield return .5;Check(shop.gameObject.activeInHierarchy,"Shop launcher");
@@ -104,6 +163,60 @@ public static class LootShopPlayVerification
             Check(!shop.informationPanel.activeSelf,"Rates hidden by default");
             Capture("shop-"+width);yield return .2;
         }
+        int initialFish=service.FishCoins, initialTickets=service.Tickets;
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>data.fishCoins=300)))yield return wait;
+        var addFeedback=addTicket.GetComponent<JuicyButton>();
+        var addPointer=new PointerEventData(EventSystem.current);
+        var addRect=(RectTransform)addTicket.transform;
+        var addSize=addRect.rect.size;
+        Check(addSize==new Vector2(48,48)&&shop.balance.fontSize>25,"Ticket control keeps the authored hit area and readable count");
+        addFeedback.OnPointerEnter(addPointer);yield return .25;
+        Check(addFeedback.DrawScale.x>1,"Ticket plus hover");
+        addFeedback.OnPointerDown(addPointer);yield return .2;
+        Check(addFeedback.DrawScale.y<1,"Ticket plus press");
+        addFeedback.OnPointerExit(addPointer);yield return .55;
+        Check(Vector2.Distance(addFeedback.DrawScale,Vector2.one)<.01f&&addRect.rect.size==addSize,"Ticket plus settles on exit without moving its hit area");
+        foreach(int width in new[]{1920,1280}){
+            Resolution(width,width==1920?1080:720);yield return .4;
+            var plusPosition=RectTransformUtility.WorldToScreenPoint(null,addRect.TransformPoint(addRect.rect.center));
+            var addRaycasts=new System.Collections.Generic.List<RaycastResult>();
+            EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current){position=plusPosition},addRaycasts);
+            Check(addRaycasts.Count>0&&addRaycasts[0].gameObject==addTicket.gameObject,"Ticket plus is clickable at both sizes");
+            EventSystem.current.SetSelectedGameObject(addTicket.gameObject);
+            ExecuteEvents.Execute(addTicket.gameObject,new BaseEventData(EventSystem.current),ExecuteEvents.submitHandler);
+            Check(exchange.gameObject.activeSelf&&exchangeBuy.interactable&&exchangePrice.text=="100"&&
+                exchangeUnitPrice.text=="100"&&exchangeBalance.text=="300"&&exchangeStatus.text.Length==0&&
+                EventSystem.current.currentSelectedGameObject==exchangeCancel.gameObject,"Ticket plus opens the priced confirmation by keyboard");
+            maximum.onClick.Invoke();
+            Check(exchangeQuantity.text=="3"&&exchangePrice.text=="300"&&!increase.interactable&&!maximum.interactable,"Max uses the affordable quantity and disables further increases");
+            decrease.onClick.Invoke();
+            Check(exchangeQuantity.text=="2"&&exchangePrice.text=="200","Decreasing quantity immediately updates total price");
+            yield return .2;
+            addRaycasts.Clear();
+            EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current){position=plusPosition},addRaycasts);
+            Check(addRaycasts.Count>0&&addRaycasts[0].gameObject.transform.IsChildOf(exchange.transform),"Exchange confirmation blocks clicks on the ticket plus");
+            Capture("ticket-exchange-"+width);yield return .2;
+            exchangeCancel.onClick.Invoke();
+            Check(!exchange.gameObject.activeSelf&&service.FishCoins==300&&service.Tickets==initialTickets,"Dismissing exchange spends nothing");
+        }
+        addTicket.onClick.Invoke();increase.onClick.Invoke();
+        saveLock=TaskCalendarPlayVerification.FailSqliteWrites();
+        exchangeBuy.onClick.Invoke();foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;
+        Check(exchange.gameObject.activeSelf&&exchangeQuantity.text=="2"&&exchangePrice.text=="200"&&service.FishCoins==300&&service.Tickets==initialTickets,"Batch save failure preserves balances, quantity and total");
+        saveLock.Dispose();saveLock=null;
+        exchangeBuy.onClick.Invoke();exchangeBuy.onClick.Invoke();
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;
+        Check(!exchange.gameObject.activeSelf&&service.FishCoins==100&&service.Tickets==initialTickets+2&&shop.status.text=="+2 Boss Tickets","Retry and rapid confirmation award and display one batch");
+        Capture("ticket-exchange-success-1280");yield return .2;
+        addTicket.onClick.Invoke();exchangeBuy.onClick.Invoke();
+        foreach(var wait in TaskCalendarPlayVerification.Await(service.FlushAsync()))yield return wait;
+        Check(service.FishCoins==0&&service.Tickets==initialTickets+3,"Exact remaining balance and consecutive same-day exchange");
+        addTicket.onClick.Invoke();
+        Check(exchange.gameObject.activeSelf&&exchangeBalance.text=="0"&&!exchangeBuy.interactable&&!increase.interactable&&!maximum.interactable&&
+            exchangeStatus.text.Contains("Not enough Fish Coins"),"Insufficient Fish Coins disable purchase and quantity increases");
+        Capture("ticket-exchange-insufficient-1280");yield return .2;
+        exchangeCancel.onClick.Invoke();
+        foreach(var wait in TaskCalendarPlayVerification.Await(SqlitePlayVerificationSupport.FixtureAsync(data=>{data.fishCoins=initialFish;data.tickets=initialTickets;})))yield return wait;
         Resolution(1920,1080);yield return .3;
         Check(shop.panel.GetComponentsInChildren<Image>(true).Count(i=>i.name.StartsWith("RarityLabel"))==3,"Three equipment rarity badges");
         foreach(var b in shop.GetComponentsInChildren<Button>(true))if(b.targetGraphic is Image bi&&bi.type==Image.Type.Sliced)Check(bi.pixelsPerUnitMultiplier==2,"Button pixel multiplier");
@@ -324,6 +437,32 @@ public static class LootShopPlayVerification
         }
         Resolution(1280,720);yield return .3;
         var target=LootRules.Catalog.First(d=>d.IconName=="Armor_GauntletsGold");foreach(var wait in TaskCalendarPlayVerification.Await(service.EquipAsync(target.Id,EquipmentSlot.Weapon)))yield return wait;page.OpenItem(target.Id);yield return .4;Capture("gauntlets-detail-1280");yield return .2;
+        var upgradeDetail=page.transform.Find("ItemDetail").GetComponent<EquipmentItemDetailUI>();
+        int fishBeforePreview=service.FishCoins;
+        upgradeDetail.upgrade.onClick.Invoke();yield return .25;
+        var batchUpgrade=upgradeDetail.bulkUpgrade;
+        Check(batchUpgrade.isActiveAndEnabled,"Equipment upgrade opens its popup");
+        var batchConfirm=batchUpgrade.transform.Find("Popup/Button_Confirm").GetComponent<Button>();
+        var upgradePrice=batchConfirm.GetComponentInChildren<TMP_Text>();
+        var upgradeFish=batchConfirm.transform.Find("FishCostIcon").GetComponent<Image>();
+        var upgradeSlider=batchUpgrade.GetComponentInChildren<Slider>();
+        Check(((Image)batchConfirm.targetGraphic).sprite==((Image)upgradeDetail.upgrade.targetGraphic).sprite&&
+            upgradePrice.color==upgradeDetail.price.color&&upgradeFish.sprite,"Batch upgrade matches the green detail button and shows fish cost");
+        foreach(int width in new[]{1920,1280}){
+            Resolution(width,width==1920?1080:720);
+            foreach(int levels in new[]{1,7}){
+                upgradeSlider.value=levels;yield return .4;
+                upgradePrice.ForceMeshUpdate();
+                var buttonRect=(RectTransform)batchConfirm.transform;
+                float left=buttonRect.InverseTransformPoint(upgradeFish.rectTransform.TransformPoint(upgradeFish.rectTransform.rect.min)).x;
+                float right=buttonRect.InverseTransformPoint(upgradePrice.rectTransform.TransformPoint(upgradePrice.textBounds.max)).x;
+                Check(upgradePrice.text==(levels==1?"15":"210")&&Mathf.Abs((left+right)*.5f-buttonRect.rect.center.x)<8f,
+                    "Fish and price remain centered for "+levels+" levels at "+width);
+                Capture("bulk-upgrade-centered-"+width+"-"+levels);yield return .2;
+            }
+        }
+        batchUpgrade.transform.Find("Popup/Button_Cancel").GetComponent<Button>().onClick.Invoke();
+        Check(!batchUpgrade.gameObject.activeSelf&&service.FishCoins==fishBeforePreview,"Upgrade preview cancellation spends nothing");
         var detail=(EquipmentItemDetailUI)typeof(EquipmentPageUI).GetField("itemDetail",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(page);
         foreach(int width in new[]{1920,1280}){
             Resolution(width,width==1920?1080:720);yield return .3;
@@ -360,6 +499,6 @@ public static class LootShopPlayVerification
         claimPage.OpenClaim(3);yield return .2;foreach(var glow in claim.equipmentEffects)glow.SendMessage("OnApplicationFocus",true);
         claimPage.transform.Find("ItemModal/Card/Close").GetComponent<Button>().onClick.Invoke();
         Check(claim.equipmentEffects.All(e=>!e.IsPlaying),"Closing claim dialog clears particles");
-        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: serialized bindings; four shop sizes; cancel, save failure/retry, single/ten/duplicate submission; opening-time flight, faster ten pull and skip; catalog information; focus/disable cleanup; no-ticket state; 27-item inventory and gauntlet equip. Visual captures require inspection.");
+        File.WriteAllText(FolderNow+"/result.txt",DateTime.UtcNow.ToString("O")+" PASS: serialized bindings; four shop sizes; ticket exchange price, hit area, keyboard, cancellation, failure/retry, consecutive purchases and insufficient balance; single/ten/duplicate chest submission; opening-time flight, faster ten pull and skip; catalog information; focus/disable cleanup; no-ticket state; 27-item inventory and gauntlet equip. Visual captures require inspection.");
     }
 }

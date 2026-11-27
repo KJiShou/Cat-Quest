@@ -103,6 +103,9 @@ public sealed class MailInboxPanel : MonoBehaviour
             settings = transform.root.GetComponentInChildren<SettingsLauncher>(true);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             var feed = VerificationFeed;
+#if UNITY_EDITOR
+            if (feed == null && DemoProfile.IsActive) feed = DemoProfile.MailFeed;
+#endif
             if (feed == null && CompanionProtocol.HasArgument("--focus-smoke"))
                 feed = () => Task.Run(() => File.ReadAllText(manager.SavePath + ".mail-test.json"));
             feed ??= () => Task.FromException<string>(new IOException("Mail verification feed is not configured."));
@@ -117,6 +120,7 @@ public sealed class MailInboxPanel : MonoBehaviour
             service.RecordsChanged += OnRecordsChanged;
             updates = AppUpdateController.Ensure();
             if (updates) updates.Changed += OnUpdateChanged;
+            if (updates && DemoProfile.IsActive && updates.State == AppUpdateState.Idle) updates.Check();
             OnUpdateChanged();
             await ReloadAsync();
             if (this) await RefreshAsync();
@@ -146,6 +150,8 @@ public sealed class MailInboxPanel : MonoBehaviour
     {
         if (inbox == null || !updates) return;
         var release = updates.Release;
+        if (release == null && DemoProfile.IsActive && updates.State == AppUpdateState.Current)
+        { await ReloadAsync(); return; }
         if (release == null || !UpdateRules.IsNewer(release.version, Application.version)
             || ReferenceEquals(observedRelease, release)) return;
         observedRelease = release;
@@ -211,7 +217,8 @@ public sealed class MailInboxPanel : MonoBehaviour
         var gifts = await service.ReadVersionGiftsAsync();
         if (!this || generation != loadVersion) return;
         if (gifts.Succeeded) current.InsertRange(0, gifts.Value.Select(version => new Entry(version)));
-        if (inbox.Update != null && UpdateRules.IsNewer(inbox.Update.version, Application.version))
+        string installed = updates && DemoProfile.IsActive ? updates.InstalledVersion : Application.version;
+        if (inbox.Update != null && UpdateRules.IsNewer(inbox.Update.version, installed))
             current.Insert(0, new Entry(inbox.Update));
         var saved = await service.ReadMailStatesAsync(current.Select(letter => letter.Key));
         if (!this || generation != loadVersion) return;

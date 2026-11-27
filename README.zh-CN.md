@@ -157,6 +157,17 @@ Tasks 还提供 **List / Calendar** 切换。月历展示已安排的 Todo、**N
 
 ## 运行 Unity 工程
 
+### 离线演示
+
+在 Windows 的 Unity Editor 中，选择 **Tools → Cat Quest → Test Account → Start Fresh Demo Run**，然后按 **Play**。打开后完成 **Review the presentation slides**，猫咪会从 Lv.24 升到 Lv.25，也会解锁当天的第三项任务奖励。
+
+- **信箱和排行榜**：点击信封领取鱼币与 Boss 门票。排行榜的四个类别均有样例玩家和随本轮进度变化的 **Your Rank**，也可打开玩家资料。
+- **应用更新**：从信箱里的更新通知打开 Updates，点 **Simulate download → Apply demo update**，再回信箱领升级礼物。模拟更新只写入本轮演示存档。
+- **装备和战斗**：在 Cat Home 升级已装备的 Demon Weapon，试穿传说装备。可开启商店宝箱、领取 Cyclope 熟练度奖励、挑战三个普通 Boss 和 Master Stage。
+- **任务、专注和 Chat**：已有每日任务、子任务、标签、日历和历史记录。Focus 统计有七天样本，当天的 25 分钟奖励可直接领。Chat 可用中文或英文请求一项任务，查看、编辑并确认离线草稿。
+
+**Use Demo Account** 会继续最近一轮，**Start Fresh Demo Run** 会另开一轮并保留旧档。**Use Original Account** 可切回平时使用的存档。初次教学和开场故事可用 **Reset Beginner Account** 演示。Pet Widget 可使用项目的 `Builds/Windows/CatQuest.exe` 打开独立伙伴窗口。真实 Google 登录和线上榜单使用常规账号流程。
+
 ### 环境要求
 
 | 要求 | 项目配置 |

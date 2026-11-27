@@ -31,16 +31,28 @@ writes leave local task data intact. Completion and reward rules are unchanged.
 
 ## Conversation and privacy
 
-Only user-sent messages and requested task facts are sent using the connected
-ChatGPT plan. Credentials remain protected by Windows DPAPI. The single chat is
-stored separately in `ai/chat.dpapi`, also protected by DPAPI. It never changes
-the player-save schema. Clearing chat keeps saved tasks.
+The connected ChatGPT plan receives chat text and requested task facts.
+Windows DPAPI protects credentials and the local conversation in
+`ai/chat.dpapi`, including the original messages and any rolling summary.
+The player-save schema stays the same. Clearing chat removes its summary and
+keeps saved tasks.
 
-Requests include up to 20 recent messages / 16,000 text characters. Each message
-is limited to 2,000 characters. Older conversation is still visible locally but
-may not be sent. Fresh task lookups resolve current facts. One request runs at a
-time. Stop, disconnect, model changes and clear discard late responses. Changing
-pages retains the session. Failed requests can be retried.
+A reply includes up to 20 recent original messages. Their text and the summary
+share a 16,000-character budget. User messages are limited to 2,000 characters.
+When older messages no longer fit, an extra request merges a bounded batch of
+older chat text with the previous summary, up to 3,000 summary characters. Long
+existing histories are processed over multiple turns. If summarizing fails, the
+reply uses the prior summary if available and the latest messages that fit.
+Fresh task lookups resolve current facts. One request runs at a time. Stop,
+disconnect, model changes and clear discard late responses. Changing pages
+retains the session. SSE text appears in a single provisional bubble as the
+model replies. For a new question, Stop closes the request and retains any visible text as a
+Stopped message in local history. Stopped messages stay out of model prompts
+and rolling summaries. Regenerate replaces the latest eligible reply using the
+same question. The previous reply and its drafts survive cancellation or failure
+until the replacement is saved. A new rolling summary is saved together with its
+completed reply. Replies with saved tasks are kept. Failed requests can be
+retried from the original question.
 
 The main Unity process owns queries and confirmation. The Companion does not
 initialize AI. Tests use injected stores or isolated directories and never use the

@@ -253,6 +253,53 @@ public static class AiPlayVerification
             Check(corners.All(c=>c.y>=0 && c.y<=Screen.height),"Review save button outside screen.");
             Check(page.editorOverlay.transform.parent==page.GetComponentInParent<Canvas>().rootCanvas.transform,"Review mask not full canvas.");
             Capture("chat-review-"+size.x);yield return .2;
+
+            context = "chat review schedule " + size;
+            var picker = page.editor.datePicker;
+            Click(picker.dateButton); yield return .3;
+            var today = DateTime.Today;
+            var first = new DateTime(today.Year, today.Month, 1);
+            var todayButton = picker.days[today.Day - 1 + ((int)first.DayOfWeek + 6) % 7];
+            var todayLabel = todayButton.GetComponentInChildren<TMP_Text>();
+            Check(picker.overlay.activeInHierarchy && !picker.HasDate && todayLabel.text == today.Day.ToString(),
+                "Schedule should open on the current month without setting a date.");
+            if (!before)
+            {
+                Check(todayLabel.color == Color.white, "Today needs a white label before it is selected.");
+                Check(todayButton.image.color == (Color)new Color32(20, 45, 77, 255), "Today's navy highlight was replaced.");
+            }
+            Capture("chat-review-schedule-" + size.x); yield return .2;
+
+            var dayFeedback = todayButton.GetComponent<JuicyButton>();
+            Check(dayFeedback, "Calendar day lost its shared feedback.");
+            var dayPointer = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
+            ExecuteEvents.Execute(todayButton.gameObject, dayPointer, ExecuteEvents.pointerEnterHandler);
+            yield return .2;
+            Check(dayFeedback.DrawShine > .05f, "Calendar day hover did not animate.");
+            ExecuteEvents.Execute(todayButton.gameObject, dayPointer, ExecuteEvents.pointerDownHandler);
+            yield return .2;
+            Check(UiMotion.Reduced ? dayFeedback.DrawShine < .1f : dayFeedback.DrawScale.y < 1, "Calendar day press did not animate.");
+            ExecuteEvents.Execute(todayButton.gameObject, dayPointer, ExecuteEvents.pointerUpHandler);
+            ExecuteEvents.Execute(todayButton.gameObject, dayPointer, ExecuteEvents.pointerExitHandler);
+            yield return .35;
+            Check(dayFeedback.DrawShine < .02f && Vector2.Distance(dayFeedback.DrawScale, Vector2.one) < .02f,
+                "Calendar day feedback did not settle after pointer exit.");
+
+            var currentMonth = picker.monthLabel.text;
+            Click(picker.nextMonth); yield return .2;
+            Check(picker.monthLabel.text != currentMonth, "Calendar did not advance to the next month.");
+            Click(picker.previousMonth); yield return .2;
+            Check(picker.monthLabel.text == currentMonth, "Calendar did not return to the current month.");
+            EventSystem.current.SetSelectedGameObject(todayButton.gameObject);
+            ExecuteEvents.Execute(todayButton.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+            yield return .2;
+            Check(picker.HasDate && picker.SelectedDate == today && !picker.overlay.activeSelf, "Keyboard date selection failed.");
+            Click(picker.dateButton); yield return .2;
+            Check(todayLabel.color == Color.white, "Selected today lost its white label.");
+            if (!before) Check(todayButton.image.color == (Color)new Color32(0, 156, 246, 255), "Selected date lost its blue highlight.");
+            Capture("chat-review-schedule-selected-" + size.x); yield return .2;
+            Click(picker.noDate); yield return .2;
+            Check(!picker.HasDate && !picker.overlay.activeSelf, "No date did not clear and dismiss the calendar.");
         }
         Click(page.saveDraft); yield return .3;
         Check(draft.state == "saved" && GameDataManager.EnsureInstance().Service.TaskSnapshot.tasks.Count(t => t.id == draft.task.id) == 1, "Confirmed task not saved exactly once.");
@@ -304,7 +351,90 @@ public static class AiPlayVerification
         yield return .2; Click(page.saveDraft); yield return .2;
         Check(page.editorOverlay.activeSelf && page.reviewStatus.text.Contains("title"),"Save error was hidden by review modal.");
         Click(page.cancelDraft); yield return .2;
+
+        context = "streaming, stop and regeneration";
+        client.Chat.Clear();
+        page.input.text = "Show a streamed study suggestion";
+        Canvas.ForceUpdateCanvases();
+        var sendBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(page.transform, page.send.transform);
+        EventSystem.current.SetSelectedGameObject(page.send.gameObject);
+        ExecuteEvents.Execute(page.send.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+        yield return .15;
+        Canvas.ForceUpdateCanvases();
+        var stopBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(page.transform, page.stop.transform);
+        Check(!page.send.gameObject.activeSelf && page.stop.gameObject.activeInHierarchy &&
+            Vector3.Distance(sendBounds.center, stopBounds.center) < 1 && Vector3.Distance(sendBounds.size, stopBounds.size) < 1,
+            "Stop did not replace Send in its original slot.");
+        Check(EventSystem.current.currentSelectedGameObject == page.stop.gameObject, "Keyboard focus did not transfer to Stop.");
+        var streamResult = fake.pending;
+        fake.delta("{\"message\":\"Start with 10 minutes. ");
+        yield return .15;
+        var preview = page.content.GetComponentsInChildren<AiChatRow>().Last();
+        Check(client.Chat.Busy && !page.thinking.enabled && preview.text.text == "Start with 10 minutes. |" &&
+            client.Chat.History.messages.Count == 1, "Partial text did not appear before request completion.");
+        byte cursorBefore = CursorAlpha(preview);
+        yield return .5;
+        Check(CursorAlpha(preview) != cursorBefore, "Streaming cursor did not blink.");
+        fake.delta("Then take a short break.");
+        yield return .2;
+        Check(page.content.GetComponentsInChildren<AiChatRow>().Last() == preview &&
+            preview.text.text == "Start with 10 minutes. Then take a short break.|", "A delta replaced the existing preview row.");
+
+        foreach (var size in new[] { new Vector2Int(1920, 1080), new Vector2Int(1280, 720) }) {
+            typeof(SettingsPlayVerification).GetMethod("Resolution", Hidden).Invoke(null, new object[] { size });
+            yield return .3;
+            Capture("chat-streaming-" + size.x); yield return .2;
+        }
+        Click(page.stop);
+        yield return .15;
+        Check(fake.cancellation.IsCancellationRequested && client.Chat.History.messages.Count == 2 &&
+            client.Chat.History.messages.Last().stopped && preview.stoppedLabel.isActiveAndEnabled &&
+            page.replyActions.activeInHierarchy && !preview.text.text.EndsWith("|") &&
+            page.send.gameObject.activeInHierarchy && !page.stop.gameObject.activeSelf, "Stopped bubble or composer state did not settle.");
+        fake.delta("Ignored late text");
+        streamResult.SetResult("{\"message\":\"Late final\",\"drafts\":[]}");
+        foreach (var size in new[] { new Vector2Int(1280, 720), new Vector2Int(1920, 1080) }) {
+            typeof(SettingsPlayVerification).GetMethod("Resolution", Hidden).Invoke(null, new object[] { size });
+            yield return .3;
+            Capture("chat-stopped-" + size.x); yield return .2;
+        }
+        page.scroll.verticalNormalizedPosition = 0;
+        yield return .15;
+        int previousRequests = fake.requests;
+        Click(page.retry);
+        page.retry.onClick.Invoke();
+        yield return .15;
+        Check(fake.requests == previousRequests + 1 && client.Chat.History.messages.Count == 2 && client.Chat.VisibleMessageCount == 1 &&
+            page.content.GetComponentsInChildren<AiChatRow>().Length == 1, "Regenerate did not remove the stopped row or prevent duplicate requests.");
+        fake.pending.SetResult("{\"message\":\"Here is a second suggestion.\",\"drafts\":[]}");
+        yield return .2;
+        Check(page.replyActions.activeInHierarchy && client.Chat.History.messages.Last().text == "Here is a second suggestion.",
+            "The final replacement or regenerate action was missing.");
+
+        context = "streaming while reviewing earlier messages";
+        page.SendText("Stream a long answer");
+        fake.delta("{\"message\":\"" + string.Concat(Enumerable.Repeat("A long streaming line for scrolling.\\n", 35)));
+        yield return .25;
+        Check(page.content.rect.height > page.scroll.viewport.rect.height, "The long stream did not overflow the viewport.");
+        page.scroll.verticalNormalizedPosition = 1;
+        yield return .15;
+        float priorOffset = page.content.anchoredPosition.y;
+        fake.delta(string.Concat(Enumerable.Repeat("A continuation.\\n", 10)));
+        yield return .2;
+        Check(Mathf.Abs(page.content.anchoredPosition.y - priorOffset) < 2, "Streaming moved a reader away from earlier messages.");
+        var cancelled = fake.pending;
+        Click(page.stop);
+        cancelled.SetResult("{\"message\":\"Late long answer\",\"drafts\":[]}");
+        yield return .15;
     }
+
+    static byte CursorAlpha(AiChatRow row)
+    {
+        var info = row.text.textInfo;
+        var glyph = info.characterInfo[info.characterCount - 1];
+        return info.meshInfo[glyph.materialReferenceIndex].colors32[glyph.vertexIndex].a;
+    }
+
     sealed class UiStore : IChatGptStorage
     {
         readonly Dictionary<string, string> data = new Dictionary<string, string> {
@@ -318,10 +448,18 @@ public static class AiPlayVerification
         public const string Models = "{\"models\":[{\"visibility\":\"list\",\"slug\":\"mock\"}]}";
         public TaskCompletionSource<string> modelResponse;
         public TaskCompletionSource<string> pending; public int requests;
-        public Task<string> Send(string url, string method, string body, string type, string bearer, bool stream, CancellationToken token)
+        public Action<string> delta;
+        public CancellationToken cancellation;
+        public Task<string> Send(string url, string method, string body, string type, string bearer, bool stream, CancellationToken token, Action<string> onDelta = null)
         {
             if (url.EndsWith("/models")) return modelResponse?.Task ?? Task.FromResult(Models);
-            if (url.EndsWith("/responses")) { requests++; pending = new TaskCompletionSource<string>(); return pending.Task; }
+            if (url.EndsWith("/responses")) {
+                requests++;
+                delta = onDelta;
+                cancellation = token;
+                pending = new TaskCompletionSource<string>();
+                return pending.Task;
+            }
             return Task.FromResult("");
         }
     }

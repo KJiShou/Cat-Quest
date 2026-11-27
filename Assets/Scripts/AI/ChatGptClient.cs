@@ -56,8 +56,18 @@ public sealed class ChatGptClient : MonoBehaviour
         if (!string.IsNullOrEmpty(isolated)) directory = isolated;
         else if (!string.IsNullOrEmpty(testSave)) directory = Path.Combine(Path.GetDirectoryName(testSave), "ai");
         if (AiBuildSmoke.Enabled) directory = Path.Combine(AiBuildSmoke.DirectoryPath, "ai");
-        Connection = new ChatGptConnection(verificationStorage ?? new ChatGptStorage(directory), verificationHttp ?? new ChatGptHttp());
-        Chat = new AiChatSession(Connection, verificationStorage ?? new ChatGptStorage(directory), GameDataManager.EnsureInstance().Service);
+        IChatGptStorage storage = verificationStorage;
+        IChatGptHttp http = verificationHttp;
+#if UNITY_EDITOR
+        if (DemoProfile.IsActive)
+        {
+            storage ??= new DemoProfile.ChatStorage();
+            http ??= new DemoProfile.ChatHttp();
+        }
+#endif
+        storage ??= new ChatGptStorage(directory);
+        Connection = new ChatGptConnection(storage, http ?? new ChatGptHttp());
+        Chat = new AiChatSession(Connection, storage, GameDataManager.EnsureInstance().Service);
 
         Status = "Loading AI settings...";
         StartOperation(Connection.Initialize(), () => { Chat.Load(); Ready = true; Status = Connection.Connected ? string.Empty : "Connect ChatGPT to chat and plan tasks."; });
@@ -93,6 +103,7 @@ public sealed class ChatGptClient : MonoBehaviour
     }
     public void Connect()
     {
+        if (DemoProfile.IsActive) { Status = "This demo uses offline Chat replies."; Changed?.Invoke(); return; }
         if (!Ready || Busy || Connection.Connected) return;
         Chat?.Stop(); cancellation = new CancellationTokenSource();
         try
@@ -125,6 +136,7 @@ public sealed class ChatGptClient : MonoBehaviour
     }
     public void Disconnect()
     {
+        if (DemoProfile.IsActive) { Status = "This demo uses offline Chat replies."; Changed?.Invoke(); return; }
         if (!Ready || Busy) return;
         Chat?.Stop(); cancellation = new CancellationTokenSource();
         Status = "Disconnecting ChatGPT...";

@@ -39,6 +39,8 @@ public sealed class CharacterHomePreview : MonoBehaviour
     private Vector2 halfSize;
     private bool initialized;
     private PreviewPixels.ResizeGate resizeGate;
+    [SerializeField] bool enableParallax;
+    private CatSceneParallax parallax;
     // Dashboard and Cat Home share the authored forest camera. Disabled pages keep
     // their binding so its original state is captured once, not from another page.
     private sealed class CameraBinding
@@ -48,6 +50,7 @@ public sealed class CharacterHomePreview : MonoBehaviour
         public RenderTexture originalTarget;
         public readonly HashSet<CharacterHomePreview> users = new HashSet<CharacterHomePreview>();
         public readonly HashSet<CharacterHomePreview> activeUsers = new HashSet<CharacterHomePreview>();
+        public CharacterHomePreview owner;
     }
     private static readonly Dictionary<Camera, CameraBinding> sharedCameras = new Dictionary<Camera, CameraBinding>();
     private CameraBinding cameraBinding;
@@ -67,6 +70,7 @@ public sealed class CharacterHomePreview : MonoBehaviour
         if (placeholder) placeholder.enabled = !view.enabled;
         if (!previewCamera || !character) return;
         if (Application.isPlaying && !ownedStage) BindCamera();
+        if (Application.isPlaying && enableParallax) previewCamera.TryGetComponent(out parallax);
         if (!initialized)
         {
             originalTarget = cameraBinding != null ? cameraBinding.originalTarget : previewCamera.targetTexture;
@@ -89,12 +93,20 @@ public sealed class CharacterHomePreview : MonoBehaviour
             cameraBinding.users.Add(this);
         }
         cameraBinding.activeUsers.Add(this);
+        if (cameraBinding.owner && cameraBinding.owner != this) cameraBinding.owner.ResetParallax();
+        cameraBinding.owner = this;
         RefreshCamera(cameraBinding);
     }
 
     private static void RefreshCamera(CameraBinding binding, CharacterHomePreview releasing = null)
     {
         if (!binding.camera) return;
+        if (releasing && binding.owner == releasing)
+        {
+            binding.owner = null;
+            foreach (var owner in binding.activeUsers)
+                if (owner) { binding.owner = owner; break; }
+        }
         if (binding.activeUsers.Count == 0) binding.camera.targetTexture = binding.originalTarget;
         else if (releasing && binding.camera.targetTexture == releasing.texture)
         {
@@ -172,7 +184,8 @@ public sealed class CharacterHomePreview : MonoBehaviour
     private void LateUpdate()
     {
         if (!previewCamera || !character || !view) return;
-        if (WindowsAppWindow.IsMinimized) { previewCamera.enabled = false; return; }
+        if (cameraBinding != null && cameraBinding.owner != this) return;
+        if (WindowsAppWindow.IsMinimized) { ResetParallax(); previewCamera.enabled = false; return; }
         SyncLayout();
         var rect = view.rectTransform.rect;
         if (rect.width <= 0 || rect.height <= 0) return;
@@ -191,16 +204,25 @@ public sealed class CharacterHomePreview : MonoBehaviour
         view.texture = texture;
         previewCamera.orthographic = true;
         previewCamera.aspect = aspect;
-        if (!fixedFraming || halfSize == Vector2.zero) { halfSize = character.bounds.extents; fixedCenter = character.bounds.center; }
+        var bounds = character.bounds;
+        if (!fixedFraming || halfSize == Vector2.zero) { halfSize = bounds.extents; fixedCenter = bounds.center; }
         float fill = ownedStage ? .8f : .55f;
         previewCamera.orthographicSize = showSceneBackground && (!ownedStage || environmentPrefab) ? backgroundOrthographicSize : Mathf.Max(ownedStage ? .1f : 1f,
             halfSize.y / fill, halfSize.x / (aspect * fill)) / Mathf.Max(.1f, framingZoom);
-        var center = (fixedFraming ? fixedCenter : character.bounds.center) + new Vector3(framingOffset.x * halfSize.x, framingOffset.y * halfSize.y, 0);
-        previewCamera.transform.position = new Vector3(center.x, center.y, previewCamera.transform.position.z);
+        var center = (fixedFraming ? fixedCenter : bounds.center) + new Vector3(framingOffset.x * halfSize.x, framingOffset.y * halfSize.y, 0);
+        var framing = new Vector3(center.x, center.y, previewCamera.transform.position.z);
+        if (parallax) parallax.Apply(framing);
+        else previewCamera.transform.position = framing;
+    }
+
+    private void ResetParallax()
+    {
+        if (parallax) parallax.ResetOffset();
     }
 
     private void OnDisable()
     {
+        if (cameraBinding == null || cameraBinding.owner == this) ResetParallax();
         if (ownedStage) ownedStage.SetActive(false);
         if (cameraBinding != null) { cameraBinding.activeUsers.Remove(this); RefreshCamera(cameraBinding, this); }
         else if (initialized && previewCamera) previewCamera.targetTexture = originalTarget;

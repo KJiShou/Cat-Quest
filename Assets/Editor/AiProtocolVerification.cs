@@ -47,7 +47,7 @@ public static class AiProtocolVerification
     }
     sealed class Http : IChatGptHttp {
         public int refreshes,calls;
-        public Task<string> Send(string url,string method,string body,string type,string bearer,bool stream,CancellationToken token) {
+        public Task<string> Send(string url,string method,string body,string type,string bearer,bool stream,CancellationToken token, Action<string> onDelta = null) {
             Interlocked.Increment(ref calls);
             if(url.EndsWith("/oauth/token")) { Interlocked.Increment(ref refreshes); return Task.FromResult("{\"access_token\":\"renewed\",\"refresh_token\":\"rotated\",\"expires_in\":3600}"); }
             if(url.EndsWith("/models"))return Task.FromResult("{\"models\":[{\"visibility\":\"hidden\",\"slug\":\"hidden\"},{\"visibility\":\"list\",\"slug\":\"first\"},{\"visibility\":\"list\",\"slug\":\"second\"}]}");
@@ -87,13 +87,22 @@ public static class AiProtocolVerification
         using var http=new ChatGptHttp();
         foreach(int code in new[]{401,403,429,503}) { bool failed=false; try { await Reply(http,code,"{}"); } catch(ArgumentException) { failed=true; } Check(failed,"HTTP error accepted."); }
         bool truncated=false; try { await Reply(http,200,"data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n",true); } catch(ArgumentException) { truncated=true; } Check(truncated,"Truncated stream accepted.");
+        using (var stop = new CancellationTokenSource(3000)) {
+            string delta = null;
+            bool stopped = false;
+            try {
+                await Reply(http, 200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"early\"}\n\n", true, true, stop.Token,
+                    fragment => { delta = fragment; stop.Cancel(); });
+            } catch (OperationCanceledException) { stopped = true; }
+            Check(stopped && delta == "early", "SSE text was not delivered before completion and cancellation.");
+        }
         using var cancel=new CancellationTokenSource(100); bool cancelled=false;
         try { await Reply(http,200,"",true,true,cancel.Token); } catch(OperationCanceledException) { cancelled=true; } Check(cancelled,"Cancellation failed.");
         bool timeout=false; var elapsed=System.Diagnostics.Stopwatch.StartNew();
         try { await Reply(http,200,"",true,true); } catch(ArgumentException error) { timeout=error.Message.Contains("timed out"); }
         Check(timeout&&elapsed.Elapsed.TotalSeconds>=19&&elapsed.Elapsed.TotalSeconds<26,"Deadline failed.");
     }
-    static async Task<string> Reply(ChatGptHttp http,int code,string body,bool stream=false,bool stall=false,CancellationToken cancellation=default)
+    static async Task<string> Reply(ChatGptHttp http,int code,string body,bool stream=false,bool stall=false,CancellationToken cancellation=default,Action<string> onDelta=null)
     {
         var listener=new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback,0); listener.Start(); using var stop=new CancellationTokenSource();
         int port=((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
@@ -103,7 +112,7 @@ public static class AiProtocolVerification
             await wire.WriteAsync(prefix,0,prefix.Length,stop.Token).ConfigureAwait(false); await wire.WriteAsync(data,0,data.Length,stop.Token).ConfigureAwait(false);
             if(stall) await Task.Delay(30000,stop.Token).ConfigureAwait(false);
         });
-        try { return await http.Send("http://127.0.0.1:"+port+"/synthetic","GET",null,null,null,stream,cancellation).ConfigureAwait(false); }
+        try { return await http.Send("http://127.0.0.1:"+port+"/synthetic","GET",null,null,null,stream,cancellation,onDelta).ConfigureAwait(false); }
         finally { stop.Cancel(); listener.Stop(); try { await server.ConfigureAwait(false); } catch(OperationCanceledException) { } }
     }
 }

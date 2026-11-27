@@ -16,6 +16,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
     public Toggle notifications, upload;
     public Toggle reduceMotion;
     [SerializeField] Toggle pauseMusicWhenUnfocused;
+    [SerializeField] Toggle preloadPetWidget;
     public Slider sound, music;
     public Button soundMute, musicMute;
     public SettingsSliderCommit soundCommit, musicCommit;
@@ -80,6 +81,8 @@ public sealed class SettingsPanelUI : MonoBehaviour
         if(reduceMotion)reduceMotion.onValueChanged.AddListener(_ => { if(!refreshing)SaveSettings(); });
         if (pauseMusicWhenUnfocused)
             pauseMusicWhenUnfocused.onValueChanged.AddListener(_ => { if (!refreshing) SaveSettings(); });
+        preloadPetWidget.transform.parent.gameObject.SetActive(AppPlatform.WindowsDesktop);
+        preloadPetWidget.onValueChanged.AddListener(_ => { if (!refreshing) SaveSettings(); });
         sound.onValueChanged.AddListener(_ => PreviewVolumes(soundCommit));
         music.onValueChanged.AddListener(_ => PreviewVolumes(musicCommit));
         soundMute.onClick.AddListener(ToggleSoundMute);
@@ -237,6 +240,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         draft.soundVolume = sound.value;
         draft.musicVolume = music.value;
         if (pauseMusicWhenUnfocused) draft.playMusicInBackground = !pauseMusicWhenUnfocused.isOn;
+        if (AppPlatform.WindowsDesktop) draft.preloadPetWidget = preloadPetWidget.isOn;
         draft.defaultTaskTab = selectedTaskTab;
         draft.dashboardRanking = selectedRanking.ToString();
         draft.hideDashboardRanking = !showDashboardRanking.isOn;
@@ -362,6 +366,7 @@ public sealed class SettingsPanelUI : MonoBehaviour
         notifications.SetIsOnWithoutNotify(saved.notificationsEnabled);
         if(reduceMotion)reduceMotion.SetIsOnWithoutNotify(saved.reduceMotion);
         if (pauseMusicWhenUnfocused) pauseMusicWhenUnfocused.SetIsOnWithoutNotify(!saved.playMusicInBackground);
+        preloadPetWidget.SetIsOnWithoutNotify(saved.preloadPetWidget);
         sound.SetValueWithoutNotify(saved.soundVolume); music.SetValueWithoutNotify(saved.musicVolume);
         RememberVolumes();
         // Native sliders do not notify visual adapters during programmatic initialization.

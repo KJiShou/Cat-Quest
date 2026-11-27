@@ -25,6 +25,8 @@ public sealed class LootShopUI : MonoBehaviour
     public TMP_Text informationText;
     public TMP_Text[] rarityRates, duplicateValues;
     public TMP_Text confirmCost;
+    [SerializeField] Button addTicket;
+    [SerializeField] BossTicketExchangeUI ticketExchange;
     public EquipmentItemDetailUI hoverDetail;
     public Sprite[] slotIcons, statIcons;
     public Image flyingIcon;
@@ -48,6 +50,7 @@ public sealed class LootShopUI : MonoBehaviour
         keyboard=GetComponent<TaskDialogKeyboard>();
         close.onClick.AddListener(Close);
         single.onClick.AddListener(()=>Prepare(1));ten.onClick.AddListener(()=>Prepare(10));
+        addTicket.onClick.AddListener(PrepareTicketExchange);
         confirm.onClick.AddListener(Purchase);cancel.onClick.AddListener(Cancel);
         skip.onClick.AddListener(FinishReveal);done.onClick.AddListener(CloseResults);
         information.onClick.AddListener(OpenInformation);informationClose.onClick.AddListener(CloseInformation);
@@ -75,10 +78,11 @@ public sealed class LootShopUI : MonoBehaviour
         for(int i=0;i<catalog.Length;i++)catalog[i].SetOwned(service.OwnsEquipment(LootRules.Catalog[i].Id));
         single.interactable=!busy&&service.LootError(1)==null;
         ten.interactable=!busy&&service.LootError(10)==null;
+        addTicket.interactable=!busy&&ticketExchange&&service.IsReady;
         if(!busy)status.text=service.LootError(1)??"";
     }
     void FocusMain(){
-        keyboard.enabled=true;keyboard.Open(new[]{close,information,single,ten}.Where(b=>b&&b.interactable).ToArray(),Close);
+        keyboard.enabled=true;keyboard.Open(new[]{close,addTicket,information,single,ten}.Where(b=>b&&b.interactable).ToArray(),Close);
     }
     public void OpenInformation(){if(busy)return;HideHover();informationPanel.SetActive(true);keyboard.Open(new[]{informationClose}.Concat(catalog.Select(c=>c.button)).ToArray(),CloseInformation);}
     public void CloseInformation(){HideHover();informationPanel.SetActive(false);FocusMain();}
@@ -105,7 +109,23 @@ public sealed class LootShopUI : MonoBehaviour
         pendingCount=count;requestId=Guid.NewGuid().ToString("N");busy=true;Refresh();
         confirmationText.text=$"Open {count} chest{(count==1?"":"s")}?";
         confirmCost.text=count.ToString();
+        confirm.interactable=true;
         confirmation.SetActive(true);keyboard.Open(new[]{cancel,confirm},Cancel);
+    }
+    void PrepareTicketExchange(){
+        if(busy||!ticketExchange)return;
+        HideHover();
+        if(!ticketExchange.Open(service,addTicket,FinishTicketExchange))return;
+        busy=true;
+        keyboard.enabled=false;
+        Refresh();
+    }
+    void FinishTicketExchange(int purchased){
+        if(!this||!isActiveAndEnabled)return;
+        busy=false;
+        Refresh();
+        if(purchased>0)status.text=$"+{purchased} Boss Ticket{(purchased==1?"":"s")}";
+        FocusMain();
     }
     void Cancel(){confirmation.SetActive(false);busy=false;pendingCount=0;requestId=null;Refresh();FocusMain();}
     public async void Purchase(){

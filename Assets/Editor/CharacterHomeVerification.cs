@@ -85,6 +85,14 @@ public static class CharacterHomeVerification
             }
             var catPreview = home.GetComponentInChildren<CharacterHomePreview>(true);
             Require(catPreview && catPreview.previewCamera == preview.previewCamera && catPreview.character == preview.character, "Cat Home must use the authored scene preview.");
+            var focusPreview = navigation.pages[(int)MainMenuPage.Focus].GetComponentInChildren<FocusScenePreview>(true);
+            foreach (var sceneView in new Component[] { preview, catPreview, focusPreview })
+                Require(new SerializedObject(sceneView).FindProperty("enableParallax").boolValue, "Missing preview parallax opt-in.");
+            var parallax = preview.previewCamera.GetComponent<CatSceneParallax>();
+            Require(parallax, "Missing shared forest parallax.");
+            var layers = new SerializedObject(parallax);
+            Require(layers.FindProperty("farLayer").objectReferenceValue && layers.FindProperty("nearLayer").objectReferenceValue,
+                "Missing forest depth layer bindings.");
             Require(preview.GetComponent<RectTransform>().anchoredPosition == Vector2.zero, "Preview is not centered.");
             for (int i = 0; i < navigation.pages.Length; i++)
             {

@@ -1,63 +1,86 @@
-using TMPro;
+using System.Linq;
 using UnityEngine;
 
 public sealed class FocusExitGuard : MonoBehaviour
 {
     bool exitPending;
-    int dialogGeneration;
-    GameObject dialog;
+    FocusCancelConfirmation dialog;
     FocusController dialogFocus;
-    TMP_Text dialogLabel, stayLabel, quitLabel;
-    void OnEnable() { Application.wantsToQuit+=WantsToQuit; }
-    void OnDisable() { Application.wantsToQuit-=WantsToQuit; Dismiss(); }
+
+    void OnEnable() => Application.wantsToQuit += WantsToQuit;
+
+    void OnDisable()
+    {
+        Application.wantsToQuit -= WantsToQuit;
+        if (dialog) dialog.Dismiss();
+    }
+
     bool WantsToQuit()
     {
-        var focus=GetComponent<FocusRunner>().Controller;
-        if(focus.Phase!=FocusPhase.Focusing && focus.Phase!=FocusPhase.Saving) return true;
-        if(dialog) return false;
-        var panel=FindFirstObjectByType<FocusPanelUI>(FindObjectsInactive.Include);
-        if(!panel) return false;
-        var canvas=panel.GetComponentInParent<UnityEngine.Canvas>();
-        var ui=new TaskUIBuilder(panel.timer.font,panel.settingsSprite);
-        var overlay=TaskUIBuilder.Rect(canvas.transform,"ExitFocusConfirmation"); TaskUIBuilder.Stretch(overlay);
-        ui.Image(overlay,new Color(0,0,0,.7f)); dialog=overlay.gameObject;
-        var card=TaskUIBuilder.Rect(overlay,"Dialog"); card.anchorMin=new Vector2(.3f,.35f); card.anchorMax=new Vector2(.7f,.65f); card.offsetMin=card.offsetMax=Vector2.zero;
-        ui.Image(card,new Color32(240,250,255,255),ui.Rounded);
-        var label=ui.Text(card,"",23);
-        label.alignment=TextAlignmentOptions.Center; label.rectTransform.anchorMin=new Vector2(.05f,.4f);label.rectTransform.anchorMax=new Vector2(.95f,.95f);label.rectTransform.offsetMin=label.rectTransform.offsetMax=Vector2.zero;
-        var stay=ui.Button(card,"Stay","Keep focusing"); Place(stay.transform,.05f,.08f,.48f,.3f); stay.onClick.AddListener(Dismiss);
-        var quit=ui.Button(card,"Quit","Cancel and exit"); Place(quit.transform,.52f,.08f,.95f,.3f);
-        dialogFocus=focus;dialogLabel=label;stayLabel=stay.GetComponentInChildren<TMP_Text>();quitLabel=quit.GetComponentInChildren<TMP_Text>();
-        dialogFocus.Changed+=RefreshDialog;RefreshDialog();
-        int generation=++dialogGeneration;
-        quit.onClick.AddListener(async ()=> {
-            if(exitPending)return;exitPending=true;quit.interactable=false;
-            bool saved;
-            try { saved=focus.Phase==FocusPhase.Saving?await focus.RetrySettlementAsync():focus.Phase!=FocusPhase.Focusing||await focus.CancelAsync(true); }
-            finally {exitPending=false;if(quit)quit.interactable=true;}
-            if (!this || !isActiveAndEnabled || !dialog || generation!=dialogGeneration) return;
-            if(!saved) { RefreshDialog(); return; }
-            // Request quitting again; GameDataManager must still drain and close storage.
-            Application.Quit();
-        });
+        var focus = GetComponent<FocusRunner>().Controller;
+        if (focus.Phase != FocusPhase.Focusing && focus.Phase != FocusPhase.Saving) return true;
+        if (dialog) return false;
+
+        var panel = FindObjectsByType<FocusPanelUI>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+            .FirstOrDefault(candidate => candidate.cancelConfirmation);
+        var canvas = panel ? panel.GetComponentInParent<Canvas>(true) : null;
+        if (!canvas) return false;
+
+        // The Focus page can be hidden while its session runs. Mount the prompt on the main canvas.
+        var template = panel.cancelConfirmation;
+        if (template.IsOpen) template.Dismiss();
+        var prompt = Instantiate(template, canvas.rootCanvas.transform, false);
+        prompt.name = "ExitFocusConfirmation";
+        dialog = prompt;
+        dialogFocus = focus;
+        focus.Changed += RefreshDialog;
+        prompt.ShowExit(() => ConfirmExit(prompt, focus), () => CloseDialog(prompt));
+        RefreshDialog();
         return false;
     }
+
+    async void ConfirmExit(FocusCancelConfirmation prompt, FocusController focus)
+    {
+        if (exitPending || focus.OperationPending) return;
+        exitPending = true;
+        RefreshDialog();
+        bool saved;
+        try
+        {
+            saved = focus.Phase == FocusPhase.Saving
+                ? await focus.RetrySettlementAsync()
+                : focus.Phase != FocusPhase.Focusing || await focus.CancelAsync(true);
+        }
+        finally
+        {
+            exitPending = false;
+            RefreshDialog();
+        }
+        if (!saved || !this || !isActiveAndEnabled || dialog != prompt || !prompt) return;
+        prompt.Dismiss();
+        // GameDataManager still drains and closes storage before the application exits.
+        Application.Quit();
+    }
+
     void RefreshDialog()
     {
-        if(!dialog||dialogFocus==null)return;
-        bool saving=dialogFocus.Phase==FocusPhase.Saving,focusing=dialogFocus.Phase==FocusPhase.Focusing;
-        dialogLabel.text=saving?"Exit Cat Quest?\nYour Focus result is not saved. Retry saving before exiting."
-            :focusing?"Exit Cat Quest?\nYour active Focus will be cancelled without rewards.":"Your Focus result is saved.\nExit Cat Quest?";
-        stayLabel.text=focusing?"Keep focusing":"Stay";
-        quitLabel.text=saving?"Retry Save and exit":focusing?"Cancel and exit":"Exit";
+        if (!dialog) return;
+        bool focusing = dialogFocus.Phase == FocusPhase.Focusing;
+        bool saving = dialogFocus.Phase == FocusPhase.Saving;
+        bool busy = exitPending || dialogFocus.OperationPending;
+        string message = busy ? "Saving the session result before closing Cat Quest."
+            : saving ? "Your Focus result could not be saved. Retry saving before exiting."
+            : focusing ? "This Focus session will be cancelled.\nNo rewards will be earned."
+            : "Your Focus session has ended. You can now close Cat Quest.";
+        string action = busy ? "Saving..." : saving ? "Retry and exit" : focusing ? "Cancel and exit" : "Exit";
+        dialog.SetExitMessage(message, focusing ? "Keep focusing" : "Stay", action, busy);
     }
-    void Dismiss()
+
+    void CloseDialog(FocusCancelConfirmation prompt)
     {
-        dialogGeneration++;
-        if(dialogFocus!=null)dialogFocus.Changed-=RefreshDialog;
-        dialogFocus=null;
-        if(dialog)Destroy(dialog);
-        dialog=null;dialogLabel=stayLabel=quitLabel=null;
+        dialogFocus.Changed -= RefreshDialog;
+        dialogFocus = null;
+        dialog = null;
+        Destroy(prompt.gameObject);
     }
-    static void Place(Transform t,float x0,float y0,float x1,float y1) { var r=(RectTransform)t;r.anchorMin=new Vector2(x0,y0);r.anchorMax=new Vector2(x1,y1);r.offsetMin=r.offsetMax=Vector2.zero; }
 }

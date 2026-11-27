@@ -39,8 +39,13 @@ public static class AiFeatureVerification
         else {
             if(!chat.messageTemplate.avatar)missing.Add("messageTemplate.avatar");
             if(!chat.messageTemplate.userAvatar)missing.Add("messageTemplate.userAvatar");
+            if(!chat.messageTemplate.stoppedLabel)missing.Add("messageTemplate.stoppedLabel");
         }
         if(!chat.thinking)missing.Add("thinking");
+        if (!chat.replyActions || !chat.retry || chat.retry.transform.parent != chat.replyActions.transform ||
+            chat.replyActions.transform.parent != chat.content) missing.Add("replyActions");
+        if (!chat.send || !chat.stop || chat.send.transform.parent != chat.stop.transform.parent)
+            missing.Add("composer action slot");
         if(!chat.draftTemplate) {
             var draftPath=AssetDatabase.GUIDToAssetPath("fb1014f266dc058428ebb9d6a7f9910c");
             var draftRoot=AssetDatabase.LoadAssetAtPath<GameObject>(draftPath);

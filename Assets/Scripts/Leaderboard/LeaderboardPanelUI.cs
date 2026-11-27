@@ -132,7 +132,8 @@ public sealed class LeaderboardPanelUI : MonoBehaviour
         ownRow.gameObject.SetActive(ranked); ownMessage.gameObject.SetActive(!ranked);
         if (ranked) ownRow.Show(result.own, result.ownRank, CurrentKind, true);
         else ownMessage.text = result.ownMessage ?? "Your rank is unavailable. Refresh to retry.";
-        updated.text = result.success && DateTimeOffset.TryParse(result.readTime, out var read) ? "Updated " + read.ToLocalTime().ToString("HH:mm") : "";
+        updated.text = !result.success ? "" : DemoProfile.IsActive ? "Demo rankings"
+            : DateTimeOffset.TryParse(result.readTime, out var read) ? "Updated " + read.ToLocalTime().ToString("HH:mm") : "";
     }
     void BindRows(LeaderboardSnapshot result, int end)
     {

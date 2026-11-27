@@ -169,14 +169,30 @@ public static class EquipmentPlayVerification
         upgradeFeedback.GetComponent<Button>().interactable=false;yield return .1;
         Check(!upgradeFeedback.effectView.gameObject.activeSelf,"Disabled upgrade clears preview");upgradeFeedback.GetComponent<Button>().interactable=true;
         Check(!UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include,FindObjectsSortMode.None).Any(t=>t.name=="TaskStatus"),"Bottom notification strip removed");
+        var batch=page.transform.Find("ItemDetail").GetComponent<EquipmentItemDetailUI>().bulkUpgrade;
+        Click(page.transform,"ItemDetail/Popup/Button_Price_Coin");yield return .3;
+        Check(batch.gameObject.activeInHierarchy&&service.EquipmentSnapshot.fishCoins==1000,"Upgrade opens preview before spending");
+        var levelSlider=batch.GetComponentInChildren<Slider>();
+        var buyUpgrade=batch.transform.Find("Popup/Button_Confirm").GetComponent<Button>();
+        var cancelUpgrade=batch.transform.Find("Popup/Button_Cancel").GetComponent<Button>();
+        var upgradePrice=buyUpgrade.GetComponentInChildren<TMP_Text>();
+        Check(levelSlider.wholeNumbers&&levelSlider.minValue==1&&upgradePrice.text=="15","Upgrade starts at one level and shows cost");
+        levelSlider.value=3;
+        Check(upgradePrice.text=="60"&&batch.transform.Find("Popup/Level Up/Text_Value (1)").GetComponent<TMP_Text>().text=="4","Slider previews target level and cumulative price");
+        Capture("bulk-upgrade-1920");yield return .3;
+        Resolution(1280,720);yield return .45;Capture("bulk-upgrade-1280");yield return .3;
+        cancelUpgrade.onClick.Invoke();
+        Check(!batch.gameObject.activeSelf&&service.EquipmentSnapshot.fishCoins==1000,"Cancel preserves level and balance");
+        Resolution(1920,1080);yield return .3;
+        Click(page.transform,"ItemDetail/Popup/Button_Price_Coin");levelSlider.value=3;
         blocked=TaskCalendarPlayVerification.FailSqliteWrites();
         try{
-            Click(page.transform,"ItemDetail/Popup/Button_Price_Coin");yield return Ui(service);
+            buyUpgrade.onClick.Invoke();yield return Ui(service);
             Check(service.EquipmentSnapshot.fishCoins==1000 && service.EquipmentSnapshot.equipment[0].level==1,"Rejected upgrade charged coins");
-            Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Upgrade failure opened confirmation");
-            Check(page.transform.Find("ItemDetail").GetComponent<EquipmentItemDetailUI>().status.text==service.LastError && !string.IsNullOrEmpty(service.LastError),"Upgrade failure was not visible");
-        }finally{blocked.Dispose();page.OpenItem("boss1-weapon");}
-        Click(page.transform,"ItemDetail/Popup/Button_Price_Coin");yield return Ui(service);Check(!page.transform.Find("ConfirmEquipment").gameObject.activeSelf,"Upgrade must execute without confirmation");Check(service.EquipmentSnapshot.fishCoins==985&&service.EquipmentSnapshot.equipment[0].level==2,"Upgrade saved");yield return .5;Capture("equipment-item-1920");yield return .4;Layout(page);
+            Check(batch.gameObject.activeSelf&&batch.transform.Find("Popup/UpgradeStatus").GetComponent<TMP_Text>().text==service.LastError&&!string.IsNullOrEmpty(service.LastError),"Upgrade failure appears in the batch popup");
+        }finally{blocked.Dispose();}
+        buyUpgrade.onClick.Invoke();buyUpgrade.onClick.Invoke();yield return Ui(service);
+        Check(!batch.gameObject.activeSelf&&service.EquipmentSnapshot.fishCoins==940&&service.EquipmentSnapshot.equipment[0].level==4,"Retry commits the batch exactly once");yield return .5;Capture("equipment-item-1920");yield return .4;Layout(page);
         nav.ShowPage(MainMenuPage.Dashboard);yield return .5;
         var blueDashboard=nav.pages[0].GetComponentInChildren<DashboardEquipmentUI>();Capture("dashboard-blue-stats-before-check-1920");yield return .2;CheckStats(blueDashboard.GetComponentInChildren<EquipmentStatsUI>(),service);
         Check(blueDashboard.slots[0].GetComponent<Image>().color==Color.Lerp(new Color32(67,184,255,255),Color.white,.75f),"Dashboard blue equipped background");
